@@ -17,7 +17,7 @@
 - Bloqueo por cuenta (5 fallos por correo en 15 min) y por IP (20 fallos en 15 min), con tabla de intentos en el esquema `autenticacion` de la base `n8n`.
 - Token de acceso (JWT HS256 de Supabase, 15 min) en el cuerpo y token de renovación rotativo en cookie `HttpOnly` con `SameSite=Strict` (7 días). El cierre de sesión revoca la sesión en Supabase.
 - Registro sin sesión y con respuesta idéntica si el correo ya existe (anti enumeración). Autoconfirmación de correo activada hasta la SPEC 05.
-- Los workflows no guardan datos de ejecución, para que ninguna contraseña quede en la base de n8n.
+- Los workflows no guardan datos de ejecución, para que ninguna contraseña quede en la base de n8n. *Hallazgo al implementar:* con `none`, n8n solo marca la ejecución como borrada y su contenido (el cuerpo con la contraseña) sigue en `execution_data` hasta el borrado definitivo, que por defecto tarda más de 1 h. Se fijan `EXECUTIONS_DATA_HARD_DELETE_BUFFER=0` y `EXECUTIONS_DATA_PRUNE_HARD_DELETE_INTERVAL=1` en el servicio `n8n` para que desaparezca en 1 o 2 minutos (comprobado: 0 filas a los 45 s). Estas variables afectan a todos los workflows de la instancia.
 - Credencial n8n `Secreto proxy` (Header Auth) y carpeta `Autenticacion` en n8n con los cinco workflows.
 - `auth/pruebas/pruebas.sh`: script con `curl` que recorre los criterios de aceptación y sale con error si alguno falla.
 
@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS autenticacion.contrasenas_comunes (
 - [ ] Reusar una cookie de renovación ya rotada (pasado el intervalo de reutilización de Supabase Auth) devuelve `401 TOKEN_INVALIDO`.
 - [ ] `yo` con un token válido devuelve `200 { id, correo, nombre }` sin campos internos; sin token, con un token manipulado o expirado devuelve `401 TOKEN_INVALIDO`.
 - [ ] `cerrar-sesion` devuelve `204` y la cookie con `Max-Age=0`; después, esa cookie ya no renueva (`401`) y el token de acceso anterior ya no pasa `yo` (`401`).
-- [ ] En la base `n8n`, `execution_entity` no tiene ninguna fila de los cinco workflows tras ejecutar `pruebas.sh`.
+- [ ] En la base `n8n`, 2 minutos después de ejecutar `pruebas.sh`, ni `execution_entity` ni `execution_data` tienen filas de los cinco workflows, y ninguna contraseña de las pruebas aparece en `execution_data`.
 - [ ] Ningún JSON de `auth/workflows/`, el `.env.example` ni `auth/` contiene `SECRETO_PROXY`, `JWT_SECRET`, contraseñas ni el email del owner.
 - [ ] En n8n existen la credencial `Secreto proxy` y la carpeta `Autenticacion` con los cinco workflows publicados, y todos los nombres de workflows, nodos, campos, tablas y variables nuevas están en español (excepto `auth/`).
 - [ ] `auth/README.md` documenta los cinco endpoints con ejemplos de petición y respuesta, todos los códigos de error y la configuración de CORS para el front.
@@ -158,6 +158,7 @@ CREATE TABLE IF NOT EXISTS autenticacion.contrasenas_comunes (
 - **Autoconfirmación de correo:** hasta la SPEC 05 cualquiera puede registrar un correo ajeno. No hay datos sensibles en la cuenta, pero no debe publicarse así.
 - **La IP de los clientes en Docker Desktop:** en local, Caddy ve la IP de la pasarela de Docker para todos los clientes, así que el límite por IP actúa sobre todos juntos. Detrás de un proxy real de producción habrá que revisar qué IP llega.
 - **Puerto 5678 sigue publicado en `127.0.0.1`:** lo protege el secreto del proxy, pero conviene retirarlo cuando el editor ya no haga falta desde el navegador.
+- **Durante 1 o 2 minutos la contraseña de cada petición sigue en `execution_data`** (n8n marca la ejecución como borrada y la elimina en el siguiente ciclo de pruning). Es una ventana corta pero real: quien lea la base de n8n en ese lapso la vería. No hay forma de evitar que el cuerpo pase por el workflow.
 - **Ejecuciones manuales desde el editor de n8n sí guardan datos**, aunque los workflows estén configurados para no guardarlos: no se deben probar los workflows de auth con contraseñas reales desde el botón *Execute*.
 - **Los Code nodes necesitan el task runner de n8n:** si no funciona en esta versión, se reemplazan por nodos `IF`/`Set` y `Postgres`. Se comprueba en el paso 5.
 - **Revocación del token de acceso:** el JWT es válido hasta que expira, salvo que Supabase Auth compruebe la sesión en `/user`. El criterio de `cerrar-sesion` lo verifica; si la versión no lo hace, `yo` pasará a consultar `auth.sessions`.

@@ -21,6 +21,10 @@ services:
       TZ: ${GENERIC_TIMEZONE}
       N8N_SECURE_COOKIE: "false"
       N8N_RUNNERS_ENABLED: "true"
+      # Las ejecuciones "no guardadas" se marcan como borradas y su contenido (con contraseñas de la API
+      # de autenticación) queda hasta el borrado definitivo: se reduce de 1 h a unos minutos.
+      EXECUTIONS_DATA_HARD_DELETE_BUFFER: "0"
+      EXECUTIONS_DATA_PRUNE_HARD_DELETE_INTERVAL: "1"
     ports:
       - "127.0.0.1:5678:5678"
     volumes:
