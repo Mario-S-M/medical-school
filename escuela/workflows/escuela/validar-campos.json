@@ -1,0 +1,108 @@
+{
+  "id": "escValidarCampos01",
+  "name": "Validar campos",
+  "description": "Subworkflow. Recibe { datos, reglas } (reglas por campo: tipo texto, entero, booleano, uuid, correo u opcion, con minimo, maximo, opcional…) y devuelve el mismo item con datos normalizados o { ok: false, estado: 422, cuerpo } con VALIDACION_FALLIDA. Rechaza los campos que no estén en las reglas.",
+  "active": false,
+  "isArchived": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "executionTimeout": 15
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Entrada\nRecibe `datos` (cuerpo o consulta del webhook) y las `reglas` de cada campo.",
+        "height": 430,
+        "width": 240,
+        "color": 4
+      },
+      "id": "c31b91c7-5e76-51a5-a92c-51f1b0565141",
+      "name": "Nota Entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -70,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Aplicar reglas\nRechaza campos extra y valida tipo, largo y rango. Normaliza (recorta textos, correos en minúscula, enteros reales) y devuelve todos los errores juntos.",
+        "height": 430,
+        "width": 240,
+        "color": 1
+      },
+      "id": "a38af808-f138-55d8-8f88-d2c1e25b2da2",
+      "name": "Nota Aplicar reglas",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        230,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Validar campos\nSubworkflow compartido: **ningún endpoint repite su validación de datos**, solo declara sus reglas.\n\nTipos: `texto`, `entero`, `booleano`, `uuid`, `correo`, `opcion`. Un campo vacío es un error salvo que la regla diga `opcional`.",
+        "height": 150,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "ce366eb2-57a6-543f-a930-3002c2433733",
+      "name": "Nota Validar campos",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -450
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "693496d3-716a-53e9-9bf7-ef021c01e49d",
+      "name": "Disparador",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const entrada = $input.first().json;\nconst datos = entrada.datos;\nconst reglas = entrada.reglas || {};\nconst detalles = [];\nconst falla = (campo, regla, mensaje) => detalles.push({ campo, regla, mensaje });\nconst respuesta = (mensaje) => [{ json: { ok: false, estado: 422, cuerpo: { error: { codigo: 'VALIDACION_FALLIDA', mensaje, detalles } } } }];\nif (!datos || typeof datos !== 'object' || Array.isArray(datos)) {\n  falla('cuerpo', 'objeto_requerido', 'Los datos deben ser un objeto JSON.');\n  return respuesta('Revisa los datos enviados.');\n}\nfor (const clave of Object.keys(datos)) if (!(clave in reglas)) falla(clave, 'campo_no_permitido', 'Este campo no está permitido.');\nconst limpio = {};\nfor (const [campo, r] of Object.entries(reglas)) {\n  let v = datos[campo];\n  if (v === undefined || v === null || v === '') {\n    if (!r.opcional) falla(campo, 'obligatorio', 'Este campo es obligatorio.');\n    limpio[campo] = null;\n    continue;\n  }\n  if (r.tipo === 'texto') {\n    if (typeof v !== 'string') { falla(campo, 'tipo_texto', 'Debe ser un texto.'); continue; }\n    v = v.trim();\n    if (!r.multilinea && /[\\u0000-\\u001f\\u007f]/.test(v)) falla(campo, 'sin_caracteres_de_control', 'No puede tener caracteres de control.');\n    if (r.minimo && v.length < r.minimo) falla(campo, 'minimo_caracteres', `Debe tener al menos ${r.minimo} caracteres.`);\n    if (r.maximo && v.length > r.maximo) falla(campo, 'maximo_caracteres', `Debe tener como máximo ${r.maximo} caracteres.`);\n    if (r.alfanumerico && !/[\\p{L}\\p{N}]/u.test(v)) falla(campo, 'requiere_letra_o_numero', 'Debe incluir al menos una letra o un número.');\n  } else if (r.tipo === 'entero') {\n    const n = typeof v === 'number' ? v : (/^-?\\d{1,15}$/.test(String(v)) ? Number(v) : NaN);\n    if (!Number.isInteger(n)) { falla(campo, 'tipo_entero', 'Debe ser un número entero.'); continue; }\n    if (r.minimo !== undefined && n < r.minimo) falla(campo, 'valor_minimo', `Debe ser al menos ${r.minimo}.`);\n    if (r.maximo !== undefined && n > r.maximo) falla(campo, 'valor_maximo', `Debe ser como máximo ${r.maximo}.`);\n    v = n;\n  } else if (r.tipo === 'booleano') {\n    if (v === true || v === 'true') v = true;\n    else if (v === false || v === 'false') v = false;\n    else { falla(campo, 'tipo_booleano', 'Debe ser verdadero o falso.'); continue; }\n  } else if (r.tipo === 'uuid') {\n    if (typeof v !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) { falla(campo, 'formato_uuid', 'Debe ser un identificador válido.'); continue; }\n    v = v.toLowerCase();\n  } else if (r.tipo === 'correo') {\n    if (typeof v !== 'string' || v.length > 254 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(v.trim())) { falla(campo, 'formato_correo', 'Debe ser un correo válido.'); continue; }\n    v = v.trim().toLowerCase();\n  } else if (r.tipo === 'opcion') {\n    if (!(r.valores || []).includes(v)) { falla(campo, 'valor_no_permitido', `Debe ser uno de: ${(r.valores || []).join(', ')}.`); continue; }\n  }\n  limpio[campo] = v;\n}\nif (detalles.length) return respuesta('Revisa los datos enviados.');\nconst { reglas: _reglas, datos: _datos, ...resto } = entrada;\nreturn [{ json: { ...resto, ok: true, datos: limpio } }];"
+      },
+      "id": "bddde94e-39b0-5bfb-8ae9-e24d4f128b47",
+      "name": "Aplicar reglas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Disparador": {
+      "main": [
+        [
+          {
+            "node": "Aplicar reglas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}

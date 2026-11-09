@@ -15,24 +15,8 @@
   "nodes": [
     {
       "parameters": {
-        "content": "### Validar sesion y roles\nSubworkflow compartido: **ningún workflow protegido repite esta lógica**, todos lo llaman con *Execute Workflow* y le pasan la solicitud del webhook.\n\nSalida: `{ ok, usuario, roles, equipos }` o `{ ok: false, estado, cuerpo }`.",
-        "height": 200,
-        "width": 1000,
-        "color": 7
-      },
-      "id": "15c62343-53b9-5290-98b7-91e84b97825f",
-      "name": "Nota Validar sesion y roles",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        0,
-        -640
-      ]
-    },
-    {
-      "parameters": {
         "content": "### Entrada\nRecibe la solicitud del webhook que lo llamó.",
-        "height": 340,
+        "height": 430,
         "width": 240,
         "color": 4
       },
@@ -42,13 +26,13 @@
       "typeVersion": 1,
       "position": [
         -70,
-        -170
+        -260
       ]
     },
     {
       "parameters": {
         "content": "### Leer token\nSaca el `Bearer` de la cabecera `Authorization`. Si falta o está mal formado, responde `401`.",
-        "height": 340,
+        "height": 430,
         "width": 480,
         "color": 4
       },
@@ -58,15 +42,15 @@
       "typeVersion": 1,
       "position": [
         260,
-        -170
+        -260
       ]
     },
     {
       "parameters": {
         "content": "### Consultar Supabase Auth\nPregunta a `auth:9999/user` quién es el dueño del token. Un token vencido o falso da `401`.",
-        "height": 340,
+        "height": 430,
         "width": 780,
-        "color": 3
+        "color": 1
       },
       "id": "68c264e7-f902-5ccc-aa73-378ccd8e9481",
       "name": "Nota Consultar Supabase Auth",
@@ -74,13 +58,13 @@
       "typeVersion": 1,
       "position": [
         860,
-        -270
+        -360
       ]
     },
     {
       "parameters": {
         "content": "### Cargar roles y equipos\nLee en `escuela` los roles extra (el estudiante es implícito) y los equipos de apoyo del usuario.",
-        "height": 340,
+        "height": 430,
         "width": 480,
         "color": 6
       },
@@ -90,15 +74,15 @@
       "typeVersion": 1,
       "position": [
         1760,
-        -370
+        -460
       ]
     },
     {
       "parameters": {
         "content": "### Salida con error\nCualquier fallo termina aquí y se devuelve tal cual al workflow que llamó.",
-        "height": 340,
+        "height": 430,
         "width": 240,
-        "color": 5
+        "color": 3
       },
       "id": "fdd9ab5e-0516-5ee5-bce5-8eb0f4b12448",
       "name": "Nota Salida con error",
@@ -106,7 +90,23 @@
       "typeVersion": 1,
       "position": [
         1730,
-        30
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Validar sesion y roles\nSubworkflow compartido: **ningún workflow protegido repite esta lógica**, todos lo llaman con *Execute Workflow* y le pasan la solicitud del webhook.\n\nSalida: `{ ok, usuario, roles, equipos }` o `{ ok: false, estado, cuerpo }`.",
+        "height": 150,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "15c62343-53b9-5290-98b7-91e84b97825f",
+      "name": "Nota Validar sesion y roles",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -650
       ]
     },
     {
@@ -296,7 +296,7 @@
       "typeVersion": 1,
       "position": [
         1800,
-        200
+        300
       ]
     }
   ],

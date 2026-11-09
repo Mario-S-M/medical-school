@@ -1,0 +1,708 @@
+{
+  "id": "escAsignarRol01",
+  "name": "Asignar rol",
+  "description": "POST /escuela/admin/asignar-rol. Da o quita el rol instructor o administrador a una cuenta (solo administrador). Al dar instructor guarda su nombre público. No guarda ejecuciones.",
+  "active": false,
+  "isArchived": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "executionTimeout": 15
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Entrada\nWebhook protegido por el secreto del proxy (Caddy es la única entrada).",
+        "height": 430,
+        "width": 240,
+        "color": 4
+      },
+      "id": "d5bfdcbf-d37f-551e-8f54-50df8b40d8d5",
+      "name": "Nota Entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -70,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Comprobar permiso\nExige el rol `administrador` con el subworkflow `Exigir rol`. Sin sesión da `401`; sin el rol, `403`.",
+        "height": 430,
+        "width": 780,
+        "color": 1
+      },
+      "id": "092227a5-ebda-5580-ac24-6f0df9bf5bbe",
+      "name": "Nota Comprobar permiso",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        260,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Validar entrada\nSubworkflow `Validar campos`: tipos, largos y campos extra. Si falla, `422 VALIDACION_FALLIDA` con la lista de reglas.",
+        "height": 430,
+        "width": 480,
+        "color": 4
+      },
+      "id": "31acb481-6297-5cc3-92a5-a10aead6b219",
+      "name": "Nota Validar entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Revisar el cambio\nUn administrador no puede quitarse a sí mismo el rol (`409 ESTADO_INVALIDO`): así la escuela nunca se queda sin administradores.",
+        "height": 430,
+        "width": 480,
+        "color": 1
+      },
+      "id": "90bdcf4e-1fe8-58d3-83ca-b03e5e11ae9c",
+      "name": "Nota Revisar el cambio",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Confirmar la cuenta\nPregunta a `auth:9999/admin/users/<id>` (rol de servicio) que la cuenta exista y toma su nombre. Si no existe, `404`.",
+        "height": 430,
+        "width": 780,
+        "color": 1
+      },
+      "id": "44fbe37f-ae7d-5da7-b28e-7e6b924d35c1",
+      "name": "Nota Confirmar la cuenta",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2360,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Aplicar el rol\nInserta o borra la fila de `roles_usuario`. Al dar `instructor` guarda o actualiza su `nombre_publico` en `perfiles_instructor`.",
+        "height": 430,
+        "width": 480,
+        "color": 6
+      },
+      "id": "f9c78a6e-7233-569d-b061-d9ca56cdfd65",
+      "name": "Nota Aplicar el rol",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3260,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Respuesta\nDevuelve el resultado o el error de cualquier paso anterior.",
+        "height": 430,
+        "width": 240,
+        "color": 5
+      },
+      "id": "7c911dc4-6167-579c-a40d-39bd3660794c",
+      "name": "Nota Respuesta",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3830,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Asignar rol\n`POST /escuela/admin/asignar-rol` · solo `administrador`.\n\nEntrada: `{ usuario_id, rol: 'instructor' | 'administrador', activo }`. El rol `equipo_apoyo` no se asigna a mano: lo da aceptar una invitación.",
+        "height": 150,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "de617030-8a15-5ff3-aeb0-b132b274b98f",
+      "name": "Nota Asignar rol",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -450
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "escuela/admin/asignar-rol",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "c70ad980-0d8f-5f46-af18-76812fa1776d",
+      "name": "Recibir solicitud",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "secretoProxy01",
+          "name": "Secreto proxy"
+        }
+      },
+      "webhookId": "3eaa92d6-ade8-51c7-960c-9ac01359bcb4"
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $input.first().json;\nreturn [{ json: { headers: e.headers, rol_requerido: \"administrador\", datos: e.body, reglas: {\"usuario_id\": {\"tipo\": \"uuid\"}, \"rol\": {\"tipo\": \"opcion\", \"valores\": [\"instructor\", \"administrador\"]}, \"activo\": {\"tipo\": \"booleano\"}} } }];"
+      },
+      "id": "3a85ca26-f794-52f1-8ba5-cd2f2fc704b8",
+      "name": "Definir reglas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escExigirRol01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "f0d572d2-3996-51b4-9272-03f9349389e9",
+      "name": "Exigir rol",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1029989-a4f7-5e8b-9487-0cfe82df28ab",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "45dce4dd-b811-54ee-bb31-6a3f40f9cc1a",
+      "name": "Permiso valido",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escValidarCampos01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "532571f0-e39f-5612-b370-4b18631f6c45",
+      "name": "Validar campos",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "853d4fe0-0ec3-5eb4-bfb0-c86ba09e5138",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "27c3c9d9-b52d-5e6e-ae04-6e09b91bc3d0",
+      "name": "Entrada valida",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $input.first().json;\nconst d = e.datos;\nif (d.rol === 'administrador' && !d.activo && d.usuario_id === e.usuario.id) {\n  return [{ json: { ok: false, estado: 409, cuerpo: { error: { codigo: 'ESTADO_INVALIDO', mensaje: 'No puedes quitarte a ti mismo el rol de administrador.' } } } }];\n}\nreturn [{ json: { ...e, ok: true } }];"
+      },
+      "id": "920e3e2b-2153-5fd2-8840-dba493d2d699",
+      "name": "Evitar quedarse sin admin",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "351116fc-f87a-5ec6-9a7f-171509c8fdb1",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3b6d5be6-5f0c-5840-8c7e-92076ac5ba21",
+      "name": "Cambio permitido",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://auth:9999/admin/users/{{ $json.datos.usuario_id }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "866bff44-94a6-5712-a2a9-2eefbaf1ecc6",
+      "name": "Consultar cuenta en Supabase Auth",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2400,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabaseServicio01",
+          "name": "Supabase rol de servicio"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst e = $('Cambio permitido').first().json;\nif (r.statusCode === 404) return [{ json: { ok: false, estado: 404, cuerpo: { error: { codigo: 'NO_ENCONTRADO', mensaje: 'La cuenta no existe.' } } } }];\nif (r.statusCode !== 200 || !r.body || !r.body.id) return [{ json: { ok: false, estado: 500, cuerpo: { error: { codigo: 'ERROR_INTERNO', mensaje: 'Error interno del servidor.' } } } }];\nconst nombre = ((r.body.user_metadata || {}).nombre || String(r.body.email || '').split('@')[0] || 'Instructor').slice(0, 80);\nreturn [{ json: { ok: true, nombre, datos: e.datos, quien: e.usuario.id } }];"
+      },
+      "id": "b3b07397-d466-5897-99cc-d6487adcbbea",
+      "name": "Leer cuenta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2700,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1fe3786c-1675-5f02-814c-65ed4d6fc07a",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f930e102-ea9b-5cbf-87e2-5548a90abdf8",
+      "name": "Cuenta existe",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3000,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH quitar AS (\n  DELETE FROM escuela.roles_usuario WHERE usuario_id = $1::uuid AND rol = $2::text AND NOT $3::boolean RETURNING 1\n), poner AS (\n  INSERT INTO escuela.roles_usuario (usuario_id, rol, asignado_por) SELECT $1::uuid, $2::text, $4::uuid WHERE $3::boolean ON CONFLICT DO NOTHING RETURNING 1\n), perfil AS (\n  INSERT INTO escuela.perfiles_instructor (usuario_id, nombre_publico) SELECT $1::uuid, $5::text WHERE $3::boolean AND $2::text = 'instructor'\n  ON CONFLICT (usuario_id) DO UPDATE SET nombre_publico = EXCLUDED.nombre_publico, actualizado_en = now() RETURNING 1\n)\nSELECT 'ok' AS resultado;",
+        "options": {
+          "queryReplacement": "={{ [$json.datos.usuario_id, $json.datos.rol, $json.datos.activo, $json.quien, $json.nombre] }}"
+        }
+      },
+      "id": "43fd2524-ca61-5146-8271-903395f1028a",
+      "name": "Aplicar el rol",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3300,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgSupabase01",
+          "name": "Postgres n8n (Supabase)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Leer cuenta').first().json.datos;\nreturn [{ json: { estado: 200, cuerpo: { usuario_id: d.usuario_id, rol: d.rol, activo: d.activo } } }];"
+      },
+      "id": "7a0abc59-8fdb-5def-9f85-b93ed75d0ef9",
+      "name": "Armar respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.cuerpo === null ? '' : JSON.stringify($json.cuerpo) }}",
+        "options": {
+          "responseCode": "={{ $json.estado }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "X-Flujo",
+                "value": "escuela"
+              }
+            ]
+          }
+        }
+      },
+      "id": "1de8c2db-e65e-5cae-b653-238a64db8d43",
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        3900,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Recibir solicitud": {
+      "main": [
+        [
+          {
+            "node": "Definir reglas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Definir reglas": {
+      "main": [
+        [
+          {
+            "node": "Exigir rol",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exigir rol": {
+      "main": [
+        [
+          {
+            "node": "Permiso valido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Permiso valido": {
+      "main": [
+        [
+          {
+            "node": "Validar campos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar campos": {
+      "main": [
+        [
+          {
+            "node": "Entrada valida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrada valida": {
+      "main": [
+        [
+          {
+            "node": "Evitar quedarse sin admin",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evitar quedarse sin admin": {
+      "main": [
+        [
+          {
+            "node": "Cambio permitido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cambio permitido": {
+      "main": [
+        [
+          {
+            "node": "Consultar cuenta en Supabase Auth",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar cuenta en Supabase Auth": {
+      "main": [
+        [
+          {
+            "node": "Leer cuenta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer cuenta": {
+      "main": [
+        [
+          {
+            "node": "Cuenta existe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cuenta existe": {
+      "main": [
+        [
+          {
+            "node": "Aplicar el rol",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aplicar el rol": {
+      "main": [
+        [
+          {
+            "node": "Armar respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar respuesta": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [
+    {
+      "id": "81647776-062c-5f6d-b9bc-37d59c58b90c",
+      "name": "Comprobar permiso",
+      "nodeIds": [
+        "3a85ca26-f794-52f1-8ba5-cd2f2fc704b8",
+        "f0d572d2-3996-51b4-9272-03f9349389e9",
+        "45dce4dd-b811-54ee-bb31-6a3f40f9cc1a"
+      ],
+      "description": "Exige el rol administrador con el subworkflow compartido."
+    },
+    {
+      "id": "54a82b09-82f2-5ffd-8afc-4245f05a5459",
+      "name": "Validar entrada",
+      "nodeIds": [
+        "532571f0-e39f-5612-b370-4b18631f6c45",
+        "27c3c9d9-b52d-5e6e-ae04-6e09b91bc3d0"
+      ],
+      "description": "Valida y normaliza los campos con el subworkflow compartido."
+    },
+    {
+      "id": "9c5c5c6f-8e19-590a-813c-0012af552407",
+      "name": "Revisar el cambio",
+      "nodeIds": [
+        "920e3e2b-2153-5fd2-8840-dba493d2d699",
+        "3b6d5be6-5f0c-5840-8c7e-92076ac5ba21"
+      ],
+      "description": "Impide que un administrador se quite su propio rol."
+    },
+    {
+      "id": "42f885e8-d615-5d2f-b5b9-51e514ec00bc",
+      "name": "Confirmar la cuenta",
+      "nodeIds": [
+        "866bff44-94a6-5712-a2a9-2eefbaf1ecc6",
+        "b3b07397-d466-5897-99cc-d6487adcbbea",
+        "f930e102-ea9b-5cbf-87e2-5548a90abdf8"
+      ],
+      "description": "Confirma que la cuenta existe en Supabase Auth y lee su nombre."
+    },
+    {
+      "id": "d1a9b9c9-9f56-5f2e-b388-3d58bc66ea7d",
+      "name": "Aplicar el rol",
+      "nodeIds": [
+        "43fd2524-ca61-5146-8271-903395f1028a",
+        "7a0abc59-8fdb-5def-9f85-b93ed75d0ef9"
+      ],
+      "description": "Inserta o borra la fila de roles_usuario. Al dar instructor guarda o actualiza su nombre_publico en perfiles_instructor."
+    }
+  ],
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}

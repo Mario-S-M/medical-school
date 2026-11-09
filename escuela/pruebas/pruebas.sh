@@ -30,6 +30,7 @@ limpiar_datos() {
     psql_n8n "delete from escuela.perfiles_instructor where usuario_id::text in ($ids)" > /dev/null 2>&1
     psql_n8n "delete from escuela.roles_usuario where usuario_id::text in ($ids)" > /dev/null 2>&1
   fi
+  psql_n8n "delete from escuela.categorias where nombre like 'Prueba esc %'" > /dev/null 2>&1
   psql_postgres "delete from auth.users where email like 'prueba_esc_%@example.com'" > /dev/null 2>&1
   psql_n8n "truncate autenticacion.intentos_inicio_sesion" > /dev/null 2>&1
   psql_n8n "truncate autenticacion.eventos_codigo" > /dev/null 2>&1
@@ -119,6 +120,95 @@ bash escuela/scripts/crear_administrador.sh "$CORREO_admin" > /dev/null
 api GET /escuela/mis-roles "$TOKEN_admin"
 estado_es 200 "administrador -> 200"
 cuerpo_tiene '"administrador"' "administrador -> rol administrador"
+
+id_de() { psql_postgres "select id from auth.users where email = '$1'"; }
+UUID_FALSO="00000000-0000-4000-8000-000000000000"
+
+echo "== Administración: permisos"
+for ruta in "GET /escuela/admin/buscar-usuario?correo=a@b.co"; do
+  solicitar ${ruta%% *} "${ruta#* }"
+  estado_es 401 "${ruta} sin token -> 401"
+done
+api GET "/escuela/admin/buscar-usuario?correo=$CORREO_admin" "$TOKEN_estudiante"
+estado_es 403 "buscar-usuario sin rol administrador -> 403"
+cuerpo_tiene '"SIN_PERMISO"' "buscar-usuario sin rol -> SIN_PERMISO"
+api POST /escuela/admin/asignar-rol "$TOKEN_estudiante" "{\"usuario_id\":\"$UUID_FALSO\",\"rol\":\"instructor\",\"activo\":true}"
+estado_es 403 "asignar-rol sin rol administrador -> 403"
+api POST /escuela/admin/guardar-categoria "$TOKEN_estudiante" '{"nombre":"Prueba esc x","posicion":1}'
+estado_es 403 "guardar-categoria sin rol administrador -> 403"
+api POST /escuela/admin/borrar-categoria "$TOKEN_estudiante" '{"id":1}'
+estado_es 403 "borrar-categoria sin rol administrador -> 403"
+api POST /escuela/admin/guardar-categoria "$TOKEN_estudiante" '{"nombre":1,"extra":true}'
+estado_es 403 "el permiso se comprueba antes que los datos (403, no 422)"
+
+echo "== Administración: buscar usuario y asignar roles"
+api GET "/escuela/admin/buscar-usuario?correo=$CORREO_estudiante" "$TOKEN_admin"
+estado_es 200 "buscar-usuario de una cuenta existente -> 200"
+cuerpo_tiene "\"$CORREO_estudiante\"" "buscar-usuario devuelve el correo"
+cuerpo_tiene '"roles":[]' "la cuenta nueva no tiene roles"
+api GET "/escuela/admin/buscar-usuario?correo=nadie_$SUFIJO@example.com" "$TOKEN_admin"
+estado_es 404 "buscar-usuario de un correo inexistente -> 404"
+api GET "/escuela/admin/buscar-usuario?correo=no-es-correo" "$TOKEN_admin"
+estado_es 422 "buscar-usuario con un correo mal formado -> 422"
+api GET "/escuela/admin/buscar-usuario?correo=$CORREO_estudiante&extra=1" "$TOKEN_admin"
+estado_es 422 "buscar-usuario con un parámetro extra -> 422"
+ID_ESTUDIANTE="$(id_de "$CORREO_estudiante")"; ID_ADMIN="$(id_de "$CORREO_admin")"
+api POST /escuela/admin/asignar-rol "$TOKEN_admin" "{\"usuario_id\":\"$ID_ESTUDIANTE\",\"rol\":\"equipo_apoyo\",\"activo\":true}"
+estado_es 422 "asignar-rol no acepta equipo_apoyo -> 422"
+api POST /escuela/admin/asignar-rol "$TOKEN_admin" "{\"usuario_id\":\"$ID_ESTUDIANTE\",\"rol\":\"instructor\",\"activo\":\"si\"}"
+estado_es 422 "asignar-rol con activo no booleano -> 422"
+api POST /escuela/admin/asignar-rol "$TOKEN_admin" "{\"usuario_id\":\"$ID_ESTUDIANTE\",\"rol\":\"instructor\",\"activo\":true,\"extra\":1}"
+estado_es 422 "asignar-rol con un campo extra -> 422"
+api POST /escuela/admin/asignar-rol "$TOKEN_admin" "{\"usuario_id\":\"$UUID_FALSO\",\"rol\":\"instructor\",\"activo\":true}"
+estado_es 404 "asignar-rol a una cuenta inexistente -> 404"
+api POST /escuela/admin/asignar-rol "$TOKEN_admin" "{\"usuario_id\":\"$ID_ADMIN\",\"rol\":\"administrador\",\"activo\":false}"
+estado_es 409 "un administrador no puede quitarse su propio rol -> 409"
+api POST /escuela/admin/asignar-rol "$TOKEN_admin" "{\"usuario_id\":\"$ID_ESTUDIANTE\",\"rol\":\"instructor\",\"activo\":true}"
+estado_es 200 "asignar-rol instructor -> 200"
+[ "$(psql_n8n "select nombre_publico from escuela.perfiles_instructor where usuario_id = '$ID_ESTUDIANTE'")" = "Usuario estudiante" ]; verificar "el rol instructor crea su perfil con el nombre de la cuenta" $?
+api GET /escuela/mis-roles "$TOKEN_estudiante"
+cuerpo_tiene '"instructor"' "mis-roles refleja el nuevo rol sin volver a iniciar sesión"
+api POST /escuela/admin/asignar-rol "$TOKEN_admin" "{\"usuario_id\":\"$ID_ESTUDIANTE\",\"rol\":\"instructor\",\"activo\":true}"
+estado_es 200 "asignar el mismo rol dos veces es idempotente"
+api POST /escuela/admin/asignar-rol "$TOKEN_admin" "{\"usuario_id\":\"$ID_ESTUDIANTE\",\"rol\":\"instructor\",\"activo\":false}"
+estado_es 200 "asignar-rol con activo false -> 200"
+[ "$(psql_n8n "select count(*) from escuela.roles_usuario where usuario_id = '$ID_ESTUDIANTE'")" = "0" ]; verificar "quitar el rol borra la fila" $?
+
+echo "== Administración: categorías"
+NOMBRE_A="Prueba esc $SUFIJO Anatomía"; NOMBRE_B="Prueba esc $SUFIJO Farmacología"
+solicitar GET /escuela/categorias
+estado_es 200 "categorias es público (sin token) -> 200"
+api POST /escuela/admin/guardar-categoria "$TOKEN_admin" "{\"nombre\":\"$NOMBRE_A\",\"posicion\":900}"
+estado_es 200 "guardar-categoria crea -> 200"
+ID_CAT_A="$(campo_json id)"
+[ -n "$(psql_n8n "select 1 from escuela.categorias where id = $ID_CAT_A and slug ~ '^[a-z0-9-]+\$' and slug like '%anatomia'")" ]; verificar "el slug no tiene acentos ni símbolos" $?
+api POST /escuela/admin/guardar-categoria "$TOKEN_admin" "{\"nombre\":\"$NOMBRE_B\",\"posicion\":901}"
+ID_CAT_B="$(campo_json id)"
+api POST /escuela/admin/guardar-categoria "$TOKEN_admin" "{\"nombre\":\"$NOMBRE_A\",\"posicion\":902}"
+estado_es 409 "guardar-categoria con un nombre repetido -> 409"
+cuerpo_tiene '"CATEGORIA_DUPLICADA"' "nombre repetido -> CATEGORIA_DUPLICADA"
+api POST /escuela/admin/guardar-categoria "$TOKEN_admin" "{\"id\":$ID_CAT_B,\"nombre\":\"$NOMBRE_A\",\"posicion\":901}"
+estado_es 409 "editar una categoría con el nombre de otra -> 409"
+api POST /escuela/admin/guardar-categoria "$TOKEN_admin" "{\"id\":$ID_CAT_B,\"nombre\":\"$NOMBRE_B editada\",\"posicion\":895}"
+estado_es 200 "editar una categoría -> 200"
+api POST /escuela/admin/guardar-categoria "$TOKEN_admin" '{"id":32000,"nombre":"Prueba esc inexistente","posicion":1}'
+estado_es 404 "editar una categoría inexistente -> 404"
+api POST /escuela/admin/guardar-categoria "$TOKEN_admin" '{"nombre":"!!!","posicion":1}'
+estado_es 422 "un nombre sin letras ni números -> 422"
+cuerpo_tiene '"requiere_letra_o_numero"' "422 con la regla incumplida en detalles"
+api POST /escuela/admin/guardar-categoria "$TOKEN_admin" '{"nombre":"Prueba esc ok","posicion":0}'
+estado_es 422 "posición fuera de rango -> 422"
+solicitar GET /escuela/categorias
+cuerpo_tiene "$NOMBRE_A" "las categorías nuevas aparecen en el listado público"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; n=[c['nombre'] for c in json.load(sys.stdin)['categorias']]; print(n.index('$NOMBRE_B editada') < n.index('$NOMBRE_A'))")" = "True" ]; verificar "el listado público va ordenado por posición (895 antes que 900)" $?
+psql_n8n "insert into escuela.cursos (slug, instructor_id, titulo, categoria_id) values ('prueba-esc-$SUFIJO', '$ID_ADMIN', 'Curso de prueba esc', $ID_CAT_A)" > /dev/null
+api POST /escuela/admin/borrar-categoria "$TOKEN_admin" "{\"id\":$ID_CAT_A}"
+estado_es 409 "borrar una categoría con cursos -> 409"
+cuerpo_tiene '"CATEGORIA_EN_USO"' "categoría con cursos -> CATEGORIA_EN_USO"
+api POST /escuela/admin/borrar-categoria "$TOKEN_admin" "{\"id\":$ID_CAT_B}"
+estado_es 204 "borrar una categoría sin cursos -> 204"
+api POST /escuela/admin/borrar-categoria "$TOKEN_admin" "{\"id\":$ID_CAT_B}"
+estado_es 404 "borrar una categoría que ya no existe -> 404"
 
 echo
 echo "$((total - fallos)) de $total casos correctos"

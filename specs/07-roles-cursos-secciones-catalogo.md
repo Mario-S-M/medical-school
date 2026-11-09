@@ -144,7 +144,7 @@ CREATE UNIQUE INDEX invitaciones_pendiente_unica ON escuela.invitaciones_equipo 
 
 | Método y ruta | Auth | Entrada → salida |
 |---|---|---|
-| `GET /escuela/categorias` | no | → `{ categorias: [{ id, nombre, slug }] }` |
+| `GET /escuela/categorias` | no | → `{ categorias: [{ id, nombre, slug, posicion }] }` (la posición permite al administrador reordenar) |
 | `GET /escuela/cursos?q=&categoria=&nivel=&pagina=` | no | → `{ cursos: [tarjeta], total, pagina, paginas }` (solo `publicado`, 12 por página) |
 | `GET /escuela/curso?slug=` | no | → ficha con `secciones[].clases[]` (sin campos internos) o `404` |
 | `GET /escuela/mis-roles` | sí | → `{ roles: [...], equipos: [{ instructor_id, nombre_publico }] }` |
@@ -186,6 +186,7 @@ CREATE UNIQUE INDEX invitaciones_pendiente_unica ON escuela.invitaciones_equipo 
 | `INVITACION_DUPLICADA` / `YA_ES_MIEMBRO` | 409 | ya hay una invitación vigente o el usuario ya está en el equipo |
 | `USUARIO_NO_REGISTRADO` | 404 | invitar a un correo sin cuenta verificada |
 | `CATEGORIA_EN_USO` | 409 | borrar una categoría con cursos |
+| `CATEGORIA_DUPLICADA` | 409 | crear o renombrar una categoría con un nombre que ya existe |
 | `PORTADA_INVALIDA` | 422 | tipo distinto de JPG, PNG o WebP, más de 2 MB, o archivo no subido al confirmar |
 
 **Storage:**

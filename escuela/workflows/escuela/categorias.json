@@ -1,0 +1,221 @@
+{
+  "id": "escCategorias01",
+  "name": "Categorias",
+  "description": "GET /escuela/categorias. Lista pública de categorías ordenadas por posición. No guarda ejecuciones.",
+  "active": false,
+  "isArchived": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "executionTimeout": 15
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Entrada\nWebhook público: no pide sesión.",
+        "height": 430,
+        "width": 240,
+        "color": 4
+      },
+      "id": "35272e87-cc02-53b1-ae12-ab87fbeaeb1c",
+      "name": "Nota Entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -70,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Consultar categorias\nLee `escuela.categorias` ordenadas por `posicion` y las devuelve como `{ categorias }`.",
+        "height": 430,
+        "width": 480,
+        "color": 6
+      },
+      "id": "a27934ca-b28a-5ca0-ba7c-2f0bc72ec15d",
+      "name": "Nota Consultar categorias",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        260,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Respuesta\nDevuelve el resultado o el error de cualquier paso anterior.",
+        "height": 430,
+        "width": 240,
+        "color": 5
+      },
+      "id": "f08de24d-1413-5e35-8f26-d4e7dc08e4ee",
+      "name": "Nota Respuesta",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        830,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Categorias\n`GET /escuela/categorias` · público.\n\nAlimenta el menú de categorías de la cabecera y el filtro del catálogo.",
+        "height": 150,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "8ae1c562-7baa-5b49-add7-1f3891908dd3",
+      "name": "Nota Categorias",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -450
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "escuela/categorias",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "0ac56dc2-8220-5bfe-8d4e-374c451a7051",
+      "name": "Recibir solicitud",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "secretoProxy01",
+          "name": "Secreto proxy"
+        }
+      },
+      "webhookId": "7b3b8d9c-37ca-54f5-9df0-511f961ba5e5"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT coalesce(json_agg(json_build_object('id', id, 'nombre', nombre, 'slug', slug, 'posicion', posicion) ORDER BY posicion, nombre), '[]'::json) AS categorias FROM escuela.categorias;",
+        "options": {
+          "queryReplacement": "={{ [] }}"
+        }
+      },
+      "id": "3f7f3d63-723f-579f-a129-72cc1e4e3f84",
+      "name": "Consultar categorias",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        300,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgSupabase01",
+          "name": "Postgres n8n (Supabase)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { estado: 200, cuerpo: { categorias: $input.first().json.categorias } } }];"
+      },
+      "id": "64c7aa99-99ea-5898-b28e-5af30f33578e",
+      "name": "Armar respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.cuerpo === null ? '' : JSON.stringify($json.cuerpo) }}",
+        "options": {
+          "responseCode": "={{ $json.estado }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "X-Flujo",
+                "value": "escuela"
+              }
+            ]
+          }
+        }
+      },
+      "id": "b57684cc-122e-5345-a3d3-7881316aa8fd",
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        900,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Recibir solicitud": {
+      "main": [
+        [
+          {
+            "node": "Consultar categorias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar categorias": {
+      "main": [
+        [
+          {
+            "node": "Armar respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar respuesta": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [
+    {
+      "id": "7387dc1a-78c4-5191-b136-95a701d17e64",
+      "name": "Consultar categorias",
+      "nodeIds": [
+        "3f7f3d63-723f-579f-a129-72cc1e4e3f84",
+        "64c7aa99-99ea-5898-b28e-5af30f33578e"
+      ],
+      "description": "Lee escuela.categorias ordenadas por posicion y las devuelve como { categorias }."
+    }
+  ],
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}

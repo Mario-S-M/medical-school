@@ -15,24 +15,8 @@
   "nodes": [
     {
       "parameters": {
-        "content": "### Mis roles\n`GET /escuela/mis-roles` · requiere sesión.\n\nDevuelve `{ roles, equipos }`. El estudiante es implícito: un usuario nuevo recibe `roles: []`. El menú de la cabecera del front lo usa para mostrar los enlaces *Instructor* y *Admin*.",
-        "height": 200,
-        "width": 1000,
-        "color": 7
-      },
-      "id": "ea2ee8a2-cca0-5523-ab5e-b7785c3bc8cd",
-      "name": "Nota Mis roles",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        0,
-        -520
-      ]
-    },
-    {
-      "parameters": {
         "content": "### Entrada\nWebhook protegido por el secreto del proxy (Caddy es la única entrada).",
-        "height": 340,
+        "height": 430,
         "width": 240,
         "color": 4
       },
@@ -42,15 +26,15 @@
       "typeVersion": 1,
       "position": [
         -70,
-        -170
+        -260
       ]
     },
     {
       "parameters": {
         "content": "### Comprobar sesion\nLlama al subworkflow `Validar sesion y roles`. Si la sesión no vale, su error pasa directo a *Responder*.",
-        "height": 340,
+        "height": 430,
         "width": 480,
-        "color": 3
+        "color": 1
       },
       "id": "12c26027-701b-57ae-9a32-40a4994ebfc4",
       "name": "Nota Comprobar sesion",
@@ -58,13 +42,13 @@
       "typeVersion": 1,
       "position": [
         260,
-        -170
+        -260
       ]
     },
     {
       "parameters": {
         "content": "### Respuesta\nDa forma al `200` o devuelve el error de la sesión.",
-        "height": 440,
+        "height": 530,
         "width": 480,
         "color": 5
       },
@@ -74,7 +58,23 @@
       "typeVersion": 1,
       "position": [
         860,
-        -270
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Mis roles\n`GET /escuela/mis-roles` · requiere sesión.\n\nDevuelve `{ roles, equipos }`. El estudiante es implícito: un usuario nuevo recibe `roles: []`. El menú de la cabecera del front lo usa para mostrar los enlaces *Instructor* y *Admin*.",
+        "height": 150,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "ea2ee8a2-cca0-5523-ab5e-b7785c3bc8cd",
+      "name": "Nota Mis roles",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -550
       ]
     },
     {
@@ -171,7 +171,7 @@
     {
       "parameters": {
         "respondWith": "text",
-        "responseBody": "={{ JSON.stringify($json.cuerpo) }}",
+        "responseBody": "={{ $json.cuerpo === null ? '' : JSON.stringify($json.cuerpo) }}",
         "options": {
           "responseCode": "={{ $json.estado }}",
           "responseHeaders": {
