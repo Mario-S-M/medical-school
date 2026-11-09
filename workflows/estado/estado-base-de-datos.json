@@ -35,8 +35,8 @@
         ],
         "credentials": {
           "postgres": {
-            "id": "pgPruebaLocal01",
-            "name": "Postgres n8n (local)"
+            "id": "pgSupabase01",
+            "name": "Postgres n8n (Supabase)"
           }
         }
       },
