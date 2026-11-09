@@ -1,6 +1,6 @@
 # SPEC 01 — Secretos seguros con openssl para Postgres + n8n
 
-**Estado:** Borrador
+**Estado:** Aprobado
 **Depende de:** —
 **Fecha:** 2026-11-08
 **Objetivo:** Generar con openssl, en una sola ejecución sin dejar ningún script en disco, un usuario de Postgres, contraseñas y la clave de cifrado de n8n, escribirlos en `.env` y recrear el stack para que n8n arranque conectado a Postgres con esas credenciales.
