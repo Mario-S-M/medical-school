@@ -150,6 +150,8 @@ services:
       GOTRUE_JWT_AUD: authenticated
       GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
       GOTRUE_JWT_EXP: ${JWT_EXPIRY}
+      # Vida máxima de la sesión (token de renovación): 7 días
+      GOTRUE_SESSIONS_TIMEBOX: 168h
 
       # Legacy symmetric HS256 key
       GOTRUE_JWT_SECRET: ${JWT_SECRET}
