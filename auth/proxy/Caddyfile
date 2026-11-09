@@ -1,4 +1,4 @@
-# Caddy: única entrada a la API de autenticación (SPEC 04).
+# Caddy: única entrada a la API de autenticación (SPEC 04) y de la escuela (SPEC 07).
 # Variables de entorno: ORIGEN_FRONT y SECRETO_PROXY (las pasa docker-compose).
 {
 	admin off
@@ -21,7 +21,7 @@
 		import cabeceras_seguras
 
 		# Todo lo que no sea /autenticacion/* no existe (así el editor de n8n no se alcanza)
-		@fuera not path /autenticacion/*
+		@fuera not path /autenticacion/* /escuela/*
 		respond @fuera `{"error":{"codigo":"NO_ENCONTRADO","mensaje":"Recurso no encontrado."}}` 404
 
 		# Origen distinto del front permitido
@@ -44,7 +44,7 @@
 		@preflight {
 			method OPTIONS
 			header Origin {$ORIGEN_FRONT}
-			path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/renovar /autenticacion/cerrar-sesion /autenticacion/yo /autenticacion/recuperar /autenticacion/restablecer /autenticacion/verificar-correo /autenticacion/reenviar-verificacion
+			path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/renovar /autenticacion/cerrar-sesion /autenticacion/yo /autenticacion/recuperar /autenticacion/restablecer /autenticacion/verificar-correo /autenticacion/reenviar-verificacion /escuela/categorias /escuela/cursos /escuela/curso /escuela/mis-roles /escuela/mis-invitaciones /escuela/mis-cursos /escuela/curso-edicion /escuela/mi-equipo /escuela/admin/buscar-usuario /escuela/admin/cursos-en-revision /escuela/responder-invitacion /escuela/crear-curso /escuela/editar-curso /escuela/guardar-seccion /escuela/borrar-seccion /escuela/guardar-clase /escuela/borrar-clase /escuela/mover /escuela/enviar-revision /escuela/url-subida-portada /escuela/confirmar-portada /escuela/invitar-equipo /escuela/cancelar-invitacion /escuela/quitar-miembro /escuela/admin/asignar-rol /escuela/admin/guardar-categoria /escuela/admin/borrar-categoria /escuela/admin/resolver-revision /escuela/admin/retirar-curso
 		}
 		header @preflight {
 			>Access-Control-Allow-Methods "GET, POST, OPTIONS"
@@ -55,21 +55,21 @@
 
 		# Rutas desconocidas dentro de /autenticacion/
 		@ruta_desconocida {
-			path /autenticacion/*
-			not path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/renovar /autenticacion/cerrar-sesion /autenticacion/yo /autenticacion/recuperar /autenticacion/restablecer /autenticacion/verificar-correo /autenticacion/reenviar-verificacion
+			path /autenticacion/* /escuela/*
+			not path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/renovar /autenticacion/cerrar-sesion /autenticacion/yo /autenticacion/recuperar /autenticacion/restablecer /autenticacion/verificar-correo /autenticacion/reenviar-verificacion /escuela/categorias /escuela/cursos /escuela/curso /escuela/mis-roles /escuela/mis-invitaciones /escuela/mis-cursos /escuela/curso-edicion /escuela/mi-equipo /escuela/admin/buscar-usuario /escuela/admin/cursos-en-revision /escuela/responder-invitacion /escuela/crear-curso /escuela/editar-curso /escuela/guardar-seccion /escuela/borrar-seccion /escuela/guardar-clase /escuela/borrar-clase /escuela/mover /escuela/enviar-revision /escuela/url-subida-portada /escuela/confirmar-portada /escuela/invitar-equipo /escuela/cancelar-invitacion /escuela/quitar-miembro /escuela/admin/asignar-rol /escuela/admin/guardar-categoria /escuela/admin/borrar-categoria /escuela/admin/resolver-revision /escuela/admin/retirar-curso
 		}
 		respond @ruta_desconocida `{"error":{"codigo":"NO_ENCONTRADO","mensaje":"Recurso no encontrado."}}` 404
 
 		# Métodos permitidos por ruta
 		@solo_post {
-			path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/renovar /autenticacion/cerrar-sesion /autenticacion/recuperar /autenticacion/restablecer /autenticacion/verificar-correo /autenticacion/reenviar-verificacion
+			path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/renovar /autenticacion/cerrar-sesion /autenticacion/recuperar /autenticacion/restablecer /autenticacion/verificar-correo /autenticacion/reenviar-verificacion /escuela/responder-invitacion /escuela/crear-curso /escuela/editar-curso /escuela/guardar-seccion /escuela/borrar-seccion /escuela/guardar-clase /escuela/borrar-clase /escuela/mover /escuela/enviar-revision /escuela/url-subida-portada /escuela/confirmar-portada /escuela/invitar-equipo /escuela/cancelar-invitacion /escuela/quitar-miembro /escuela/admin/asignar-rol /escuela/admin/guardar-categoria /escuela/admin/borrar-categoria /escuela/admin/resolver-revision /escuela/admin/retirar-curso
 			not method POST
 		}
 		header @solo_post >Allow POST
 		respond @solo_post `{"error":{"codigo":"METODO_NO_PERMITIDO","mensaje":"Método no permitido."}}` 405
 
 		@solo_get {
-			path /autenticacion/yo
+			path /autenticacion/yo /escuela/categorias /escuela/cursos /escuela/curso /escuela/mis-roles /escuela/mis-invitaciones /escuela/mis-cursos /escuela/curso-edicion /escuela/mi-equipo /escuela/admin/buscar-usuario /escuela/admin/cursos-en-revision
 			not method GET
 		}
 		header @solo_get >Allow GET
@@ -77,7 +77,7 @@
 
 		# Las rutas con cuerpo exigen JSON
 		@sin_json {
-			path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/recuperar /autenticacion/restablecer /autenticacion/verificar-correo /autenticacion/reenviar-verificacion
+			path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/recuperar /autenticacion/restablecer /autenticacion/verificar-correo /autenticacion/reenviar-verificacion /escuela/responder-invitacion /escuela/crear-curso /escuela/editar-curso /escuela/guardar-seccion /escuela/borrar-seccion /escuela/guardar-clase /escuela/borrar-clase /escuela/mover /escuela/enviar-revision /escuela/url-subida-portada /escuela/confirmar-portada /escuela/invitar-equipo /escuela/cancelar-invitacion /escuela/quitar-miembro /escuela/admin/asignar-rol /escuela/admin/guardar-categoria /escuela/admin/borrar-categoria /escuela/admin/resolver-revision /escuela/admin/retirar-curso
 			not header Content-Type application/json*
 		}
 		respond @sin_json `{"error":{"codigo":"TIPO_CONTENIDO_NO_SOPORTADO","mensaje":"El tipo de contenido debe ser application/json."}}` 415

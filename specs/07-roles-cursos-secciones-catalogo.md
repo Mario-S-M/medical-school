@@ -41,7 +41,9 @@ El usuario pidió una escuela en línea completa (instructores, videos protegido
 - **Portada:** imagen JPG, PNG o WebP de hasta 2 MB en un bucket público `portadas` de Supabase Storage. n8n entrega una URL firmada de subida y el navegador sube el archivo por el proxy de Astro `/almacen` hacia Kong.
 - **Backend:**
   - carpeta nueva `escuela/` (`sql/`, `workflows/`, `plantillas/`, `postman/`, `pruebas/`, `scripts/`, `README.md`);
-  - workflows en la carpeta `Escuela` de n8n, uno por endpoint, más el subworkflow `Validar sesion y roles`;
+  - workflows de n8n, uno por endpoint, generados por `escuela/scripts/generar_workflows.py` e importados con `escuela/scripts/importar_workflows.sh`. Los de roles y sesión (`Validar sesion y roles`, `Mis roles`, `Buscar usuario`, `Asignar rol`) van en la carpeta `Usuarios` de n8n y el resto en la carpeta `Escuela`;
+  - cada workflow se divide en **grupos de nodos colapsables** (un grupo por tramo de lógica) y lleva **notas adhesivas** (una general y una por sección);
+  - la lógica que se repite en varios workflows vive en un **subworkflow** (hoy `Validar sesion y roles`) y se llama con *Execute Workflow*, nunca se copia;
   - rutas `/escuela/*` en Caddy y en el proxy de Astro.
 - **Front:**
   - páginas `/cursos`, `/curso`, `/instructor`, `/instructor/curso`, `/instructor/equipo`, `/admin/roles`, `/admin/categorias` y `/admin/revision`;
@@ -280,7 +282,9 @@ CREATE UNIQUE INDEX invitaciones_pendiente_unica ON escuela.invitaciones_equipo 
 - [ ] `quitar-miembro` retira el acceso al temario. Si el usuario no está en otro equipo, pierde el rol `equipo_apoyo`.
 - [ ] `borrar-categoria` con cursos asignados da `409 CATEGORIA_EN_USO`.
 - [ ] Las rutas `/escuela/*` responden por Caddy `405` ante un método no permitido, `415` en `POST` sin JSON y `413` ante más de 10 KB, y por el puerto 5678 directo sin el secreto del proxy responden `403`.
-- [ ] Ningún workflow de `Escuela` guarda ejecuciones correctas, todos están publicados en la carpeta `Escuela` de n8n, y los nombres de workflows, nodos, campos, tablas y variables nuevas están en español.
+- [ ] Ningún workflow de la escuela guarda ejecuciones correctas, todos están publicados (los subworkflows también, n8n no ejecuta uno inactivo), los de roles y sesión están en la carpeta `Usuarios` y el resto en `Escuela`, y los nombres de workflows, nodos, campos, tablas y variables nuevas están en español.
+- [ ] Cada workflow tiene una nota general y una nota por sección, y los grupos de nodos (que n8n exige conexos, con una entrada y una salida) se pueden colapsar. `python3 escuela/scripts/revisar_notas.py` termina con código 0 (cada nodo queda dentro de una sola nota y ninguna nota pisa a otra) y, abierto en el editor de n8n con Playwright, ningún workflow muestra notas cortadas ni superpuestas a los nodos.
+- [ ] Ninguna lógica está copiada entre workflows: la comprobación de la sesión y los roles solo existe en `Validar sesion y roles`, y los demás la llaman.
 - [ ] Ningún archivo de `escuela/` ni de `frontend/` contiene la `SERVICE_ROLE_KEY`, `SECRETO_PROXY`, `JWT_SECRET` ni el email del owner.
 - [ ] `escuela/README.md` documenta cada endpoint, los errores, los permisos, cómo crear el primer administrador y cómo crear el bucket. La colección de Postman es JSON válido sin secretos.
 
@@ -313,6 +317,8 @@ CREATE UNIQUE INDEX invitaciones_pendiente_unica ON escuela.invitaciones_equipo 
 - **Tomada: Supabase Storage con URL firmada de subida por Kong** y el proxy `/almacen` de Astro. Es el mismo camino que usarán los videos y los archivos nunca pasan por n8n ni por el límite de 10 KB de Caddy. **Descartados:** subir a través de n8n y un disco local con Caddy.
 - **Tomada: nuevo `GET /escuela/mis-roles`.** **Descartado:** ampliar `/autenticacion/yo`, que cambiaba un workflow cerrado de SPEC 04.
 - **Tomada: carpeta `escuela/` y prefijo `/escuela/*`.** **Descartado:** mezclarlo en `auth/`.
+- **Tomada (petición del usuario al implementar): grupos de nodos, notas adhesivas y subworkflows.** Cada tramo de lógica es un grupo colapsable con su nota, y lo repetido va en un subworkflow. **Descartada:** workflows planos de 10 a 15 nodos con la lógica copiada en cada endpoint. Los workflows se generan con un script y no se dibujan a mano, para que las notas y los grupos sean coherentes.
+- **Tomada (petición del usuario al implementar): los workflows de roles van en una carpeta `Usuarios` de n8n** y el resto en `Escuela`; cambia lo escrito en el alcance original, que decía una sola carpeta `Escuela`.
 
 **Fuera de esta spec:**
 - **Tomada: conocimientos previos como texto plano; la IA con Ollama va en SPEC 12.**

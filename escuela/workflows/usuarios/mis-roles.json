@@ -1,0 +1,268 @@
+{
+  "id": "escMisRoles01",
+  "name": "Mis roles",
+  "description": "GET /escuela/mis-roles. Devuelve los roles extra del usuario (el estudiante es implícito) y los equipos de apoyo a los que pertenece. No guarda ejecuciones.",
+  "active": false,
+  "isArchived": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "executionTimeout": 15
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Mis roles\n`GET /escuela/mis-roles` · requiere sesión.\n\nDevuelve `{ roles, equipos }`. El estudiante es implícito: un usuario nuevo recibe `roles: []`. El menú de la cabecera del front lo usa para mostrar los enlaces *Instructor* y *Admin*.",
+        "height": 200,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "ea2ee8a2-cca0-5523-ab5e-b7785c3bc8cd",
+      "name": "Nota Mis roles",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -520
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Entrada\nWebhook protegido por el secreto del proxy (Caddy es la única entrada).",
+        "height": 340,
+        "width": 240,
+        "color": 4
+      },
+      "id": "984fc548-2389-56bf-8f7c-a5e2a2cceef1",
+      "name": "Nota Entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -70,
+        -170
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Comprobar sesion\nLlama al subworkflow `Validar sesion y roles`. Si la sesión no vale, su error pasa directo a *Responder*.",
+        "height": 340,
+        "width": 480,
+        "color": 3
+      },
+      "id": "12c26027-701b-57ae-9a32-40a4994ebfc4",
+      "name": "Nota Comprobar sesion",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        260,
+        -170
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Respuesta\nDa forma al `200` o devuelve el error de la sesión.",
+        "height": 440,
+        "width": 480,
+        "color": 5
+      },
+      "id": "34d70b3c-8690-5789-9fa4-e0c9b36f5e61",
+      "name": "Nota Respuesta",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        860,
+        -270
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "escuela/mis-roles",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "59bbfeb7-532b-5bcc-aa0e-09e82e339b49",
+      "name": "Recibir solicitud",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "secretoProxy01",
+          "name": "Secreto proxy"
+        }
+      },
+      "webhookId": "3b66478b-1b89-52d5-a373-e517a1d1f778"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escValidar01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "63b0da1e-b697-5dbf-98c6-bac7ee613771",
+      "name": "Validar sesion y roles",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "58a70ca9-8b24-5077-873e-086c3b7df699",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "38995125-b451-5d1e-8347-86e6f37b4818",
+      "name": "Sesion valida",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $input.first().json;\nconst equipos = c.equipos.map(e => ({ instructor_id: e.instructor_id, nombre_publico: e.nombre_publico }));\nreturn [{ json: { estado: 200, cuerpo: { roles: c.roles, equipos } } }];"
+      },
+      "id": "9bc38ef2-1c43-5d01-9a8f-31f609ffed5b",
+      "name": "Armar respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify($json.cuerpo) }}",
+        "options": {
+          "responseCode": "={{ $json.estado }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "X-Flujo",
+                "value": "escuela"
+              }
+            ]
+          }
+        }
+      },
+      "id": "978b3313-02be-5e4a-be0d-1289e49060b3",
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1200,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Recibir solicitud": {
+      "main": [
+        [
+          {
+            "node": "Validar sesion y roles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar sesion y roles": {
+      "main": [
+        [
+          {
+            "node": "Sesion valida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sesion valida": {
+      "main": [
+        [
+          {
+            "node": "Armar respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar respuesta": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [
+    {
+      "id": "2bcab175-9431-567f-99c0-f0ea7f8fc602",
+      "name": "Comprobar sesion",
+      "nodeIds": [
+        "63b0da1e-b697-5dbf-98c6-bac7ee613771",
+        "38995125-b451-5d1e-8347-86e6f37b4818"
+      ],
+      "description": "Valida el token y carga roles y equipos con el subworkflow compartido."
+    }
+  ],
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}

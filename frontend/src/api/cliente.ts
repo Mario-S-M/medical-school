@@ -1,6 +1,6 @@
 import { ErrorApi } from './errores';
 
-type Opciones = { cuerpo?: unknown; token?: string; renovacion?: boolean };
+type Opciones = { cuerpo?: unknown; token?: string; renovacion?: boolean; prefijo?: string };
 
 async function leerJson(respuesta: Response) {
   try {
@@ -18,7 +18,7 @@ export async function solicitar<T>(metodo: string, ruta: string, op: Opciones = 
 
   let respuesta: Response;
   try {
-    respuesta = await fetch(`/autenticacion/${ruta}`, {
+    respuesta = await fetch(`/${op.prefijo ?? 'autenticacion'}/${ruta}`, {
       method: metodo,
       headers: cabeceras,
       credentials: 'same-origin',

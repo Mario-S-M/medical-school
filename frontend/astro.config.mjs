@@ -13,7 +13,7 @@ export default defineConfig({
     plugins: [tailwindcss()],
     server: {
       strictPort: true,
-      proxy: { '/autenticacion': { target: URL_API } },
+      proxy: { '/autenticacion': { target: URL_API }, '/escuela': { target: URL_API } },
     },
   },
 });
