@@ -125,7 +125,7 @@ estado_es 403 "renovar sin X-Solicitado-Con -> 403"
 cuerpo_tiene '"ORIGEN_NO_PERMITIDO"' "renovar sin X-Solicitado-Con -> ORIGEN_NO_PERMITIDO"
 
 echo "== Acceso directo a n8n sin pasar por Caddy"
-for ruta in registro iniciar-sesion renovar; do  # se amplía con cada workflow nuevo
+for ruta in registro iniciar-sesion renovar cerrar-sesion yo; do  # se amplía con cada workflow nuevo
   metodo=POST; [ "$ruta" = yo ] && metodo=GET
   solicitar "$metodo" "/webhook/autenticacion/$ruta" -H 'Content-Type: application/json' -d '{}' --connect-timeout 3 2>/dev/null
   BASE_ORIGINAL="$BASE"; BASE="http://127.0.0.1:5678"
@@ -309,6 +309,63 @@ renovar_sesion "$COOKIE_1"
 estado_es 401 "reusar una cookie ya rotada y consumida -> 401"
 cuerpo_tiene '"TOKEN_INVALIDO"' "reusar una cookie ya rotada y consumida -> TOKEN_INVALIDO"
 cabecera_tiene "Max-Age=0" "reuso detectado: la cookie se borra"
+
+echo "== Quién soy y cierre de sesión"
+limpiar_intentos
+registrar_usuario sesion2
+CORREO_YO="$CORREO_ACTUAL"
+iniciar_sesion "$CORREO_YO" "$CONTRASENA_VALIDA"
+TOKEN_YO="$(campo_json token_acceso)"
+COOKIE_YO="$(valor_cookie)"
+consultar_yo() { solicitar GET /autenticacion/yo -H "Origin: $ORIGEN_FRONT" "$@"; }
+consultar_yo -H "Authorization: Bearer $TOKEN_YO"
+estado_es 200 "yo con token válido -> 200"
+echo "$cuerpo" | python3 -c "import sys,json; d=json.load(sys.stdin); assert set(d)=={'id','correo','nombre'} and d['correo']=='$CORREO_YO' and d['nombre']=='Usuario sesion2'"; verificar "yo devuelve solo { id, correo, nombre }" $?
+consultar_yo
+estado_es 401 "yo sin token -> 401"
+cuerpo_tiene '"TOKEN_INVALIDO"' "yo sin token -> TOKEN_INVALIDO"
+consultar_yo -H "Authorization: Bearer ${TOKEN_YO%?}x"
+estado_es 401 "yo con token manipulado -> 401"
+consultar_yo -H "Authorization: Basic $TOKEN_YO"
+estado_es 401 "yo con esquema distinto de Bearer -> 401"
+TOKEN_EXPIRADO="$(JWT_SECRET="$(leer_env JWT_SECRET)" python3 - <<'PY'
+import os, hmac, hashlib, base64, json, time, uuid
+b = lambda d: base64.urlsafe_b64encode(d).rstrip(b'=').decode()
+h = b(json.dumps({'alg': 'HS256', 'typ': 'JWT'}).encode())
+p = b(json.dumps({'sub': str(uuid.uuid4()), 'role': 'authenticated', 'aud': 'authenticated', 'iat': int(time.time()) - 1000, 'exp': int(time.time()) - 100, 'session_id': str(uuid.uuid4())}).encode())
+print(f"{h}.{p}.{b(hmac.new(os.environ['JWT_SECRET'].encode(), f'{h}.{p}'.encode(), hashlib.sha256).digest())}")
+PY
+)"
+consultar_yo -H "Authorization: Bearer $TOKEN_EXPIRADO"
+estado_es 401 "yo con token expirado -> 401"
+
+solicitar POST /autenticacion/cerrar-sesion -H "Origin: $ORIGEN_FRONT"
+estado_es 401 "cerrar sesión sin token -> 401"
+solicitar POST /autenticacion/cerrar-sesion -H "Origin: $ORIGEN_FRONT" -H "Authorization: Bearer $TOKEN_YO" -H "Cookie: token_renovacion=$COOKIE_YO"
+estado_es 204 "cerrar sesión con token válido -> 204"
+cabecera_tiene "Max-Age=0" "cerrar sesión: la cookie se borra"
+cabecera_tiene "Set-Cookie: token_renovacion=;" "cerrar sesión: cookie token_renovacion vacía"
+consultar_yo -H "Authorization: Bearer $TOKEN_YO"
+estado_es 401 "tras cerrar sesión, el token de acceso anterior ya no pasa yo"
+renovar_sesion "$COOKIE_YO"
+estado_es 401 "tras cerrar sesión, la cookie anterior ya no renueva"
+
+echo "== Ejecuciones y secretos"
+for valor_env in SECRETO_PROXY JWT_SECRET CONTRASENA_BD_N8N POSTGRES_PASSWORD SERVICE_ROLE_KEY; do
+  valor="$(leer_env "$valor_env")"
+  [ -z "$(grep -rlF -- "$valor" auth .env.example 2>/dev/null)" ]; verificar "ningún archivo de auth/ ni .env.example contiene $valor_env" $?
+done
+CORREO_OWNER="$(psql_n8n 'select email from "user" order by "createdAt" limit 1')"
+[ -n "$CORREO_OWNER" ] && [ -z "$(grep -rlF -- "$CORREO_OWNER" auth .env.example 2>/dev/null)" ]; verificar "ningún archivo de auth/ ni .env.example contiene el email del owner" $?
+IDS="'autRegistro01','autInicioSesion01','autRenovarSesion01','autQuienSoy01','autCierreSesion01'"
+echo "  (esperando el borrado definitivo de ejecuciones de n8n, hasta 2 minutos)"
+intentos=0
+until [ "$(psql_n8n "select (select count(*) from execution_entity where \"workflowId\" in ($IDS)) + (select count(*) from execution_data d join execution_entity e on e.id = d.\"executionId\" where e.\"workflowId\" in ($IDS))")" = "0" ] || [ "$intentos" -ge 40 ]; do
+  sleep 3; intentos=$((intentos + 1))
+done
+[ "$(psql_n8n "select count(*) from execution_entity where \"workflowId\" in ($IDS)")" = "0" ]; verificar "execution_entity sin filas de los cinco workflows" $?
+[ "$(psql_n8n "select count(*) from execution_data d join execution_entity e on e.id = d.\"executionId\" where e.\"workflowId\" in ($IDS)")" = "0" ]; verificar "execution_data sin filas de los cinco workflows" $?
+[ "$(psql_n8n "select count(*) from execution_data where data like '%${CONTRASENA_VALIDA}%'")" = "0" ]; verificar "ninguna contraseña de las pruebas aparece en execution_data" $?
 
 echo
 echo "Casos: $total, fallos: $fallos"
