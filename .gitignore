@@ -4,3 +4,8 @@
 postgres/
 pgadmin/
 .playwright-mcp/
+
+# Supabase: datos locales
+supabase/volumes/db/data/
+supabase/volumes/storage/
+supabase/volumes/logs/*.log
