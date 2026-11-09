@@ -1,6 +1,6 @@
 # SPEC 06 — Front de autenticación en Astro, con componentes mínimos y pruebas e2e
 
-**Estado:** Aprobado
+**Estado:** Implementado
 **Depende de:** SPEC 05 (y, a través de ella, SPEC 04, 03, 02 y 01)
 **Fecha:** 2026-11-09
 **Objetivo:** Crear en `frontend/` un proyecto Astro (última versión) con una plantilla genérica y las pantallas de registro, verificación de correo, inicio de sesión, recuperación de contraseña y panel protegido, que consumen la API de `auth/` y están divididas en componentes, hooks y módulos de, como máximo, 50 líneas cada uno.
@@ -99,26 +99,26 @@ Los identificadores van en español y sin acentos (`FormularioInicioSesion`, `to
 
 ## Criterios de aceptación
 
-- [ ] `npm run build` en `frontend/` termina con código 0 y `npx astro check` no reporta errores.
-- [ ] `frontend/package.json` fija `astro` en la versión más reciente publicada en npm el día de la implementación, y usa `@astrojs/react` y `tailwindcss` v4.
-- [ ] `frontend/scripts/verificar_tamano.sh` termina con código 0: ningún archivo `.astro`, `.tsx` o `.ts` de `frontend/src/` supera 50 líneas.
-- [ ] `docker compose config -q` pasa y `ORIGEN_FRONT` vale `http://localhost:4321` en `.env.example`; `auth/pruebas/pruebas.sh` sigue terminando con código 0.
-- [ ] Con `npm run dev` activo, `curl -i http://localhost:4321/autenticacion/yo` devuelve `401` con `TOKEN_INVALIDO`, y `GET http://localhost:4321/webhook/autenticacion/yo` no llega a n8n.
-- [ ] `npx playwright test` termina con código 0 contra el stack levantado y cubre cada criterio de esta lista que lo permite.
-- [ ] Registrar un usuario nuevo lleva a `/verificar-correo` con el correo precargado; el código leído de Mailpit lo verifica y el usuario puede iniciar sesión.
-- [ ] Un código erróneo en `/verificar-correo` muestra "El código no es válido o venció." y no cambia de página; "Reenviar código" deja a Mailpit con un correo nuevo y bloquea el botón con cuenta regresiva.
-- [ ] Iniciar sesión con una cuenta sin verificar lleva a `/verificar-correo`; con la contraseña incorrecta muestra el mensaje genérico de credenciales.
-- [ ] Iniciar sesión correcto lleva a `/panel`, que muestra el nombre y el correo del usuario sin pedir nada más.
-- [ ] Recargar `/panel` con sesión mantiene al usuario dentro (se restaura con `renovar`); abrir `/panel` sin sesión redirige a `/iniciar-sesion`.
-- [ ] Tras iniciar sesión, `localStorage` y `sessionStorage` no contienen `token_acceso` ni la contraseña (solo `correo_pendiente`, y se borra al verificar), y `document.cookie` no muestra `token_renovacion` (es `HttpOnly`).
-- [ ] "Cerrar sesión" lleva a `/iniciar-sesion`; después, `/panel` redirige de nuevo y la cookie anterior ya no renueva (`401`).
-- [ ] Un registro con una contraseña débil muestra en una lista cada regla incumplida que devuelve la API, y la lista de reglas en vivo marca como cumplidas las que el cliente comprueba.
-- [ ] Tras 5 contraseñas incorrectas del mismo correo, el sexto intento muestra el bloqueo con cuenta regresiva y el botón deshabilitado.
-- [ ] `/recuperar` con un correo registrado y con uno inexistente muestra el mismo mensaje; `/restablecer` con el código de Mailpit y una contraseña válida lleva a `/iniciar-sesion`, y entrar con la nueva funciona y con la vieja da error de credenciales.
-- [ ] Una sesión abierta antes de `restablecer` queda cerrada: recargar `/panel` en ella redirige a `/iniciar-sesion`.
-- [ ] Toda la interfaz está en español, cada campo tiene `label` asociado y los mensajes de error están en una región `aria-live`.
-- [ ] Ningún archivo de `frontend/` (excepto `node_modules`) contiene `SECRETO_PROXY`, `JWT_SECRET`, claves de Supabase ni el email del owner, y `frontend/node_modules` y `frontend/dist` están ignorados por git.
-- [ ] `frontend/README.md` documenta cómo arrancar el front, la variable `URL_API`, la estructura de carpetas, la regla de 50 líneas y cómo correr las pruebas e2e.
+- [x] `npm run build` en `frontend/` termina con código 0 y `npx astro check` no reporta errores.
+- [x] `frontend/package.json` fija `astro` en la versión más reciente publicada en npm el día de la implementación, y usa `@astrojs/react` y `tailwindcss` v4.
+- [x] `frontend/scripts/verificar_tamano.sh` termina con código 0: ningún archivo `.astro`, `.tsx` o `.ts` de `frontend/src/` supera 50 líneas.
+- [x] `docker compose config -q` pasa y `ORIGEN_FRONT` vale `http://localhost:4321` en `.env.example`; `auth/pruebas/pruebas.sh` sigue terminando con código 0.
+- [x] Con `npm run dev` activo, `curl -i http://localhost:4321/autenticacion/yo` devuelve `401` con `TOKEN_INVALIDO`, y `GET http://localhost:4321/webhook/autenticacion/yo` no llega a n8n.
+- [x] `npx playwright test` termina con código 0 contra el stack levantado y cubre cada criterio de esta lista que lo permite.
+- [x] Registrar un usuario nuevo lleva a `/verificar-correo` con el correo precargado; el código leído de Mailpit lo verifica y el usuario puede iniciar sesión.
+- [x] Un código erróneo en `/verificar-correo` muestra "El código no es válido o venció." y no cambia de página; "Reenviar código" deja a Mailpit con un correo nuevo y bloquea el botón con cuenta regresiva.
+- [x] Iniciar sesión con una cuenta sin verificar lleva a `/verificar-correo`; con la contraseña incorrecta muestra el mensaje genérico de credenciales.
+- [x] Iniciar sesión correcto lleva a `/panel`, que muestra el nombre y el correo del usuario sin pedir nada más.
+- [x] Recargar `/panel` con sesión mantiene al usuario dentro (se restaura con `renovar`); abrir `/panel` sin sesión redirige a `/iniciar-sesion`.
+- [x] Tras iniciar sesión, `localStorage` y `sessionStorage` no contienen `token_acceso` ni la contraseña (solo `correo_pendiente`, y se borra al verificar), y `document.cookie` no muestra `token_renovacion` (es `HttpOnly`).
+- [x] "Cerrar sesión" lleva a `/iniciar-sesion`; después, `/panel` redirige de nuevo y la cookie anterior ya no renueva (`401`).
+- [x] Un registro con una contraseña débil muestra en una lista cada regla incumplida que devuelve la API, y la lista de reglas en vivo marca como cumplidas las que el cliente comprueba.
+- [x] Tras 5 contraseñas incorrectas del mismo correo, el sexto intento muestra el bloqueo con cuenta regresiva y el botón deshabilitado.
+- [x] `/recuperar` con un correo registrado y con uno inexistente muestra el mismo mensaje; `/restablecer` con el código de Mailpit y una contraseña válida lleva a `/iniciar-sesion`, y entrar con la nueva funciona y con la vieja da error de credenciales.
+- [x] Una sesión abierta antes de `restablecer` queda cerrada: recargar `/panel` en ella redirige a `/iniciar-sesion`.
+- [x] Toda la interfaz está en español, cada campo tiene `label` asociado y los mensajes de error están en una región `aria-live`.
+- [x] Ningún archivo de `frontend/` (excepto `node_modules`) contiene `SECRETO_PROXY`, `JWT_SECRET`, claves de Supabase ni el email del owner, y `frontend/node_modules` y `frontend/dist` están ignorados por git.
+- [x] `frontend/README.md` documenta cómo arrancar el front, la variable `URL_API`, la estructura de carpetas, la regla de 50 líneas y cómo correr las pruebas e2e.
 
 ## Decisiones tomadas y descartadas
 
