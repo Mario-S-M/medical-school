@@ -45,5 +45,26 @@ services:
       db:
         condition: service_healthy
 
+  caddy:
+    image: caddy:2.11.9-alpine
+    restart: unless-stopped
+    environment:
+      ORIGEN_FRONT: ${ORIGEN_FRONT}
+      SECRETO_PROXY: ${SECRETO_PROXY}
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./auth/proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+    tmpfs:
+      - /data
+      - /config
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      - n8n
+
 volumes:
   pgadmin_data:
