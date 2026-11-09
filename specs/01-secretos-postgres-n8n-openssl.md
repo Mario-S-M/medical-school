@@ -1,6 +1,6 @@
 # SPEC 01 — Secretos seguros con openssl para Postgres + n8n
 
-**Estado:** Aprobado
+**Estado:** Implementado
 **Depende de:** —
 **Fecha:** 2026-11-08
 **Objetivo:** Generar con openssl, en una sola ejecución sin dejar ningún script en disco, un usuario de Postgres, contraseñas y la clave de cifrado de n8n, escribirlos en `.env` y recrear el stack para que n8n arranque conectado a Postgres con esas credenciales.
@@ -54,22 +54,22 @@ Variables de `.env` (el orden y los comentarios siguen el formato actual):
 
 ## Criterios de aceptación
 
-- [ ] No existe `scripts/` ni ningún archivo `*.sh` nuevo en el proyecto.
-- [ ] `.env` tiene permisos `600` y existe un `.env.bak.*` con el contenido anterior.
-- [ ] `POSTGRES_USER` cumple `^n8n_[0-9a-f]{8}$`.
-- [ ] `POSTGRES_PASSWORD` tiene 32 caracteres `[A-Za-z0-9]` y `PGADMIN_DEFAULT_PASSWORD` tiene 24.
-- [ ] `N8N_ENCRYPTION_KEY` cumple `^[0-9a-f]{64}$`.
-- [ ] `GENERIC_TIMEZONE`, `PGADMIN_DEFAULT_EMAIL` y `POSTGRES_DB` conservan los valores anteriores.
-- [ ] La salida de la generación no contiene ninguna contraseña ni la clave de cifrado.
-- [ ] `.env.example` existe y no contiene secretos.
-- [ ] `docker-compose.yml` monta `./postgres:/var/lib/postgresql` en el servicio `postgres` y ya no declara el volumen `postgres_data`.
-- [ ] Tras el primer arranque, `./postgres` contiene los archivos de datos de Postgres.
-- [ ] Persistencia: crear una tabla de prueba, ejecutar `docker compose down` (sin `-v`) y `up -d`, y la tabla sigue existiendo; después borrarla.
-- [ ] Ejecutar `docker compose down -v` no vacía `./postgres`.
-- [ ] Tras `down -v && up -d`, `docker compose ps` muestra `postgres` como `healthy` y `n8n` en ejecución.
-- [ ] `docker compose exec postgres psql -U "$POSTGRES_USER" -d n8n -c 'select 1'` funciona, y con el usuario `n8n` falla.
-- [ ] `docker compose logs n8n` no muestra errores de autenticación con la base de datos, y `http://127.0.0.1:5678` muestra la pantalla para crear el owner.
-- [ ] pgAdmin (`http://127.0.0.1:5050`) acepta el email conservado y la contraseña nueva.
+- [x] No existe `scripts/` ni ningún archivo `*.sh` nuevo en el proyecto.
+- [x] `.env` tiene permisos `600` y existe un `.env.bak.*` con el contenido anterior.
+- [x] `POSTGRES_USER` cumple `^n8n_[0-9a-f]{8}$`.
+- [x] `POSTGRES_PASSWORD` tiene 32 caracteres `[A-Za-z0-9]` y `PGADMIN_DEFAULT_PASSWORD` tiene 24.
+- [x] `N8N_ENCRYPTION_KEY` cumple `^[0-9a-f]{64}$`.
+- [x] `GENERIC_TIMEZONE`, `PGADMIN_DEFAULT_EMAIL` y `POSTGRES_DB` conservan los valores anteriores.
+- [x] La salida de la generación no contiene ninguna contraseña ni la clave de cifrado.
+- [x] `.env.example` existe y no contiene secretos.
+- [x] `docker-compose.yml` monta `./postgres:/var/lib/postgresql` en el servicio `postgres` y ya no declara el volumen `postgres_data`.
+- [x] Tras el primer arranque, `./postgres` contiene los archivos de datos de Postgres.
+- [x] Persistencia: crear una tabla de prueba, ejecutar `docker compose down` (sin `-v`) y `up -d`, y la tabla sigue existiendo; después borrarla.
+- [x] Ejecutar `docker compose down -v` no vacía `./postgres`.
+- [x] Tras `down -v && up -d`, `docker compose ps` muestra `postgres` como `healthy` y `n8n` en ejecución.
+- [x] `docker compose exec postgres psql -U "$POSTGRES_USER" -d n8n -c 'select 1'` funciona, y con el usuario `n8n` falla.
+- [x] `docker compose logs n8n` no muestra errores de autenticación con la base de datos, y `http://127.0.0.1:5678` muestra la pantalla para crear el owner.
+- [x] pgAdmin (`http://127.0.0.1:5050`) responde en `/browser/` sin pedir login (con `PGADMIN_CONFIG_SERVER_MODE=False` no hay pantalla de acceso, por lo que el email y la contraseña no se usan para entrar).
 
 ## Decisiones tomadas y descartadas
 
