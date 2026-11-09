@@ -123,7 +123,7 @@ CREATE UNIQUE INDEX invitaciones_pendiente_unica ON escuela.invitaciones_equipo 
 ```
 
 **Reglas:**
-- **Slug:** se genera del título (minúsculas, sin acentos, guiones) con sufijo `-2`, `-3`… si ya existe. No cambia tras la primera publicación.
+- **Slug:** se genera del título (minúsculas, sin acentos, guiones) con sufijo `-2`, `-3`… si ya existe. Se fija al crear el curso y no cambia aunque se renombre (así los enlaces nunca se rompen).
 - **Caducidad:** una invitación `pendiente` con `expira_en < now()` se trata como caducada y se puede reenviar.
 - **Rol `equipo_apoyo`:** se quita cuando el usuario ya no pertenece a ningún equipo.
 - **Perfil del instructor:** `perfiles_instructor` se rellena desde Supabase Auth (`user_metadata.nombre`) al dar el rol `instructor`.
@@ -312,6 +312,7 @@ CREATE UNIQUE INDEX invitaciones_pendiente_unica ON escuela.invitaciones_equipo 
 - **Tomada: editar un curso publicado no lo devuelve a revisión.** Mantiene la spec manejable; el admin puede retirarlo. **Descartado:** versionar cursos publicados.
 - **Tomada: catálogo y ficha públicos, y todo video con cuenta (SPEC 08).** Atrae gente sin romper la regla de "sí o sí con cuenta" para ver clases. **Descartados:** todo cerrado y muestras sin cuenta.
 - **Tomada: fichas estáticas con carga en el cliente (`/curso?c=`).** Respeta SPEC 06. **Descartado:** SSR con `@astrojs/node` (mejor SEO; puede volver en otra spec).
+- **Tomada (al implementar): el slug se fija al crear el curso** y `editar-curso` no lo acepta. **Descartado:** regenerarlo mientras sea borrador, que complicaba las reglas sin dar nada a cambio.
 - **Tomada: reordenar con botones subir y bajar.** **Descartado:** arrastrar y soltar.
 
 **Infraestructura:**

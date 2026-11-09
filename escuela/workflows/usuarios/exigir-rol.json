@@ -1,7 +1,7 @@
 {
   "id": "escExigirRol01",
   "name": "Exigir rol",
-  "description": "Subworkflow. Recibe la solicitud del webhook más rol_requerido, valida la sesión con Validar sesion y roles y comprueba que el usuario tenga ese rol. Devuelve el mismo item con { ok, usuario, roles, equipos } o { ok: false, estado: 401 o 403, cuerpo }.",
+  "description": "Subworkflow. Recibe la solicitud del webhook más rol_requerido (un rol o una lista: basta con uno), valida la sesión con Validar sesion y roles y comprueba que el usuario lo tenga. Devuelve el mismo item con { ok, usuario, roles, equipos } o { ok: false, estado: 401 o 403, cuerpo }.",
   "active": false,
   "isArchived": false,
   "settings": {
@@ -79,7 +79,7 @@
     },
     {
       "parameters": {
-        "content": "### Exigir rol\nSubworkflow compartido: **ningún endpoint protegido repite la comprobación de permisos**.\n\nEntrada: la solicitud del webhook y `rol_requerido` (`instructor`, `administrador`…). Salida: el mismo item con `usuario`, `roles` y `equipos`, o `{ ok: false, estado, cuerpo }`.",
+        "content": "### Exigir rol\nSubworkflow compartido: **ningún endpoint protegido repite la comprobación de permisos**.\n\nEntrada: la solicitud del webhook y `rol_requerido` (un rol o una lista de roles: basta con uno). Salida: el mismo item con `usuario`, `roles` y `equipos`, o `{ ok: false, estado, cuerpo }`.",
         "height": 150,
         "width": 1000,
         "color": 7
@@ -162,7 +162,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const contexto = $input.first().json;\nconst original = $('Disparador').first().json;\nif (!contexto.roles.includes(original.rol_requerido)) {\n  return [{ json: { ok: false, estado: 403, cuerpo: { error: { codigo: 'SIN_PERMISO', mensaje: 'No tienes permiso para hacer esto.' } } } }];\n}\nreturn [{ json: { ...original, ...contexto } }];"
+        "jsCode": "const contexto = $input.first().json;\nconst original = $('Disparador').first().json;\nif (![].concat(original.rol_requerido).some((r) => contexto.roles.includes(r))) {\n  return [{ json: { ok: false, estado: 403, cuerpo: { error: { codigo: 'SIN_PERMISO', mensaje: 'No tienes permiso para hacer esto.' } } } }];\n}\nreturn [{ json: { ...original, ...contexto } }];"
       },
       "id": "7dfb79b7-1449-51a5-a84e-fda7860bb4c8",
       "name": "Comprobar rol",

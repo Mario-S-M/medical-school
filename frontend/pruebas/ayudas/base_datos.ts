@@ -30,3 +30,20 @@ export function retrasarEnvio(correo: string) {
   if (!/^[a-z0-9.@_-]+$/.test(correo)) throw new Error('Correo de prueba no válido');
   sql('postgres', `update auth.users set confirmation_sent_at = now() - interval '2 minutes', recovery_sent_at = now() - interval '2 minutes' where email = '${correo}'`);
 }
+
+const consulta = (base: string, sentencia: string) =>
+  execFileSync('docker', ['compose', 'exec', '-T', 'db', 'psql', '-U', 'supabase_admin', '-d', base, '-tA', '-c', sentencia], { cwd: RAIZ }).toString().trim();
+
+// Da un rol de la escuela a una cuenta de prueba (equivale a lo que hace un administrador desde /admin/roles).
+export function darRol(correo: string, rol: 'instructor' | 'administrador' | 'equipo_apoyo') {
+  if (!/^[a-z0-9.@_-]+$/.test(correo)) throw new Error('Correo de prueba no válido');
+  const id = consulta('postgres', `select id from auth.users where email = '${correo}'`);
+  sql('n8n', `insert into escuela.roles_usuario (usuario_id, rol) values ('${id}', '${rol}') on conflict do nothing`);
+  if (rol === 'instructor') sql('n8n', `insert into escuela.perfiles_instructor (usuario_id, nombre_publico) values ('${id}', 'Prueba E2E') on conflict do nothing`);
+}
+
+export const crearCategoriaE2E = (nombre: string) =>
+  sql('n8n', `insert into escuela.categorias (nombre, slug, posicion) values ('${nombre}', lower(replace('${nombre}', ' ', '-')), 990) on conflict do nothing`);
+
+export const ponerEstadoCursoE2E = (titulo: string, estado: string) =>
+  sql('n8n', `update escuela.cursos set estado = '${estado}' where titulo = '${titulo}'`);

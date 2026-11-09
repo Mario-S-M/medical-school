@@ -19,7 +19,7 @@ export default function MenuSesion() {
   }
   return (
     <div className="flex items-center gap-1">
-      {roles.includes('instructor') && <a className={ghost} href="/instructor">Instructor</a>}
+      {(roles.includes('instructor') || roles.includes('equipo_apoyo')) && <a className={ghost} href="/instructor">Instructor</a>}
       {roles.includes('administrador') && <a className={ghost} href="/admin/roles">Admin</a>}
       <a className={ghost} href="/panel">Panel</a>
       <BotonCerrarSesion />

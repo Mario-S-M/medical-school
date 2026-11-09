@@ -210,6 +210,94 @@ estado_es 204 "borrar una categoría sin cursos -> 204"
 api POST /escuela/admin/borrar-categoria "$TOKEN_admin" "{\"id\":$ID_CAT_B}"
 estado_es 404 "borrar una categoría que ya no existe -> 404"
 
+echo "== Cursos del instructor"
+crear_usuario instructor_a
+crear_usuario instructor_b
+crear_usuario miembro
+ID_A="$(id_de "$CORREO_instructor_a")"; ID_B="$(id_de "$CORREO_instructor_b")"; ID_MIEMBRO="$(id_de "$CORREO_miembro")"
+for id in "$ID_A" "$ID_B"; do api POST /escuela/admin/asignar-rol "$TOKEN_admin" "{\"usuario_id\":\"$id\",\"rol\":\"instructor\",\"activo\":true}"; done
+api POST /escuela/crear-curso "$TOKEN_estudiante" '{"titulo":"Anatomía básica del cuerpo"}'
+estado_es 403 "crear-curso sin rol instructor -> 403"
+solicitar POST /escuela/crear-curso -H 'Content-Type: application/json' -d '{"titulo":"Anatomía básica"}'
+estado_es 401 "crear-curso sin token -> 401"
+api POST /escuela/crear-curso "$TOKEN_instructor_a" '{"titulo":"Ana"}'
+estado_es 422 "crear-curso con un título demasiado corto -> 422"
+api POST /escuela/crear-curso "$TOKEN_instructor_a" '{"titulo":"Anatomía básica","extra":1}'
+estado_es 422 "crear-curso con un campo extra -> 422"
+api POST /escuela/crear-curso "$TOKEN_instructor_a" "{\"titulo\":\"Prueba esc $SUFIJO Anatomía básica\"}"
+estado_es 201 "crear-curso -> 201"
+CURSO_A="$(campo_json id)"; SLUG_A="$(campo_json slug)"
+[[ "$SLUG_A" =~ ^[a-z0-9-]+$ && "$SLUG_A" == *anatomia-basica ]]; verificar "el slug no tiene acentos ni símbolos" $?
+api POST /escuela/crear-curso "$TOKEN_instructor_a" "{\"titulo\":\"Prueba esc $SUFIJO Anatomía básica\"}"
+[ "$(campo_json slug)" = "$SLUG_A-2" ]; verificar "un segundo curso con el mismo título recibe el sufijo -2" $?
+[ "$(psql_n8n "select estado from escuela.cursos where id = $CURSO_A")" = "borrador" ]; verificar "el curso nace en borrador" $?
+api POST /escuela/crear-curso "$TOKEN_instructor_b" "{\"titulo\":\"Prueba esc $SUFIJO Fisiología\"}"
+CURSO_B="$(campo_json id)"
+
+echo "== Cursos: mis-cursos y curso-edicion"
+api GET /escuela/mis-cursos "$TOKEN_estudiante"
+estado_es 403 "mis-cursos sin rol -> 403"
+api GET /escuela/mis-cursos "$TOKEN_instructor_a"
+estado_es 200 "mis-cursos -> 200"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; c=json.load(sys.stdin)['cursos']; print(len(c)==2 and all(x['es_mio'] for x in c))")" = "True" ]; verificar "mis-cursos devuelve solo los dos cursos propios" $?
+api GET "/escuela/mis-cursos?x=1" "$TOKEN_instructor_a"
+estado_es 422 "mis-cursos con un parámetro extra -> 422"
+api GET "/escuela/curso-edicion?id=$CURSO_A" "$TOKEN_instructor_a"
+estado_es 200 "curso-edicion del dueño -> 200"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['es_dueno'] is True and d['estado']=='borrador' and d['secciones']==[] and d['lo_que_aprenderas']==[])")" = "True" ]; verificar "curso-edicion trae el estado, es_dueno y el temario vacío" $?
+api GET "/escuela/curso-edicion?id=$CURSO_B" "$TOKEN_instructor_a"
+estado_es 403 "curso-edicion de un curso ajeno -> 403"
+api GET "/escuela/curso-edicion?id=99999999" "$TOKEN_instructor_a"
+estado_es 404 "curso-edicion de un curso inexistente -> 404"
+api GET "/escuela/curso-edicion?id=abc" "$TOKEN_instructor_a"
+estado_es 422 "curso-edicion con un id no numérico -> 422"
+
+echo "== Cursos: editar-curso"
+api POST /escuela/admin/guardar-categoria "$TOKEN_admin" "{\"nombre\":\"Prueba esc $SUFIJO Ciencias\",\"posicion\":950}"
+ID_CAT="$(campo_json id)"
+DATOS="{\"curso_id\":$CURSO_A,\"titulo\":\"Prueba esc $SUFIJO Anatomía del cuerpo\",\"subtitulo\":\"Huesos y músculos\",\"descripcion\":\"Línea uno\\nLínea dos\",\"conocimientos_previos\":\"Nada\",\"lo_que_aprenderas\":[\" Huesos \",\"Músculos\"],\"nivel\":\"basico\",\"categoria_id\":$ID_CAT}"
+api POST /escuela/editar-curso "$TOKEN_instructor_a" "$DATOS"
+estado_es 200 "editar-curso del dueño -> 200"
+api GET "/escuela/curso-edicion?id=$CURSO_A" "$TOKEN_instructor_a"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['subtitulo']=='Huesos y músculos' and d['lo_que_aprenderas']==['Huesos','Músculos'] and d['nivel']=='basico' and d['categoria_id']==$ID_CAT and d['slug']=='$SLUG_A')")" = "True" ]; verificar "los cambios se guardan (textos recortados) y el slug no cambia" $?
+api POST /escuela/editar-curso "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"subtitulo\":\"\"}"
+estado_es 200 "editar solo un campo -> 200"
+api GET "/escuela/curso-edicion?id=$CURSO_A" "$TOKEN_instructor_a"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['subtitulo'] is None and d['nivel']=='basico' and d['titulo'].endswith('del cuerpo'))")" = "True" ]; verificar "enviar vacío limpia un campo y lo omitido no cambia" $?
+api POST /escuela/editar-curso "$TOKEN_instructor_b" "$DATOS"
+estado_es 403 "editar-curso de un curso ajeno -> 403"
+api POST /escuela/editar-curso "$TOKEN_instructor_a" "{\"curso_id\":99999999,\"nivel\":\"basico\"}"
+estado_es 404 "editar-curso de un curso inexistente -> 404"
+api POST /escuela/editar-curso "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"categoria_id\":32000}"
+estado_es 422 "editar-curso con una categoría inexistente -> 422"
+cuerpo_tiene '"categoria_inexistente"' "categoría inexistente -> regla en detalles"
+api POST /escuela/editar-curso "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"nivel\":\"experto\"}"
+estado_es 422 "editar-curso con un nivel no permitido -> 422"
+api POST /escuela/editar-curso "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"lo_que_aprenderas\":[\"1\",\"2\",\"3\",\"4\",\"5\",\"6\",\"7\",\"8\",\"9\",\"10\",\"11\"]}"
+estado_es 422 "editar-curso con más de 10 elementos en lo que aprenderás -> 422"
+api POST /escuela/editar-curso "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"slug\":\"otro\"}"
+estado_es 422 "editar-curso no acepta cambiar el slug -> 422"
+api POST /escuela/editar-curso "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"titulo\":\"Ana\"}"
+estado_es 422 "editar-curso con un título demasiado corto -> 422"
+
+echo "== Cursos: equipo de apoyo y revisión"
+psql_n8n "insert into escuela.roles_usuario (usuario_id, rol) values ('$ID_MIEMBRO', 'equipo_apoyo'); insert into escuela.equipos_apoyo (instructor_id, miembro_id) values ('$ID_A', '$ID_MIEMBRO')" > /dev/null
+api GET "/escuela/curso-edicion?id=$CURSO_A" "$TOKEN_miembro"
+estado_es 200 "un miembro del equipo puede abrir el curso en el editor"
+cuerpo_tiene '"es_dueno":false' "el miembro del equipo no es dueño"
+api GET /escuela/mis-cursos "$TOKEN_miembro"
+cuerpo_tiene "\"id\":$CURSO_A" "mis-cursos del miembro incluye los cursos de su instructor"
+api POST /escuela/editar-curso "$TOKEN_miembro" "{\"curso_id\":$CURSO_A,\"nivel\":\"basico\"}"
+estado_es 403 "el equipo de apoyo no edita los datos del curso (403)"
+api GET "/escuela/curso-edicion?id=$CURSO_B" "$TOKEN_miembro"
+estado_es 403 "el miembro no ve cursos de otros instructores"
+psql_n8n "update escuela.cursos set estado = 'en_revision' where id = $CURSO_A" > /dev/null
+api POST /escuela/editar-curso "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"nivel\":\"basico\"}"
+estado_es 409 "editar un curso en revisión -> 409"
+cuerpo_tiene '"CURSO_EN_REVISION"' "curso en revisión -> CURSO_EN_REVISION"
+api GET "/escuela/curso-edicion?id=$CURSO_A" "$TOKEN_instructor_a"
+estado_es 200 "un curso en revisión se puede abrir (solo lectura)"
+
 echo
 echo "$((total - fallos)) de $total casos correctos"
 [ "$fallos" -eq 0 ]

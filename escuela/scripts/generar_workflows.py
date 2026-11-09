@@ -210,14 +210,14 @@ ERROR_PERMISO_JS = "{ error: { codigo: 'SIN_PERMISO', mensaje: 'No tienes permis
 
 def exigir_rol():
     f = Flujo("escExigirRol01", "Exigir rol",
-              "Subworkflow. Recibe la solicitud del webhook más rol_requerido, valida la sesión con Validar sesion y roles y comprueba que el usuario tenga ese rol. "
+              "Subworkflow. Recibe la solicitud del webhook más rol_requerido (un rol o una lista: basta con uno), valida la sesión con Validar sesion y roles y comprueba que el usuario lo tenga. "
               "Devuelve el mismo item con { ok, usuario, roles, equipos } o { ok: false, estado: 401 o 403, cuerpo }.", "usuarios")
     f.nodo("Disparador", "n8n-nodes-base.executeWorkflowTrigger", 1.1, {"inputSource": "passthrough"}, 0, 0)
     f.subflujo("Validar sesion y roles", "escValidar01", 240, 0)
     f.si("Sesion valida", "={{ $json.ok }}", 480, 0)
     f.codigo("Comprobar rol", f"""const contexto = $input.first().json;
 const original = $('Disparador').first().json;
-if (!contexto.roles.includes(original.rol_requerido)) {{
+if (![].concat(original.rol_requerido).some((r) => contexto.roles.includes(r))) {{
   return [{{ json: {{ ok: false, estado: 403, cuerpo: {ERROR_PERMISO_JS} }} }}];
 }}
 return [{{ json: {{ ...original, ...contexto }} }}];""", 720, -100)
@@ -229,7 +229,7 @@ return [{{ json: {{ ...original, ...contexto }} }}];""", 720, -100)
               "Valida el token y carga los roles con el subworkflow compartido.")
     f.seccion("Comprobar rol", "Si el usuario no tiene el rol pedido, responde `403 SIN_PERMISO`.", NOTA_PERMISOS, ["Comprobar rol"])
     f.seccion("Salida con error", "Un error de sesión sale tal cual.", NOTA_ERROR, ["Devolver error"])
-    f.general("Exigir rol", "Subworkflow compartido: **ningún endpoint protegido repite la comprobación de permisos**.\n\nEntrada: la solicitud del webhook y `rol_requerido` (`instructor`, `administrador`…). Salida: el mismo item con `usuario`, `roles` y `equipos`, o `{ ok: false, estado, cuerpo }`.")
+    f.general("Exigir rol", "Subworkflow compartido: **ningún endpoint protegido repite la comprobación de permisos**.\n\nEntrada: la solicitud del webhook y `rol_requerido` (un rol o una lista de roles: basta con uno). Salida: el mismo item con `usuario`, `roles` y `equipos`, o `{ ok: false, estado, cuerpo }`.")
     f.guardar()
 
 
@@ -245,6 +245,7 @@ if (!datos || typeof datos !== 'object' || Array.isArray(datos)) {
 }
 for (const clave of Object.keys(datos)) if (!(clave in reglas)) falla(clave, 'campo_no_permitido', 'Este campo no está permitido.');
 const limpio = {};
+const presentes = Object.keys(datos).filter((k) => k in reglas);
 for (const [campo, r] of Object.entries(reglas)) {
   let v = datos[campo];
   if (v === undefined || v === null || v === '') {
@@ -275,6 +276,16 @@ for (const [campo, r] of Object.entries(reglas)) {
   } else if (r.tipo === 'correo') {
     if (typeof v !== 'string' || v.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())) { falla(campo, 'formato_correo', 'Debe ser un correo válido.'); continue; }
     v = v.trim().toLowerCase();
+  } else if (r.tipo === 'lista_texto') {
+    if (!Array.isArray(v)) { falla(campo, 'tipo_lista', 'Debe ser una lista de textos.'); continue; }
+    if (r.maximo_items && v.length > r.maximo_items) falla(campo, 'maximo_elementos', `Puede tener como máximo ${r.maximo_items} elementos.`);
+    const elementos = [];
+    for (const el of v) {
+      const t = typeof el === 'string' ? el.trim() : '';
+      if (!t || (r.maximo && t.length > r.maximo)) { falla(campo, 'elemento_invalido', `Cada elemento debe ser un texto de 1 a ${r.maximo || 200} caracteres.`); break; }
+      elementos.push(t);
+    }
+    v = elementos;
   } else if (r.tipo === 'opcion') {
     if (!(r.valores || []).includes(v)) { falla(campo, 'valor_no_permitido', `Debe ser uno de: ${(r.valores || []).join(', ')}.`); continue; }
   }
@@ -282,7 +293,7 @@ for (const [campo, r] of Object.entries(reglas)) {
 }
 if (detalles.length) return respuesta('Revisa los datos enviados.');
 const { reglas: _reglas, datos: _datos, ...resto } = entrada;
-return [{ json: { ...resto, ok: true, datos: limpio } }];"""
+return [{ json: { ...resto, ok: true, datos: limpio, presentes } }];"""
 
 
 def validar_campos():
@@ -294,11 +305,11 @@ def validar_campos():
     f.unir("Disparador", "Aplicar reglas")
     f.seccion("Entrada", "Recibe `datos` (cuerpo o consulta del webhook) y las `reglas` de cada campo.", NOTA_ENTRADA, ["Disparador"])
     f.seccion("Aplicar reglas", "Rechaza campos extra y valida tipo, largo y rango. Normaliza (recorta textos, correos en minúscula, enteros reales) y devuelve todos los errores juntos.", NOTA_PERMISOS, ["Aplicar reglas"])
-    f.general("Validar campos", "Subworkflow compartido: **ningún endpoint repite su validación de datos**, solo declara sus reglas.\n\nTipos: `texto`, `entero`, `booleano`, `uuid`, `correo`, `opcion`. Un campo vacío es un error salvo que la regla diga `opcional`.")
+    f.general("Validar campos", "Subworkflow compartido: **ningún endpoint repite su validación de datos**, solo declara sus reglas.\n\nTipos: `texto`, `entero`, `booleano`, `uuid`, `correo`, `opcion`, `lista_texto`. Un campo vacío es un error salvo que la regla diga `opcional`. `presentes` lista los campos que sí llegaron, para distinguir «no enviado» de «vaciado».")
     f.guardar()
 
 
-def protegido(f, metodo, ruta, rol, origen, reglas):
+def protegido(f, metodo, ruta, rol, origen, reglas, acceso=None):
     """Entrada común de un endpoint: webhook, permiso por rol (si rol) y validación de campos (si reglas).
     Los errores de los dos pasos van directo a "Responder". Devuelve la columna libre siguiente."""
     f.webhook(metodo, ruta, 0, 0)
@@ -306,7 +317,7 @@ def protegido(f, metodo, ruta, rol, origen, reglas):
     f.seccion("Entrada", "Webhook protegido por el secreto del proxy (Caddy es la única entrada).", NOTA_ENTRADA, ["Recibir solicitud"])
     if rol:
         f.codigo("Definir reglas", f"""const e = $input.first().json;
-return [{{ json: {{ headers: e.headers, rol_requerido: {json.dumps(rol)}, datos: e.{origen}, reglas: {json.dumps(reglas, ensure_ascii=False)} }} }}];""", x, 0)
+return [{{ json: {{ headers: e.headers, rol_requerido: {json.dumps(rol)}, datos: e.{origen}, reglas: {json.dumps(reglas, ensure_ascii=False)}{', acceso: ' + json.dumps(acceso) if acceso else ''} }} }}];""", x, 0)
         f.subflujo("Exigir rol", "escExigirRol01", x + 240, 0)
         f.si("Permiso valido", "={{ $json.ok }}", x + 480, 0)
         f.unir(anterior, "Definir reglas"); f.unir("Definir reglas", "Exigir rol"); f.unir("Exigir rol", "Permiso valido")
@@ -323,7 +334,16 @@ return [{{ json: {{ datos: e.{origen}, reglas: {json.dumps(reglas, ensure_ascii=
     f.unir(anterior, "Validar campos"); f.unir("Validar campos", "Entrada valida"); f.unir("Entrada valida", "Responder", 1)
     f.seccion("Validar entrada", "Subworkflow `Validar campos`: tipos, largos y campos extra. Si falla, `422 VALIDACION_FALLIDA` con la lista de reglas.", NOTA_ENTRADA,
               ["Validar campos", "Entrada valida"], True, "Valida y normaliza los campos con el subworkflow compartido.")
-    return x + 480
+    x += 480
+    if acceso:
+        f.subflujo("Validar acceso a curso", "escValidarAcceso01", x, 0)
+        f.si("Acceso valido", "={{ $json.ok }}", x + 240, 0)
+        f.unir("Entrada valida", "Validar acceso a curso"); f.unir("Validar acceso a curso", "Acceso valido"); f.unir("Acceso valido", "Responder", 1)
+        que = "el instructor dueño" if acceso["modo"] == "dueno" else "el dueño o su equipo de apoyo"
+        f.seccion("Comprobar curso", f"Subworkflow `Validar acceso a curso`: solo {que}. Curso ajeno: `403`; inexistente: `404`" + ("; en revisión: `409`." if acceso["editable"] else "."), NOTA_PERMISOS,
+                  ["Validar acceso a curso", "Acceso valido"], True, "Comprueba que el curso existe y que el usuario puede tocarlo.")
+        x += 480
+    return x
 
 
 def cierre(f, x, nombres_datos, titulo, texto, color=NOTA_DATOS, resumen=None):
@@ -469,6 +489,144 @@ SELECT 'ok' AS resultado;""", "={{ [$json.datos.usuario_id, $json.datos.rol, $js
     f.guardar()
 
 
+def validar_acceso():
+    f = Flujo("escValidarAcceso01", "Validar acceso a curso",
+              "Subworkflow. Recibe el item con usuario, datos y acceso { modo: dueno | dueno_o_equipo, editable, tipo: curso | seccion | clase | dato, campo }, "
+              "busca el curso afectado y comprueba que exista, que el usuario sea su dueño o de su equipo de apoyo y, si editable, que no esté en revisión.", "escuela")
+    f.nodo("Disparador", "n8n-nodes-base.executeWorkflowTrigger", 1.1, {"inputSource": "passthrough"}, 0, 0)
+    f.codigo("Resolver objetivo", """const e = $input.first().json;
+const a = e.acceso || {};
+const tipo = a.tipo === 'dato' ? e.datos.tipo : a.tipo;
+return [{ json: { tipo, id: e.datos[a.campo], usuario_id: e.usuario.id } }];""", 240, 0)
+    f.sql("Consultar curso", """WITH objetivo AS (
+  SELECT CASE $1::text
+    WHEN 'curso' THEN $2::bigint
+    WHEN 'seccion' THEN (SELECT curso_id FROM escuela.secciones WHERE id = $2::bigint)
+    WHEN 'clase' THEN (SELECT s.curso_id FROM escuela.clases k JOIN escuela.secciones s ON s.id = k.seccion_id WHERE k.id = $2::bigint)
+  END AS curso_id
+)
+SELECT c.id, c.instructor_id, c.estado,
+       (c.instructor_id = $3::uuid) AS es_dueno,
+       EXISTS (SELECT 1 FROM escuela.equipos_apoyo e WHERE e.instructor_id = c.instructor_id AND e.miembro_id = $3::uuid) AS es_equipo
+FROM objetivo o JOIN escuela.cursos c ON c.id = o.curso_id;""", "={{ [$json.tipo, $json.id, $json.usuario_id] }}", 480, 0)
+    f.codigo("Decidir acceso", f"""const original = $('Disparador').first().json;
+const c = $input.first().json;
+const a = original.acceso;
+const error = (estado, codigo, mensaje) => [{{ json: {{ ok: false, estado, cuerpo: {{ error: {{ codigo, mensaje }} }} }} }}];
+if (!c.id) return error(404, 'NO_ENCONTRADO', 'El curso no existe.');
+if (!(a.modo === 'dueno' ? c.es_dueno : c.es_dueno || c.es_equipo)) return error(403, 'SIN_PERMISO', 'No tienes permiso para hacer esto.');
+if (a.editable && c.estado === 'en_revision') return error(409, 'CURSO_EN_REVISION', 'El curso está en revisión y no se puede editar.');
+return [{{ json: {{ ...original, ok: true, curso: {{ id: Number(c.id), instructor_id: c.instructor_id, estado: c.estado }}, es_dueno: c.es_dueno }} }}];""", 720, 0)
+    f.unir("Disparador", "Resolver objetivo"); f.unir("Resolver objetivo", "Consultar curso"); f.unir("Consultar curso", "Decidir acceso")
+    f.seccion("Entrada", "Recibe el item del endpoint con `usuario`, `datos` y `acceso`.", NOTA_ENTRADA, ["Disparador"])
+    f.seccion("Comprobar acceso", "Resuelve el curso (directo, o a partir de una sección o una clase), lo consulta y decide: `404` si no existe, `403` si no es del usuario ni de su equipo, `409` si está en revisión y se va a editar.", NOTA_PERMISOS,
+              ["Resolver objetivo", "Consultar curso", "Decidir acceso"], True, "Resuelve el curso y decide si el usuario puede tocarlo.")
+    f.general("Validar acceso a curso", "Subworkflow compartido: **ningún endpoint de cursos repite la comprobación de propiedad**.\n\n`acceso.modo`: `dueno` o `dueno_o_equipo` (instructor dueño o miembro de su equipo de apoyo). `acceso.editable`: si es `true`, un curso `en_revision` se rechaza. Devuelve el item con `curso` y `es_dueno`.")
+    f.guardar()
+
+
+def mis_cursos():
+    f = Flujo("escMisCursos01", "Mis cursos", "GET /escuela/mis-cursos. Cursos del instructor y de los instructores cuyo equipo de apoyo integra el usuario, en cualquier estado. No guarda ejecuciones.", "escuela")
+    x = protegido(f, "GET", "escuela/mis-cursos", ["instructor", "equipo_apoyo"], "query", {})
+    f.sql("Consultar cursos", """SELECT coalesce(json_agg(t ORDER BY t.actualizado_en DESC), '[]'::json) AS cursos FROM (
+  SELECT c.id, c.slug, c.titulo, c.estado, c.comentario_revision, c.portada_ruta, c.actualizado_en,
+         (c.instructor_id = $1::uuid) AS es_mio, coalesce(p.nombre_publico, 'Instructor') AS instructor
+  FROM escuela.cursos c LEFT JOIN escuela.perfiles_instructor p ON p.usuario_id = c.instructor_id
+  WHERE c.instructor_id = $1::uuid
+     OR c.instructor_id IN (SELECT instructor_id FROM escuela.equipos_apoyo WHERE miembro_id = $1::uuid)
+) t;""", "={{ [$json.usuario.id] }}", x, 0)
+    f.codigo("Armar respuesta", "return [{ json: { estado: 200, cuerpo: { cursos: $input.first().json.cursos } } }];", x + 240, 0)
+    f.unir("Entrada valida", "Consultar cursos"); f.unir("Consultar cursos", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Consultar cursos", "Armar respuesta"], "Listar cursos", "Cursos propios y de los instructores del equipo, del más reciente al más antiguo, con su estado y el comentario de la revisión.")
+    f.general("Mis cursos", "`GET /escuela/mis-cursos` · `instructor` o `equipo_apoyo`.\n\nAlimenta la pantalla *Mis cursos*. `es_mio` distingue los cursos propios de los del instructor al que se apoya.")
+    f.guardar()
+
+
+def curso_edicion():
+    f = Flujo("escCursoEdicion01", "Curso para edicion", "GET /escuela/curso-edicion?id=. Curso completo con su temario para el editor; solo el instructor dueño o su equipo de apoyo. No guarda ejecuciones.", "escuela")
+    x = protegido(f, "GET", "escuela/curso-edicion", ["instructor", "equipo_apoyo"], "query", {"id": {"tipo": "entero", "minimo": 1, "maximo": 9007199254740}},
+                  {"modo": "dueno_o_equipo", "editable": False, "tipo": "curso", "campo": "id"})
+    f.sql("Consultar curso completo", """SELECT json_build_object(
+  'id', c.id, 'slug', c.slug, 'titulo', c.titulo, 'subtitulo', c.subtitulo, 'descripcion', c.descripcion,
+  'conocimientos_previos', c.conocimientos_previos, 'lo_que_aprenderas', c.lo_que_aprenderas, 'nivel', c.nivel,
+  'categoria_id', c.categoria_id, 'estado', c.estado, 'comentario_revision', c.comentario_revision,
+  'portada_ruta', c.portada_ruta, 'actualizado_en', c.actualizado_en,
+  'secciones', coalesce((
+    SELECT json_agg(json_build_object('id', s.id, 'titulo', s.titulo, 'posicion', s.posicion, 'clases', coalesce((
+      SELECT json_agg(json_build_object('id', k.id, 'titulo', k.titulo, 'descripcion', k.descripcion,
+             'duracion_estimada_minutos', k.duracion_estimada_minutos, 'es_muestra', k.es_muestra, 'posicion', k.posicion) ORDER BY k.posicion)
+      FROM escuela.clases k WHERE k.seccion_id = s.id), '[]'::json)) ORDER BY s.posicion)
+    FROM escuela.secciones s WHERE s.curso_id = c.id), '[]'::json)) AS curso
+FROM escuela.cursos c WHERE c.id = $1::bigint;""", "={{ [$json.curso.id] }}", x, 0)
+    f.codigo("Armar respuesta", "const dueno = $('Acceso valido').first().json.es_dueno;\nreturn [{ json: { estado: 200, cuerpo: { ...$input.first().json.curso, es_dueno: dueno } } }];", x + 240, 0)
+    f.unir("Acceso valido", "Consultar curso completo"); f.unir("Consultar curso completo", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Consultar curso completo", "Armar respuesta"], "Leer el curso", "Devuelve el curso con sus secciones y clases en orden, y `es_dueno` para que el editor sepa si puede cambiar los datos del curso.")
+    f.general("Curso para edicion", "`GET /escuela/curso-edicion?id=` · dueño o equipo de apoyo.\n\nTrae todo lo que necesita el editor: datos del curso, estado, comentario de la revisión y temario. A diferencia de la ficha pública, incluye cursos en borrador y en revisión.")
+    f.guardar()
+
+
+def crear_curso():
+    f = Flujo("escCrearCurso01", "Crear curso", "POST /escuela/crear-curso. Crea un curso en borrador para el instructor con un slug único generado del título. No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/crear-curso", "instructor", "body", {"titulo": {"tipo": "texto", "minimo": 5, "maximo": 120, "alfanumerico": True}})
+    f.sql("Insertar el curso", """WITH base AS (
+  SELECT coalesce(nullif(trim(both '-' from lower(regexp_replace(escuela.sin_acentos($1::text), '[^a-zA-Z0-9]+', '-', 'g'))), ''), 'curso') AS slug
+), libre AS (
+  SELECT CASE WHEN k = 1 THEN b.slug ELSE b.slug || '-' || k END AS slug
+  FROM base b, generate_series(1, 1000) k
+  WHERE NOT EXISTS (SELECT 1 FROM escuela.cursos c WHERE c.slug = CASE WHEN k = 1 THEN b.slug ELSE b.slug || '-' || k END)
+  ORDER BY k LIMIT 1
+)
+INSERT INTO escuela.cursos (slug, instructor_id, titulo) SELECT slug, $2::uuid, $1::text FROM libre
+ON CONFLICT (slug) DO NOTHING RETURNING id, slug;""", "={{ [$json.datos.titulo, $json.usuario.id] }}", x, 0)
+    f.codigo("Armar respuesta", f"""const r = $input.first().json;
+if (r.id) return [{{ json: {{ estado: 201, cuerpo: {{ id: Number(r.id), slug: r.slug }} }} }}];
+return [{{ json: {{ estado: 500, cuerpo: {ERROR_INTERNO_JS} }} }}];""", x + 240, 0)
+    f.unir("Entrada valida", "Insertar el curso"); f.unir("Insertar el curso", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Insertar el curso", "Armar respuesta"], "Crear el curso", "Genera el slug del título (sin acentos, con guiones) y le añade `-2`, `-3`… hasta encontrar uno libre. El curso nace en `borrador`.")
+    f.general("Crear curso", "`POST /escuela/crear-curso` · solo `instructor`.\n\nEntrada: `{ titulo }`. Responde `201 { id, slug }`. El slug se fija al crear y no cambia aunque se renombre el curso.")
+    f.guardar()
+
+
+def editar_curso():
+    f = Flujo("escEditarCurso01", "Editar curso", "POST /escuela/editar-curso. Cambia los datos de un curso (solo el instructor dueño, y no mientras esté en revisión). Solo se tocan los campos enviados. No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/editar-curso", "instructor", "body", {
+        "curso_id": {"tipo": "entero", "minimo": 1, "maximo": 9007199254740},
+        "titulo": {"tipo": "texto", "opcional": True, "minimo": 5, "maximo": 120, "alfanumerico": True},
+        "subtitulo": {"tipo": "texto", "opcional": True, "maximo": 200},
+        "descripcion": {"tipo": "texto", "opcional": True, "maximo": 5000, "multilinea": True},
+        "conocimientos_previos": {"tipo": "texto", "opcional": True, "maximo": 2000, "multilinea": True},
+        "lo_que_aprenderas": {"tipo": "lista_texto", "opcional": True, "maximo_items": 10, "maximo": 150},
+        "nivel": {"tipo": "opcion", "opcional": True, "valores": ["basico", "intermedio", "avanzado"]},
+        "categoria_id": {"tipo": "entero", "opcional": True, "minimo": 1, "maximo": 32000}},
+        {"modo": "dueno", "editable": True, "tipo": "curso", "campo": "curso_id"})
+    f.sql("Actualizar el curso", """WITH p AS (SELECT string_to_array($9::text, ',') AS presentes),
+cat AS (SELECT ($8::int IS NULL OR EXISTS (SELECT 1 FROM escuela.categorias WHERE id = $8::int)) AS ok),
+actualizado AS (
+  UPDATE escuela.cursos c SET
+    titulo = CASE WHEN 'titulo' = ANY(p.presentes) AND $2::text IS NOT NULL THEN $2::text ELSE c.titulo END,
+    subtitulo = CASE WHEN 'subtitulo' = ANY(p.presentes) THEN $3::text ELSE c.subtitulo END,
+    descripcion = CASE WHEN 'descripcion' = ANY(p.presentes) THEN $4::text ELSE c.descripcion END,
+    conocimientos_previos = CASE WHEN 'conocimientos_previos' = ANY(p.presentes) THEN $5::text ELSE c.conocimientos_previos END,
+    lo_que_aprenderas = CASE WHEN 'lo_que_aprenderas' = ANY(p.presentes) THEN ARRAY(SELECT jsonb_array_elements_text($6::jsonb)) ELSE c.lo_que_aprenderas END,
+    nivel = CASE WHEN 'nivel' = ANY(p.presentes) THEN $7::text ELSE c.nivel END,
+    categoria_id = CASE WHEN 'categoria_id' = ANY(p.presentes) THEN $8::int ELSE c.categoria_id END,
+    actualizado_en = now()
+  FROM p, cat WHERE c.id = $1::bigint AND cat.ok RETURNING c.id
+)
+SELECT CASE WHEN EXISTS (SELECT 1 FROM actualizado) THEN 'ok' WHEN NOT (SELECT ok FROM cat) THEN 'categoria_invalida' ELSE 'no_encontrado' END AS resultado;""",
+          "={{ [$json.datos.curso_id, $json.datos.titulo, $json.datos.subtitulo, $json.datos.descripcion, $json.datos.conocimientos_previos, JSON.stringify($json.datos.lo_que_aprenderas), $json.datos.nivel, $json.datos.categoria_id, $json.presentes.join(',')] }}", x, 0)
+    f.codigo("Armar respuesta", f"""const r = $input.first().json;
+const id = $('Acceso valido').first().json.curso.id;
+if (r.resultado === 'ok') return [{{ json: {{ estado: 200, cuerpo: {{ id }} }} }}];
+if (r.resultado === 'categoria_invalida') return [{{ json: {{ estado: 422, cuerpo: {{ error: {{ codigo: 'VALIDACION_FALLIDA', mensaje: 'Revisa los datos enviados.', detalles: [{{ campo: 'categoria_id', regla: 'categoria_inexistente', mensaje: 'La categoría no existe.' }}] }} }} }} }}];
+if (r.resultado === 'no_encontrado') return [{{ json: {{ estado: 404, cuerpo: {{ error: {{ codigo: 'NO_ENCONTRADO', mensaje: 'El curso no existe.' }} }} }} }}];
+return [{{ json: {{ estado: 500, cuerpo: {ERROR_INTERNO_JS} }} }}];""", x + 240, 0)
+    f.unir("Acceso valido", "Actualizar el curso"); f.unir("Actualizar el curso", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Actualizar el curso", "Armar respuesta"], "Actualizar el curso", "Cambia solo los campos que llegaron (`presentes`): enviar `\"\"` o `null` vacía un campo opcional y omitirlo lo deja igual. Una categoría que no existe da `422`.")
+    f.general("Editar curso", "`POST /escuela/editar-curso` · solo el `instructor` dueño; el equipo de apoyo no cambia los datos del curso.\n\nEntrada: `{ curso_id, titulo?, subtitulo?, descripcion?, conocimientos_previos?, lo_que_aprenderas?, nivel?, categoria_id? }`. Un curso `en_revision` responde `409 CURSO_EN_REVISION`.")
+    f.guardar()
+
+
 if __name__ == "__main__":
     validar_sesion_y_roles()
     mis_roles()
@@ -479,3 +637,8 @@ if __name__ == "__main__":
     borrar_categoria()
     buscar_usuario()
     asignar_rol()
+    validar_acceso()
+    mis_cursos()
+    curso_edicion()
+    crear_curso()
+    editar_curso()

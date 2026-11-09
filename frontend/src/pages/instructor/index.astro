@@ -1,0 +1,8 @@
+---
+import LayoutBase from '../../layouts/LayoutBase.astro';
+import PaginaInstructor from '../../componentes/instructor/PaginaInstructor';
+---
+
+<LayoutBase titulo="Mis cursos">
+  <PaginaInstructor client:only="react" />
+</LayoutBase>
