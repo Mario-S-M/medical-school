@@ -39,6 +39,19 @@ CONTRASENA_VALIDA='Zorro#Azul-2026x'
 registrar_usuario() {
   CORREO_ACTUAL="$(correo_nuevo "$1")"
   publicar_json /autenticacion/registro "{\"correo\":\"$CORREO_ACTUAL\",\"nombre\":\"Usuario $1\",\"contrasena\":\"$CONTRASENA_VALIDA\"}"
+  # el correo se verifica con el código que llega a Mailpit, y luego se borran los correos del usuario
+  esperar_correos "$CORREO_ACTUAL" 1
+  publicar_json /autenticacion/verificar-correo "{\"correo\":\"$CORREO_ACTUAL\",\"codigo\":\"$(codigo_de_correo "$CORREO_ACTUAL")\"}"
+  curl -s -G -X DELETE "http://127.0.0.1:8025/api/v1/search" --data-urlencode "query=to:$CORREO_ACTUAL" > /dev/null
+}
+# registrar_sin_verificar <sufijo>: registra y deja la cuenta sin verificar y con su correo en Mailpit
+registrar_sin_verificar() {
+  CORREO_ACTUAL="$(correo_nuevo "$1")"
+  publicar_json /autenticacion/registro "{\"correo\":\"$CORREO_ACTUAL\",\"nombre\":\"Usuario $1\",\"contrasena\":\"$CONTRASENA_VALIDA\"}"
+  esperar_correos "$CORREO_ACTUAL" 1
+}
+verificar_correo() { # <correo> <código>
+  publicar_json /autenticacion/verificar-correo "{\"correo\":\"$1\",\"codigo\":\"$2\"}"
 }
 iniciar_sesion() { # <correo> <contraseña> [argumentos de curl...]
   local c="$1" k="$2"; shift 2
@@ -152,7 +165,7 @@ estado_es 403 "renovar sin X-Solicitado-Con -> 403"
 cuerpo_tiene '"ORIGEN_NO_PERMITIDO"' "renovar sin X-Solicitado-Con -> ORIGEN_NO_PERMITIDO"
 
 echo "== Acceso directo a n8n sin pasar por Caddy"
-for ruta in registro iniciar-sesion renovar cerrar-sesion yo recuperar restablecer; do  # se amplía con cada workflow nuevo
+for ruta in registro iniciar-sesion renovar cerrar-sesion yo recuperar restablecer verificar-correo reenviar-verificacion; do  # se amplía con cada workflow nuevo
   metodo=POST; [ "$ruta" = yo ] && metodo=GET
   solicitar "$metodo" "/webhook/autenticacion/$ruta" -H 'Content-Type: application/json' -d '{}' --connect-timeout 3 2>/dev/null
   BASE_ORIGINAL="$BASE"; BASE="http://127.0.0.1:5678"
@@ -167,7 +180,7 @@ echo "== Registro"
 CORREO_A="$(correo_nuevo a)"
 publicar_json /autenticacion/registro "{\"correo\":\"$(echo "$CORREO_A" | tr 'a-z' 'A-Z' | sed 's/@EXAMPLE.COM/@Example.com/')\",\"nombre\":\"Ana Prueba\",\"contrasena\":\"$CONTRASENA_VALIDA\"}"
 estado_es 201 "registro válido -> 201"
-cuerpo_tiene '"mensaje"' "registro válido -> mensaje"
+cuerpo_tiene 'verifícala con el código' "registro válido -> pide verificar el correo"
 cuerpo_no_tiene "$CONTRASENA_VALIDA" "la respuesta no contiene la contraseña"
 cuerpo_primero="$cuerpo"
 fila="$(psql_postgres "select email || '|' || coalesce(raw_user_meta_data->>'nombre','') from auth.users where email = '$CORREO_A'")"
@@ -526,6 +539,116 @@ estado_es 429 "código erróneo 21 de la IP -> 429"
 cuerpo_tiene '"DEMASIADOS_INTENTOS"' "código erróneo 21 de la IP -> DEMASIADOS_INTENTOS"
 limpiar_eventos
 
+echo "== Verificación de correo"
+limpiar_eventos; vaciar_mailpit
+solicitar GET /autenticacion/verificar-correo
+estado_es 405 "GET verificar-correo -> 405"
+solicitar POST /autenticacion/verificar-correo -H 'Content-Type: text/plain' -d x
+estado_es 415 "POST verificar-correo con text/plain -> 415"
+solicitar GET /autenticacion/reenviar-verificacion
+estado_es 405 "GET reenviar-verificacion -> 405"
+solicitar POST /autenticacion/reenviar-verificacion -H 'Content-Type: text/plain' -d x
+estado_es 415 "POST reenviar-verificacion con text/plain -> 415"
+
+registrar_sin_verificar verificacion
+CORREO_V="$CORREO_ACTUAL"
+cuerpo_tiene 'verifícala con el código' "registro: mensaje que pide verificar"
+[ "$(psql_postgres "select email_confirmed_at is null from auth.users where email = '$CORREO_V'")" = "t" ]; verificar "registro: email_confirmed_at queda nulo" $?
+CODIGO_V="$(codigo_de_correo "$CORREO_V")"
+[ -n "$CODIGO_V" ]; verificar "Mailpit recibe un código de 6 dígitos de verificación" $?
+ultimo_correo "$CORREO_V" asunto | grep -qi 'verificaci'; verificar "el asunto está en español (verificación)" $?
+! ultimo_correo "$CORREO_V" html | grep -qE 'https?://|href='; verificar "el correo de verificación no trae enlaces" $?
+cuerpo_primero_v="$cuerpo"
+publicar_json /autenticacion/registro "{\"correo\":\"$CORREO_V\",\"nombre\":\"Usuario verificacion\",\"contrasena\":\"$CONTRASENA_VALIDA\"}"
+estado_es 201 "registrar otra vez la cuenta sin verificar -> 201"
+[ "$cuerpo" = "$cuerpo_primero_v" ]; verificar "registro repetido: mismo cuerpo que el primero" $?
+
+limpiar_intentos
+iniciar_sesion "$CORREO_V" "$CONTRASENA_VALIDA"
+estado_es 403 "contraseña correcta sin verificar -> 403"
+cuerpo_tiene '"CORREO_NO_VERIFICADO"' "contraseña correcta sin verificar -> CORREO_NO_VERIFICADO"
+[ "$(psql_n8n "select count(*) from autenticacion.intentos_inicio_sesion where correo = '$CORREO_V'")" = "0" ]; verificar "el 403 no suma a intentos_inicio_sesion" $?
+iniciar_sesion "$CORREO_V" "incorrecta-Aa1!"
+estado_es 401 "contraseña incorrecta sin verificar -> 401 genérico"
+cuerpo_tiene '"CREDENCIALES_INVALIDAS"' "contraseña incorrecta sin verificar -> CREDENCIALES_INVALIDAS"
+limpiar_intentos
+
+for caso in '{"correo":"'"$CORREO_V"'","codigo":"12345"}' '{"correo":"'"$CORREO_V"'","codigo":"abcdef"}' '{"correo":"'"$CORREO_V"'","codigo":123456}' '{"correo":"'"$CORREO_V"'"}' '{"correo":"'"$CORREO_V"'","codigo":"123456","extra":1}' '{"correo":"no-es-correo","codigo":"123456"}' '[1]'; do
+  publicar_json /autenticacion/verificar-correo "$caso"
+  [ "$estado" = "422" ] && echo "$cuerpo" | grep -q '"VALIDACION_FALLIDA"'; verificar "verificar-correo con entrada inválida -> 422 ($caso)" $?
+done
+publicar_json /autenticacion/verificar-correo '{"correo":'
+estado_es 400 "verificar-correo con JSON roto -> 400"
+
+verificar_correo "$CORREO_V" "000000"
+estado_es 400 "verificar con código erróneo -> 400"
+cuerpo_tiene '"CODIGO_INVALIDO"' "código erróneo -> CODIGO_INVALIDO"
+cuerpo_malo_v="$cuerpo"
+verificar_correo "$(correo_nuevo fantasma_ver)" "000000"
+[ "$cuerpo" = "$cuerpo_malo_v" ]; verificar "código erróneo y correo inexistente: cuerpos idénticos" $?
+verificar_correo "$CORREO_V" "$CODIGO_V"
+estado_es 200 "verificar con el código correcto -> 200"
+cabecera_no_tiene '^set-cookie:' "verificar-correo no entrega cookie"
+cuerpo_no_tiene "token" "verificar-correo no devuelve tokens"
+[ "$(psql_postgres "select email_confirmed_at is not null from auth.users where email = '$CORREO_V'")" = "t" ]; verificar "email_confirmed_at queda con fecha" $?
+[ "$(psql_postgres "select count(*) from auth.sessions s join auth.users u on u.id = s.user_id where u.email = '$CORREO_V'")" = "0" ]; verificar "la sesión que devuelve Supabase se descarta (0 sesiones)" $?
+iniciar_sesion "$CORREO_V" "$CONTRASENA_VALIDA"
+estado_es 200 "tras verificar, iniciar sesión -> 200"
+verificar_correo "$CORREO_V" "$CODIGO_V"
+estado_es 400 "reusar el código de verificación -> 400"
+
+echo "== Código de verificación vencido y bloqueo"
+registrar_sin_verificar vencido_ver
+CORREO_VV="$CORREO_ACTUAL"; CODIGO_VV="$(codigo_de_correo "$CORREO_VV")"
+psql_postgres "update auth.users set confirmation_sent_at = now() - interval '16 minutes' where email = '$CORREO_VV'" > /dev/null
+verificar_correo "$CORREO_VV" "$CODIGO_VV"
+estado_es 400 "código de verificación vencido (16 min) -> 400"
+limpiar_eventos
+registrar_sin_verificar bloqueo_ver
+CORREO_BV="$CORREO_ACTUAL"; CODIGO_BV="$(codigo_de_correo "$CORREO_BV")"
+for i in 1 2 3 4 5; do verificar_correo "$CORREO_BV" "00000$i"; done
+verificar_correo "$CORREO_BV" "$CODIGO_BV"
+estado_es 429 "6.º intento con el código correcto tras 5 erróneos -> 429"
+cuerpo_tiene '"CODIGO_BLOQUEADO"' "6.º intento -> CODIGO_BLOQUEADO"
+cabecera_tiene "Retry-After:" "6.º intento: cabecera Retry-After"
+limpiar_eventos
+
+echo "== Reenviar verificación"
+limpiar_eventos
+registrar_sin_verificar reenvio
+CORREO_RV="$CORREO_ACTUAL"
+psql_postgres "update auth.users set confirmation_sent_at = now() - interval '2 minutes' where email = '$CORREO_RV'" > /dev/null
+curl -s -G -X DELETE "http://127.0.0.1:8025/api/v1/search" --data-urlencode "query=to:$CORREO_RV" > /dev/null
+publicar_json /autenticacion/reenviar-verificacion "{\"correo\":\"$CORREO_RV\"}"
+estado_es 202 "reenviar a una cuenta sin verificar -> 202"
+cuerpo_sin_verificar="$cuerpo"
+esperar_correos "$CORREO_RV" 1
+[ "$(contar_correos "$CORREO_RV")" = "1" ]; verificar "reenviar: Mailpit recibe un código nuevo" $?
+CODIGO_RV="$(codigo_de_correo "$CORREO_RV")"
+verificar_correo "$CORREO_RV" "$CODIGO_RV"
+estado_es 200 "el código reenviado verifica la cuenta"
+registrar_usuario reenvio_verificado
+CORREO_YA="$CORREO_ACTUAL"
+publicar_json /autenticacion/reenviar-verificacion "{\"correo\":\"$CORREO_YA\"}"
+estado_es 202 "reenviar a una cuenta ya verificada -> 202"
+[ "$cuerpo" = "$cuerpo_sin_verificar" ]; verificar "reenviar: mismo cuerpo para cuenta verificada y sin verificar" $?
+CORREO_FANTASMA_RV="$(correo_nuevo fantasma_rv)"
+publicar_json /autenticacion/reenviar-verificacion "{\"correo\":\"$CORREO_FANTASMA_RV\"}"
+estado_es 202 "reenviar a un correo inexistente -> 202"
+[ "$cuerpo" = "$cuerpo_sin_verificar" ]; verificar "reenviar: mismo cuerpo para un correo inexistente" $?
+sleep 2
+[ "$(contar_correos "$CORREO_YA")" = "0" ] && [ "$(contar_correos "$CORREO_FANTASMA_RV")" = "0" ]; verificar "no llega correo a una cuenta verificada ni a una inexistente" $?
+publicar_json /autenticacion/reenviar-verificacion '{"correo":"no-es-un-correo"}'
+estado_es 422 "reenviar con correo mal formado -> 422"
+limpiar_eventos
+LIMITE_RV="$(correo_nuevo limite_rv)"
+for i in 1 2 3; do publicar_json /autenticacion/reenviar-verificacion "{\"correo\":\"$LIMITE_RV\"}"; done
+publicar_json /autenticacion/reenviar-verificacion "{\"correo\":\"$LIMITE_RV\"}"
+estado_es 429 "4.ª solicitud de reenvío del mismo correo -> 429"
+cuerpo_tiene '"DEMASIADOS_INTENTOS"' "4.ª solicitud de reenvío -> DEMASIADOS_INTENTOS"
+cabecera_tiene "Retry-After:" "4.ª solicitud de reenvío: cabecera Retry-After"
+limpiar_eventos
+
 echo "== Ejecuciones y secretos"
 for valor_env in SECRETO_PROXY JWT_SECRET CONTRASENA_BD_N8N POSTGRES_PASSWORD SERVICE_ROLE_KEY; do
   valor="$(leer_env "$valor_env")"
@@ -533,7 +656,7 @@ for valor_env in SECRETO_PROXY JWT_SECRET CONTRASENA_BD_N8N POSTGRES_PASSWORD SE
 done
 CORREO_OWNER="$(psql_n8n 'select email from "user" order by "createdAt" limit 1')"
 [ -n "$CORREO_OWNER" ] && [ -z "$(grep -rlF -- "$CORREO_OWNER" auth .env.example 2>/dev/null)" ]; verificar "ningún archivo de auth/ ni .env.example contiene el email del owner" $?
-IDS="'autRegistro01','autInicioSesion01','autRenovarSesion01','autQuienSoy01','autCierreSesion01','autRecuperar01','autRestablecer01'"
+IDS="'autRegistro01','autInicioSesion01','autRenovarSesion01','autQuienSoy01','autCierreSesion01','autRecuperar01','autRestablecer01','autVerificar01','autReenviar01'"
 echo "  (esperando el borrado definitivo de ejecuciones de n8n, hasta 2 minutos)"
 intentos=0
 until [ "$(psql_n8n "select (select count(*) from execution_entity where \"workflowId\" in ($IDS)) + (select count(*) from execution_data d join execution_entity e on e.id = d.\"executionId\" where e.\"workflowId\" in ($IDS))")" = "0" ] || [ "$intentos" -ge 40 ]; do

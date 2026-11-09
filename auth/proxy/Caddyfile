@@ -44,7 +44,7 @@
 		@preflight {
 			method OPTIONS
 			header Origin {$ORIGEN_FRONT}
-			path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/renovar /autenticacion/cerrar-sesion /autenticacion/yo /autenticacion/recuperar /autenticacion/restablecer
+			path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/renovar /autenticacion/cerrar-sesion /autenticacion/yo /autenticacion/recuperar /autenticacion/restablecer /autenticacion/verificar-correo /autenticacion/reenviar-verificacion
 		}
 		header @preflight {
 			>Access-Control-Allow-Methods "GET, POST, OPTIONS"
@@ -56,13 +56,13 @@
 		# Rutas desconocidas dentro de /autenticacion/
 		@ruta_desconocida {
 			path /autenticacion/*
-			not path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/renovar /autenticacion/cerrar-sesion /autenticacion/yo /autenticacion/recuperar /autenticacion/restablecer
+			not path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/renovar /autenticacion/cerrar-sesion /autenticacion/yo /autenticacion/recuperar /autenticacion/restablecer /autenticacion/verificar-correo /autenticacion/reenviar-verificacion
 		}
 		respond @ruta_desconocida `{"error":{"codigo":"NO_ENCONTRADO","mensaje":"Recurso no encontrado."}}` 404
 
 		# Métodos permitidos por ruta
 		@solo_post {
-			path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/renovar /autenticacion/cerrar-sesion /autenticacion/recuperar /autenticacion/restablecer
+			path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/renovar /autenticacion/cerrar-sesion /autenticacion/recuperar /autenticacion/restablecer /autenticacion/verificar-correo /autenticacion/reenviar-verificacion
 			not method POST
 		}
 		header @solo_post >Allow POST
@@ -77,7 +77,7 @@
 
 		# Las rutas con cuerpo exigen JSON
 		@sin_json {
-			path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/recuperar /autenticacion/restablecer
+			path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/recuperar /autenticacion/restablecer /autenticacion/verificar-correo /autenticacion/reenviar-verificacion
 			not header Content-Type application/json*
 		}
 		respond @sin_json `{"error":{"codigo":"TIPO_CONTENIDO_NO_SOPORTADO","mensaje":"El tipo de contenido debe ser application/json."}}` 415
