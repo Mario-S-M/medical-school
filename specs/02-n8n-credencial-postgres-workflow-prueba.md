@@ -15,12 +15,12 @@
 - Export del workflow, sin secretos, a `workflows/prueba-postgres.json` versionado en git.
 - *Añadido tras la implementación inicial:* `CLAUDE.md` en la raíz del repo con la regla de que todos los workflows y todas las variables van en español.
 - *Añadido tras la implementación inicial:* carpeta `workflows/estado/` con el workflow `Estado base de datos`: Manual Trigger → consulta de salud a Postgres → resultado en español (`estado: "sano"`). Si la base no responde, la ejecución falla.
+- *Añadido tras la implementación inicial:* una carpeta `Estado` también dentro de n8n (proyecto Personal) con ese workflow dentro, espejo de `workflows/estado/`. En Community Edition las carpetas requieren registrar la instancia con una clave de licencia gratuita enviada por email; se registra con el email del owner.
 
 **No entra:**
 - Una base o un usuario separado para datos de la app: se reutiliza la base `n8n` y el único usuario de SPEC 01.
 - Crear la cuenta owner de n8n: ya existe; el login se da en el momento de implementar y no se guarda en el repo.
 - Workflows con triggers automáticos (cron, webhook) o lógica de negocio. El workflow de estado se ejecuta a mano; exponerlo como endpoint de salud (webhook) o programarlo irá en otra spec.
-- Una carpeta «Estado» dentro de la UI de n8n: la carpeta es solo del repo (`workflows/estado/`).
 - Renombrar nada existente en inglés (nombres propios de n8n como *Manual Trigger*, tipos de nodo o claves del JSON exportado): la regla de `CLAUDE.md` aplica a lo que se crea con nombre propio.
 - Guardar la contraseña de Postgres en pgAdmin vía `PassFile`: pgAdmin la pide la primera vez.
 - Exponer puertos fuera de `127.0.0.1` o TLS.
@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS pruebas.prueba_n8n (
 - [ ] En n8n existe el workflow `Estado base de datos` con los nodos `Ejecutar estado`, `Consultar salud`, `Armar resultado`, y al ejecutarlo termina con `success` y `Armar resultado` devuelve `estado = "sano"`.
 - [ ] `workflows/estado/estado-base-de-datos.json` existe, es JSON válido, y no contiene la contraseña ni el usuario de Postgres ni el email del owner.
 - [ ] Todos los nombres y campos del workflow de estado están en español.
+- [ ] La instancia de n8n tiene la licencia gratuita activada (*Settings → Usage and plan* ya no pide activar) y en el proyecto Personal existe la carpeta `Estado` con `Estado base de datos` dentro.
 
 ## Decisiones tomadas y descartadas
 
@@ -127,7 +128,7 @@ CREATE TABLE IF NOT EXISTS pruebas.prueba_n8n (
 - **Tomada: exportar el workflow a `workflows/prueba-postgres.json`.** Queda versionado; n8n guarda solo la referencia a la credencial.
 - **Tomada: ampliar esta spec** con la regla de español y el workflow de estado, a petición del usuario, en vez de abrir una spec 03. **Descartada:** spec aparte, que habría dado su propia rama y criterios.
 - **Tomada: la regla va en el `CLAUDE.md` del proyecto** (versionado, aplica a este repo). **Descartada:** `~/.claude/CLAUDE.md` global.
-- **Tomada: carpeta `workflows/estado/` en el repo.** Agrupa los workflows de salud y se importa con el CLI. **Descartada:** carpeta en la UI de n8n.
+- **Tomada: carpeta `Estado` tanto en `workflows/estado/` (repo) como en la UI de n8n**, a petición del usuario. Para la de n8n se registra la instancia con la licencia gratuita de Community Edition, que envía el email del owner a n8n. **Descartada:** dejar la carpeta solo en el repo.
 - **Tomada: workflow de estado manual y con fallo explícito.** Si Postgres no responde, la ejecución falla; no se captura el error, así el fallo se ve en *Executions*. **Descartada:** webhook o cron, que quedan para otra spec.
 
 ## Riesgos identificados
