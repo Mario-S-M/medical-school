@@ -3,3 +3,4 @@
 !.env.example
 postgres/
 pgadmin/
+.playwright-mcp/
