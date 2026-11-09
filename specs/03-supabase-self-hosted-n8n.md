@@ -1,6 +1,6 @@
 # SPEC 03 — Supabase self-hosted en docker-compose y n8n sobre su Postgres
 
-**Estado:** Aprobado. 
+**Estado:** Implementado
 **Depende de:** SPEC 01, SPEC 02
 **Fecha:** 2026-11-09
 **Objetivo:** Sustituir el contenedor `postgres` por el stack oficial completo de Supabase self-hosted, todo en `127.0.0.1`. n8n arranca de cero sobre una base `n8n` dentro del Postgres de Supabase, se recrean la credencial y los workflows de SPEC 02 desde los JSON del repo y pgAdmin apunta al nuevo Postgres. Así queda lista la base para el login de SPEC 04.
@@ -8,7 +8,7 @@
 ## Alcance
 
 **Entra:**
-- Carpeta `supabase/` con los archivos del `docker/` oficial de Supabase (`docker-compose.yml`, `volumes/api/kong.yml`, `volumes/db/*.sql`, etc.), fijados a un tag de release concreto que se anota en esta spec al implementar.
+- Carpeta `supabase/` con los archivos del `docker/` oficial de Supabase (`docker-compose.yml`, `volumes/api/kong.yml`, `volumes/db/*.sql`, etc.), fijados a un tag de release concreto que se anota en esta spec al implementar. **Tag usado: `v1.26.08`** (también en `supabase/VERSION`). En ese tag analytics y vector viven en `docker-compose.logs.yml`, que también se incluye; las claves ES256 opcionales se dejan vacías y se usan las claves legacy HS256.
 - `docker-compose.yml` raíz: quita el servicio `postgres`, incluye `supabase/docker-compose.yml` con `include:` (usando el `.env` raíz) y mantiene `n8n` y `pgadmin`.
 - Stack oficial completo: db, auth (GoTrue), rest, realtime, storage, imgproxy, meta, functions, analytics, vector, kong, studio y supavisor.
 - Un solo `.env` raíz con las variables de Supabase (nombres impuestos por Supabase, como `JWT_SECRET`, `ANON_KEY`, `SERVICE_ROLE_KEY`, `DASHBOARD_USERNAME`…) generadas con openssl igual que en SPEC 01, sin dejar scripts. Ningún valor por defecto del `.env.example` oficial.
@@ -68,20 +68,20 @@ CREATE DATABASE n8n OWNER <USUARIO_BD_N8N>;
 
 ## Criterios de aceptación
 
-- [ ] `supabase/` contiene el compose oficial y esta spec anota el tag usado.
-- [ ] `docker-compose.yml` ya no tiene el servicio `postgres` ni la imagen `postgres:18.6`, e incluye `supabase/docker-compose.yml`.
-- [ ] `docker compose ps` muestra todos los servicios de Supabase, n8n y pgAdmin en ejecución, y los que tienen healthcheck aparecen `healthy`.
-- [ ] `docker compose config | grep -E 'published'` solo muestra puertos ligados a `127.0.0.1`.
-- [ ] El `.env` tiene permisos `600`, no contiene ningún valor por defecto del `.env.example` oficial (p. ej. `grep -c 'your-super-secret' .env` = 0) y existe `.env.bak.*`.
-- [ ] `ANON_KEY` y `SERVICE_ROLE_KEY` se verifican con `JWT_SECRET` (HS256) y tienen `role` `anon` y `service_role`.
-- [ ] `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/auth/v1/health -H "apikey: $ANON_KEY"` devuelve `200`.
-- [ ] `http://127.0.0.1:8000` pide basic auth y entra a Studio con `DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD`.
-- [ ] En el Postgres de Supabase existe la base `n8n` cuyo dueño es `USUARIO_BD_N8N`, ese rol no es superusuario y las tablas internas de n8n están ahí.
-- [ ] n8n arranca sin errores de base de datos en `docker compose logs n8n`.
-- [ ] En n8n existen la credencial `Postgres n8n (Supabase)` (*Test connection* correcto), los workflows `Prueba Postgres` y `Estado base de datos` dentro de la carpeta `Estado` y ambos se ejecutan con `success`; `Armar resultado` devuelve `estado = "sano"`.
-- [ ] pgAdmin muestra el servidor apuntando a `db` sin registrarlo a mano.
-- [ ] `./postgres` sigue existiendo sin cambios.
-- [ ] `git status` no muestra datos de Supabase ni `.env`; los JSON re-exportados no contienen contraseñas, usuarios ni el email del owner.
+- [x] `supabase/` contiene el compose oficial y esta spec anota el tag usado.
+- [x] `docker-compose.yml` ya no tiene el servicio `postgres` ni la imagen `postgres:18.6`, e incluye `supabase/docker-compose.yml`.
+- [x] `docker compose ps` muestra todos los servicios de Supabase, n8n y pgAdmin en ejecución, y los que tienen healthcheck aparecen `healthy`.
+- [x] `docker compose config | grep -E 'published'` solo muestra puertos ligados a `127.0.0.1`.
+- [x] El `.env` tiene permisos `600`, no contiene ningún valor por defecto del `.env.example` oficial (p. ej. `grep -c 'your-super-secret' .env` = 0) y existe `.env.bak.*`.
+- [x] `ANON_KEY` y `SERVICE_ROLE_KEY` se verifican con `JWT_SECRET` (HS256) y tienen `role` `anon` y `service_role`.
+- [x] `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/auth/v1/health -H "apikey: $ANON_KEY"` devuelve `200`.
+- [x] `http://127.0.0.1:8000` pide basic auth y entra a Studio con `DASHBOARD_USERNAME`/`DASHBOARD_PASSWORD`.
+- [x] En el Postgres de Supabase existe la base `n8n` cuyo dueño es `USUARIO_BD_N8N`, ese rol no es superusuario y las tablas internas de n8n están ahí.
+- [x] n8n arranca sin errores de base de datos en `docker compose logs n8n`.
+- [x] En n8n existen la credencial `Postgres n8n (Supabase)` (*Test connection* correcto), los workflows `Prueba Postgres` y `Estado base de datos` dentro de la carpeta `Estado` y ambos se ejecutan con `success`; `Armar resultado` devuelve `estado = "sano"`.
+- [x] pgAdmin muestra el servidor apuntando a `db` sin registrarlo a mano.
+- [x] `./postgres` sigue existiendo sin cambios.
+- [x] `git status` no muestra datos de Supabase ni `.env`; los JSON re-exportados no contienen contraseñas, usuarios ni el email del owner.
 
 ## Decisiones tomadas y descartadas
 
