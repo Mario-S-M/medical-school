@@ -3,7 +3,7 @@
 **Estado:** Aprobado
 **Depende de:** SPEC 01
 **Fecha:** 2026-11-08
-**Objetivo:** Dejar n8n con una credencial Postgres funcional hacia la base `n8n`, pgAdmin con el servidor ya registrado, y un workflow de prueba que crea, inserta y lee una tabla en el esquema `pruebas`, exportado a `workflows/prueba-postgres.json`.
+**Objetivo:** Dejar n8n con una credencial Postgres funcional hacia la base `n8n`, pgAdmin con el servidor ya registrado, un workflow de prueba que crea, inserta y lee una tabla en el esquema `pruebas` (`workflows/prueba-postgres.json`), un workflow de estado que comprueba la salud de la base (`workflows/estado/estado-base-de-datos.json`) y una regla en `CLAUDE.md` que exige workflows y variables en español.
 
 ## Alcance
 
@@ -13,11 +13,15 @@
 - Vía preferida: MCP de n8n. Si no está disponible o no permite la operación, Playwright sobre la UI en `http://127.0.0.1:5678`.
 - pgAdmin con el servidor Postgres pre-registrado vía `servers.json`, para hacer `SELECT` también desde pgAdmin.
 - Export del workflow, sin secretos, a `workflows/prueba-postgres.json` versionado en git.
+- *Añadido tras la implementación inicial:* `CLAUDE.md` en la raíz del repo con la regla de que todos los workflows y todas las variables van en español.
+- *Añadido tras la implementación inicial:* carpeta `workflows/estado/` con el workflow `Estado base de datos`: Manual Trigger → consulta de salud a Postgres → resultado en español (`estado: "sano"`). Si la base no responde, la ejecución falla.
 
 **No entra:**
 - Una base o un usuario separado para datos de la app: se reutiliza la base `n8n` y el único usuario de SPEC 01.
 - Crear la cuenta owner de n8n: ya existe; el login se da en el momento de implementar y no se guarda en el repo.
-- Workflows con triggers automáticos (cron, webhook) o lógica de negocio.
+- Workflows con triggers automáticos (cron, webhook) o lógica de negocio. El workflow de estado se ejecuta a mano; exponerlo como endpoint de salud (webhook) o programarlo irá en otra spec.
+- Una carpeta «Estado» dentro de la UI de n8n: la carpeta es solo del repo (`workflows/estado/`).
+- Renombrar nada existente en inglés (nombres propios de n8n como *Manual Trigger*, tipos de nodo o claves del JSON exportado): la regla de `CLAUDE.md` aplica a lo que se crea con nombre propio.
 - Guardar la contraseña de Postgres en pgAdmin vía `PassFile`: pgAdmin la pide la primera vez.
 - Exponer puertos fuera de `127.0.0.1` o TLS.
 - Cambiar los secretos del `.env`.
@@ -54,6 +58,13 @@ CREATE TABLE IF NOT EXISTS pruebas.prueba_n8n (
 3. `Insertar fila` — Postgres, *Execute Query*: `INSERT INTO pruebas.prueba_n8n (mensaje) VALUES ('hola desde n8n') RETURNING *;`
 4. `Leer filas` — Postgres, *Execute Query*: `SELECT * FROM pruebas.prueba_n8n ORDER BY id DESC LIMIT 10;`
 
+**Workflow `Estado base de datos`** (`workflows/estado/estado-base-de-datos.json`, id `estadoBaseDatos01`, misma credencial):
+1. `Ejecutar estado` — Manual Trigger.
+2. `Consultar salud` — Postgres, *Execute Query*: `SELECT now() AS ahora, current_database() AS base_de_datos, current_user AS usuario_conectado, version() AS version_postgres, pg_is_in_recovery() AS en_recuperacion;`
+3. `Armar resultado` — Set: `estado = "sano"` más los campos en español del paso 2 (`ahora`, `base_de_datos`, `usuario_conectado`, `version_postgres`).
+
+**Regla en `CLAUDE.md`** (raíz del repo): los nombres de workflows, nodos, carpetas de workflows y las variables (campos, alias SQL, variables de `.env` nuevas) se escriben en español, sin acentos ni espacios en identificadores (`snake_case`).
+
 **`pgadmin/servers.json`** (gitignored, porque incluye el usuario generado):
 
 ```json
@@ -84,6 +95,8 @@ CREATE TABLE IF NOT EXISTS pruebas.prueba_n8n (
 5. **Ejecutar el workflow** (*Execute workflow*) y comprobar que `Leer filas` devuelve al menos una fila con `mensaje = 'hola desde n8n'`.
 6. **Exportar el workflow** a `workflows/prueba-postgres.json` (por MCP/UI o con `docker compose exec n8n n8n export:workflow --id=<id>`). Revisar que el JSON solo referencia la credencial por id/nombre y no contiene la contraseña.
 7. **Verificar desde pgAdmin** (ver criterios) y hacer commit de `docker-compose.yml`, `.gitignore` y `workflows/prueba-postgres.json`.
+8. **Crear `CLAUDE.md`** en la raíz con la regla de workflows y variables en español.
+9. **Crear el workflow `Estado base de datos`** en `workflows/estado/estado-base-de-datos.json`, importarlo con el CLI de n8n, ejecutarlo y re-exportarlo desde n8n sin secretos ni datos del owner.
 
 ## Criterios de aceptación
 
@@ -97,6 +110,10 @@ CREATE TABLE IF NOT EXISTS pruebas.prueba_n8n (
 - [ ] Las tablas internas de n8n en `public` no se modificaron (el workflow solo toca el esquema `pruebas`).
 - [ ] `workflows/prueba-postgres.json` existe, es JSON válido y `grep -c "$POSTGRES_PASSWORD" workflows/prueba-postgres.json` devuelve 0.
 - [ ] Se documenta en el cierre si se usó el MCP de n8n o Playwright, y por qué.
+- [ ] `CLAUDE.md` existe en la raíz y contiene la regla de workflows y variables en español.
+- [ ] En n8n existe el workflow `Estado base de datos` con los nodos `Ejecutar estado`, `Consultar salud`, `Armar resultado`, y al ejecutarlo termina con `success` y `Armar resultado` devuelve `estado = "sano"`.
+- [ ] `workflows/estado/estado-base-de-datos.json` existe, es JSON válido, y no contiene la contraseña ni el usuario de Postgres ni el email del owner.
+- [ ] Todos los nombres y campos del workflow de estado están en español.
 
 ## Decisiones tomadas y descartadas
 
@@ -108,6 +125,10 @@ CREATE TABLE IF NOT EXISTS pruebas.prueba_n8n (
 - **Tomada: recrear `pgadmin_data`** para que se importe `servers.json`. Solo contiene configuración de pgAdmin. **Descartada:** `setup.py load-servers` dentro del contenedor, que en modo escritorio depende del usuario interno de pgAdmin y es más frágil.
 - **Tomada: sin `PassFile`.** pgAdmin pide la contraseña la primera vez y puede guardarla en su volumen. Evita otro archivo con secretos.
 - **Tomada: exportar el workflow a `workflows/prueba-postgres.json`.** Queda versionado; n8n guarda solo la referencia a la credencial.
+- **Tomada: ampliar esta spec** con la regla de español y el workflow de estado, a petición del usuario, en vez de abrir una spec 03. **Descartada:** spec aparte, que habría dado su propia rama y criterios.
+- **Tomada: la regla va en el `CLAUDE.md` del proyecto** (versionado, aplica a este repo). **Descartada:** `~/.claude/CLAUDE.md` global.
+- **Tomada: carpeta `workflows/estado/` en el repo.** Agrupa los workflows de salud y se importa con el CLI. **Descartada:** carpeta en la UI de n8n.
+- **Tomada: workflow de estado manual y con fallo explícito.** Si Postgres no responde, la ejecución falla; no se captura el error, así el fallo se ve en *Executions*. **Descartada:** webhook o cron, que quedan para otra spec.
 
 ## Riesgos identificados
 
