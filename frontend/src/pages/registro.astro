@@ -1,0 +1,12 @@
+---
+import LayoutBase from '../layouts/LayoutBase.astro';
+import TarjetaAuth from '../componentes/estructura/TarjetaAuth.astro';
+import FormularioRegistro from '../componentes/auth/FormularioRegistro';
+---
+
+<LayoutBase titulo="Crear cuenta">
+  <TarjetaAuth titulo="Crear cuenta" descripcion="Te enviaremos un código para verificar tu correo.">
+    <FormularioRegistro client:load />
+    <p class="mt-4 text-sm">¿Ya tienes cuenta? <a class="text-sky-700 underline" href="/iniciar-sesion">Inicia sesión</a></p>
+  </TarjetaAuth>
+</LayoutBase>

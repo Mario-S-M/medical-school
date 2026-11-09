@@ -1,0 +1,11 @@
+---
+import LayoutBase from '../layouts/LayoutBase.astro';
+import TarjetaAuth from '../componentes/estructura/TarjetaAuth.astro';
+import FormularioRestablecer from '../componentes/auth/FormularioRestablecer';
+---
+
+<LayoutBase titulo="Restablecer contraseña">
+  <TarjetaAuth titulo="Restablecer contraseña" descripcion="Escribe el código de 6 dígitos que te enviamos (vence en 15 minutos) y tu contraseña nueva.">
+    <FormularioRestablecer client:load />
+  </TarjetaAuth>
+</LayoutBase>

@@ -1,0 +1,13 @@
+---
+import LayoutBase from '../layouts/LayoutBase.astro';
+import TarjetaAuth from '../componentes/estructura/TarjetaAuth.astro';
+import FormularioInicioSesion from '../componentes/auth/FormularioInicioSesion';
+---
+
+<LayoutBase titulo="Iniciar sesión">
+  <TarjetaAuth titulo="Bienvenido de nuevo" descripcion="Inicia sesión para continuar.">
+    <FormularioInicioSesion client:load />
+    <p class="mt-5 text-center text-sm"><a class="text-sky-700 underline" href="/recuperar">¿Olvidaste tu contraseña?</a></p>
+    <p class="mt-2 text-center text-sm text-slate-600">¿No tienes cuenta? <a class="text-sky-700 underline" href="/registro">Regístrate</a></p>
+  </TarjetaAuth>
+</LayoutBase>
