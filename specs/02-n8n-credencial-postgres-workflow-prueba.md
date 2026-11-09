@@ -1,6 +1,6 @@
 # SPEC 02 — Credencial Postgres en n8n, pgAdmin preconfigurado y workflow de prueba
 
-**Estado:** Aprobado
+**Estado:** Implementado
 **Depende de:** SPEC 01
 **Fecha:** 2026-11-08
 **Objetivo:** Dejar n8n con una credencial Postgres funcional hacia la base `n8n`, pgAdmin con el servidor ya registrado, un workflow de prueba que crea, inserta y lee una tabla en el esquema `pruebas` (`workflows/prueba-postgres.json`), un workflow de estado que comprueba la salud de la base (`workflows/estado/estado-base-de-datos.json`) y una regla en `CLAUDE.md` que exige workflows y variables en español.
@@ -100,21 +100,21 @@ CREATE TABLE IF NOT EXISTS pruebas.prueba_n8n (
 
 ## Criterios de aceptación
 
-- [ ] `pgadmin/servers.json` existe, no está trackeado por git y `git check-ignore pgadmin/servers.json` lo confirma.
-- [ ] `docker-compose.yml` monta `./pgadmin/servers.json` en `/pgadmin4/servers.json` en modo solo lectura.
-- [ ] Al abrir `http://127.0.0.1:5050`, el árbol muestra `Postgres n8n (local)` sin registrarlo a mano; tras introducir la contraseña conecta y en *Query Tool* `SELECT * FROM pruebas.prueba_n8n;` devuelve filas.
-- [ ] En n8n existe la credencial `Postgres n8n (local)` y su *Test connection* es correcto.
-- [ ] En n8n existe el workflow `Prueba Postgres` con los nodos `Ejecutar prueba`, `Crear tabla`, `Insertar fila`, `Leer filas`.
-- [ ] Ejecutarlo dos veces termina sin errores y la segunda vez `Leer filas` devuelve al menos 2 filas (`CREATE … IF NOT EXISTS` es idempotente).
-- [ ] `docker compose exec postgres psql -U "$POSTGRES_USER" -d n8n -c 'select count(*) from pruebas.prueba_n8n'` devuelve ≥ 1.
-- [ ] Las tablas internas de n8n en `public` no se modificaron (el workflow solo toca el esquema `pruebas`).
-- [ ] `workflows/prueba-postgres.json` existe, es JSON válido y `grep -c "$POSTGRES_PASSWORD" workflows/prueba-postgres.json` devuelve 0.
-- [ ] Se documenta en el cierre si se usó el MCP de n8n o Playwright, y por qué.
-- [ ] `CLAUDE.md` existe en la raíz y contiene la regla de workflows y variables en español.
-- [ ] En n8n existe el workflow `Estado base de datos` con los nodos `Ejecutar estado`, `Consultar salud`, `Armar resultado`, y al ejecutarlo termina con `success` y `Armar resultado` devuelve `estado = "sano"`.
-- [ ] `workflows/estado/estado-base-de-datos.json` existe, es JSON válido, y no contiene la contraseña ni el usuario de Postgres ni el email del owner.
-- [ ] Todos los nombres y campos del workflow de estado están en español.
-- [ ] La instancia de n8n tiene la licencia gratuita activada (*Settings → Usage and plan* ya no pide activar) y en el proyecto Personal existe la carpeta `Estado` con `Estado base de datos` dentro.
+- [x] `pgadmin/servers.json` existe, no está trackeado por git y `git check-ignore pgadmin/servers.json` lo confirma.
+- [x] `docker-compose.yml` monta `./pgadmin/servers.json` en `/pgadmin4/servers.json` en modo solo lectura.
+- [x] Al abrir `http://127.0.0.1:5050`, el árbol muestra `Postgres n8n (local)` sin registrarlo a mano; tras introducir la contraseña conecta y en *Query Tool* `SELECT * FROM pruebas.prueba_n8n;` devuelve filas.
+- [x] En n8n existe la credencial `Postgres n8n (local)` y su *Test connection* es correcto.
+- [x] En n8n existe el workflow `Prueba Postgres` con los nodos `Ejecutar prueba`, `Crear tabla`, `Insertar fila`, `Leer filas`.
+- [x] Ejecutarlo dos veces termina sin errores y la segunda vez `Leer filas` devuelve al menos 2 filas (`CREATE … IF NOT EXISTS` es idempotente).
+- [x] `docker compose exec postgres psql -U "$POSTGRES_USER" -d n8n -c 'select count(*) from pruebas.prueba_n8n'` devuelve ≥ 1.
+- [x] Las tablas internas de n8n en `public` no se modificaron (el workflow solo toca el esquema `pruebas`).
+- [x] `workflows/prueba-postgres.json` existe, es JSON válido y `grep -c "$POSTGRES_PASSWORD" workflows/prueba-postgres.json` devuelve 0.
+- [x] Se documenta en el cierre si se usó el MCP de n8n o Playwright, y por qué.
+- [x] `CLAUDE.md` existe en la raíz y contiene la regla de workflows y variables en español.
+- [x] En n8n existe el workflow `Estado base de datos` con los nodos `Ejecutar estado`, `Consultar salud`, `Armar resultado`, y al ejecutarlo termina con `success` y `Armar resultado` devuelve `estado = "sano"`.
+- [x] `workflows/estado/estado-base-de-datos.json` existe, es JSON válido, y no contiene la contraseña ni el usuario de Postgres ni el email del owner.
+- [x] Todos los nombres y campos del workflow de estado están en español.
+- [x] La instancia de n8n tiene la licencia gratuita activada (*Settings → Usage and plan* ya no pide activar) y en el proyecto Personal existe la carpeta `Estado` con `Estado base de datos` dentro.
 
 ## Decisiones tomadas y descartadas
 
