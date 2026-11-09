@@ -493,6 +493,8 @@ services:
       - ./volumes/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:Z
       # Initialize the database settings with JWT_SECRET and JWT_EXP
       - ./volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:Z
+      # Rol y base de n8n (usa USUARIO_BD_N8N y CONTRASENA_BD_N8N del entorno)
+      - ./volumes/db/n8n.sql:/docker-entrypoint-initdb.d/init-scripts/99-n8n.sql:Z
       # PGDATA directory is persisted between restarts
       - ./volumes/db/data:/var/lib/postgresql/data:Z
       # Changes required for internal supabase data such as _analytics
@@ -526,6 +528,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXP: ${JWT_EXPIRY}
+      USUARIO_BD_N8N: ${USUARIO_BD_N8N}
+      CONTRASENA_BD_N8N: ${CONTRASENA_BD_N8N}
     command:
       [
         "postgres",
