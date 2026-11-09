@@ -100,6 +100,25 @@
 			header_up X-Secreto-Proxy {$SECRETO_PROXY}
 			header_down -Server
 			header_down -X-Powered-By
+			header_down -X-Flujo
+
+			# Respuestas que no vienen de nuestros workflows (sin X-Flujo): n8n no pudo leer el JSON o falló
+			@json_roto {
+				status 422
+				header !X-Flujo
+			}
+			handle_response @json_roto {
+				header Content-Type "application/json; charset=utf-8"
+				respond `{"error":{"codigo":"JSON_INVALIDO","mensaje":"El cuerpo no es un JSON válido."}}` 400
+			}
+			@fallo_ajeno {
+				status 4xx 5xx
+				header !X-Flujo
+			}
+			handle_response @fallo_ajeno {
+				header Content-Type "application/json; charset=utf-8"
+				respond `{"error":{"codigo":"ERROR_INTERNO","mensaje":"Error interno del servidor."}}` 500
+			}
 		}
 	}
 
