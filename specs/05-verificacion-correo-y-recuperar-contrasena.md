@@ -1,6 +1,6 @@
 # SPEC 05 — Verificación de correo y recuperación de contraseña con código por SMTP (Mailpit)
 
-**Estado:** Aprobado
+**Estado:** Implementado
 **Depende de:** SPEC 04 (y, a través de ella, SPEC 01, 02 y 03)
 **Fecha:** 2026-11-09
 **Objetivo:** Añadir a la API de autenticación la verificación de correo obligatoria y la recuperación de contraseña, ambas con un código de 6 dígitos enviado por SMTP (Mailpit en local, configurable a un SMTP real) y gestionadas por workflows de n8n sobre Supabase Auth.
@@ -89,30 +89,30 @@ CREATE INDEX IF NOT EXISTS eventos_codigo_ip_idx     ON autenticacion.eventos_co
 
 ## Criterios de aceptación
 
-- [ ] `auth/pruebas/pruebas.sh` termina con código 0 contra el stack levantado y cubre cada criterio de esta lista que lo permite, incluidos los de SPEC 04.
-- [ ] `docker compose config -q` pasa; `mailpit` está en ejecución con su interfaz y API solo en `127.0.0.1:8025`, y ni el SMTP de Mailpit (1025) ni el puerto interno `:8081` de Caddy están publicados en el host.
-- [ ] En el servicio `auth`, `SMTP_HOST` es `mailpit`, `GOTRUE_MAILER_OTP_EXP` es `900` y `ENABLE_EMAIL_AUTOCONFIRM` es `false`.
-- [ ] Las tres plantillas se sirven por la red interna (`wget http://caddy:8081/recuperacion.html` desde el contenedor `n8n` devuelve HTML) y no por el host (`127.0.0.1:8081` rechaza la conexión).
-- [ ] Tras `recuperar` de una cuenta verificada, Mailpit recibe un solo correo para ese destinatario, con asunto en español y un código de 6 dígitos en el cuerpo, sin ningún enlace.
-- [ ] `recuperar` de un correo registrado y de uno inexistente devuelven el mismo estado `202` y el mismo cuerpo, y Mailpit solo recibe correo en el primer caso.
-- [ ] La cuarta solicitud de código del mismo correo y propósito en 1 h devuelve `429 DEMASIADOS_INTENTOS` con `Retry-After`, también para un correo inexistente; la undécima desde la misma IP también.
-- [ ] `restablecer` con el código correcto y una contraseña válida devuelve `200`; después, iniciar sesión con la contraseña nueva funciona (`200`) y con la vieja da `401`.
-- [ ] Tras `restablecer`, la cookie de renovación y el token de acceso de una sesión abierta antes dejan de servir (`renovar` y `yo` devuelven `401`).
-- [ ] Tras `restablecer`, Mailpit recibe un correo de aviso de cambio de contraseña para ese usuario.
-- [ ] Reusar el mismo código en `restablecer` devuelve `400 CODIGO_INVALIDO`, y un código vencido (con `recovery_sent_at` retrasado 16 minutos en `auth.users`) también.
-- [ ] `restablecer` con una contraseña que incumple la política devuelve `422 CONTRASENA_INSEGURA` y el código sigue siendo válido: se puede usar después con una contraseña correcta.
-- [ ] `restablecer` con un código erróneo y con un correo inexistente devuelven `400 CODIGO_INVALIDO` con cuerpos idénticos byte a byte.
-- [ ] Tras 5 códigos erróneos del mismo correo, el sexto intento (aun con el código correcto) devuelve `429 CODIGO_BLOQUEADO` con `Retry-After` mayor que 0; con 20 códigos erróneos desde la misma IP, el siguiente devuelve `429 DEMASIADOS_INTENTOS`.
-- [ ] `registro` de un correo nuevo devuelve `201` con el mensaje nuevo, deja `email_confirmed_at` nulo en `auth.users` y Mailpit recibe un correo con un código de 6 dígitos; registrar dos veces el mismo correo devuelve el mismo cuerpo.
-- [ ] `iniciar-sesion` con la contraseña correcta en una cuenta sin verificar devuelve `403 CORREO_NO_VERIFICADO`; con una contraseña incorrecta devuelve el mismo `401 CREDENCIALES_INVALIDAS` de siempre, y el `403` no suma a `intentos_inicio_sesion`.
-- [ ] `verificar-correo` con el código correcto devuelve `200`, deja `email_confirmed_at` con fecha, no devuelve tokens ni cookie, y a partir de ahí `iniciar-sesion` da `200`; con un código erróneo devuelve `400 CODIGO_INVALIDO`.
-- [ ] `reenviar-verificacion` de una cuenta sin verificar devuelve `202` y Mailpit recibe un código nuevo; de una cuenta ya verificada y de un correo inexistente devuelve el mismo `202` y no llega correo.
-- [ ] Las rutas nuevas responden por Caddy `405` ante un método distinto de `POST`, `415` ante un `Content-Type` distinto de `application/json`, `413` ante más de 10 KB, y por el puerto 5678 directo sin el secreto del proxy responden `403`.
-- [ ] Un código o una contraseña mal formados, un campo faltante o un campo extra en los cuatro endpoints devuelven `422 VALIDACION_FALLIDA`.
-- [ ] En la base `n8n`, 2 minutos después de ejecutar `pruebas.sh`, ni `execution_entity` ni `execution_data` tienen filas de los nueve workflows de autenticación, y ningún código ni contraseña de las pruebas aparece en `execution_data`.
-- [ ] En n8n existen los cuatro workflows nuevos, publicados y dentro de la carpeta `Autenticacion`, y los nombres de workflows, nodos, campos, tablas y variables nuevas están en español (excepto las variables que impone Supabase).
-- [ ] Ningún archivo de `auth/` ni `.env.example` contiene secretos (`SMTP_PASS`, `SECRETO_PROXY`, `JWT_SECRET`) ni el email del owner, y `auth/plantillas/` no contiene enlaces.
-- [ ] `auth/README.md` documenta los nueve endpoints, los errores nuevos, la caducidad de 15 minutos y cómo cambiar a un SMTP real; la colección de Postman tiene nueve peticiones en la carpeta `Autenticacion`, nombradas como sus workflows, y sigue siendo JSON válido sin secretos.
+- [x] `auth/pruebas/pruebas.sh` termina con código 0 contra el stack levantado y cubre cada criterio de esta lista que lo permite, incluidos los de SPEC 04.
+- [x] `docker compose config -q` pasa; `mailpit` está en ejecución con su interfaz y API solo en `127.0.0.1:8025`, y ni el SMTP de Mailpit (1025) ni el puerto interno `:8081` de Caddy están publicados en el host.
+- [x] En el servicio `auth`, `SMTP_HOST` es `mailpit`, `GOTRUE_MAILER_OTP_EXP` es `900` y `ENABLE_EMAIL_AUTOCONFIRM` es `false`.
+- [x] Las tres plantillas se sirven por la red interna (`wget http://caddy:8081/recuperacion.html` desde el contenedor `n8n` devuelve HTML) y no por el host (`127.0.0.1:8081` rechaza la conexión).
+- [x] Tras `recuperar` de una cuenta verificada, Mailpit recibe un solo correo para ese destinatario, con asunto en español y un código de 6 dígitos en el cuerpo, sin ningún enlace.
+- [x] `recuperar` de un correo registrado y de uno inexistente devuelven el mismo estado `202` y el mismo cuerpo, y Mailpit solo recibe correo en el primer caso.
+- [x] La cuarta solicitud de código del mismo correo y propósito en 1 h devuelve `429 DEMASIADOS_INTENTOS` con `Retry-After`, también para un correo inexistente; la undécima desde la misma IP también.
+- [x] `restablecer` con el código correcto y una contraseña válida devuelve `200`; después, iniciar sesión con la contraseña nueva funciona (`200`) y con la vieja da `401`.
+- [x] Tras `restablecer`, la cookie de renovación y el token de acceso de una sesión abierta antes dejan de servir (`renovar` y `yo` devuelven `401`).
+- [x] Tras `restablecer`, Mailpit recibe un correo de aviso de cambio de contraseña para ese usuario.
+- [x] Reusar el mismo código en `restablecer` devuelve `400 CODIGO_INVALIDO`, y un código vencido (con `recovery_sent_at` retrasado 16 minutos en `auth.users`) también.
+- [x] `restablecer` con una contraseña que incumple la política devuelve `422 CONTRASENA_INSEGURA` y el código sigue siendo válido: se puede usar después con una contraseña correcta.
+- [x] `restablecer` con un código erróneo y con un correo inexistente devuelven `400 CODIGO_INVALIDO` con cuerpos idénticos byte a byte.
+- [x] Tras 5 códigos erróneos del mismo correo, el sexto intento (aun con el código correcto) devuelve `429 CODIGO_BLOQUEADO` con `Retry-After` mayor que 0; con 20 códigos erróneos desde la misma IP, el siguiente devuelve `429 DEMASIADOS_INTENTOS`.
+- [x] `registro` de un correo nuevo devuelve `201` con el mensaje nuevo, deja `email_confirmed_at` nulo en `auth.users` y Mailpit recibe un correo con un código de 6 dígitos; registrar dos veces el mismo correo devuelve el mismo cuerpo.
+- [x] `iniciar-sesion` con la contraseña correcta en una cuenta sin verificar devuelve `403 CORREO_NO_VERIFICADO`; con una contraseña incorrecta devuelve el mismo `401 CREDENCIALES_INVALIDAS` de siempre, y el `403` no suma a `intentos_inicio_sesion`.
+- [x] `verificar-correo` con el código correcto devuelve `200`, deja `email_confirmed_at` con fecha, no devuelve tokens ni cookie, y a partir de ahí `iniciar-sesion` da `200`; con un código erróneo devuelve `400 CODIGO_INVALIDO`.
+- [x] `reenviar-verificacion` de una cuenta sin verificar devuelve `202` y Mailpit recibe un código nuevo; de una cuenta ya verificada y de un correo inexistente devuelve el mismo `202` y no llega correo.
+- [x] Las rutas nuevas responden por Caddy `405` ante un método distinto de `POST`, `415` ante un `Content-Type` distinto de `application/json`, `413` ante más de 10 KB, y por el puerto 5678 directo sin el secreto del proxy responden `403`.
+- [x] Un código o una contraseña mal formados, un campo faltante o un campo extra en los cuatro endpoints devuelven `422 VALIDACION_FALLIDA`.
+- [x] En la base `n8n`, 2 minutos después de ejecutar `pruebas.sh`, ni `execution_entity` ni `execution_data` tienen filas de los nueve workflows de autenticación, y ningún código ni contraseña de las pruebas aparece en `execution_data`.
+- [x] En n8n existen los cuatro workflows nuevos, publicados y dentro de la carpeta `Autenticacion`, y los nombres de workflows, nodos, campos, tablas y variables nuevas están en español (excepto las variables que impone Supabase).
+- [x] Ningún archivo de `auth/` ni `.env.example` contiene secretos (`SMTP_PASS`, `SECRETO_PROXY`, `JWT_SECRET`) ni el email del owner, y `auth/plantillas/` no contiene enlaces.
+- [x] `auth/README.md` documenta los nueve endpoints, los errores nuevos, la caducidad de 15 minutos y cómo cambiar a un SMTP real; la colección de Postman tiene nueve peticiones en la carpeta `Autenticacion`, nombradas como sus workflows, y sigue siendo JSON válido sin secretos.
 
 ## Decisiones tomadas y descartadas
 
