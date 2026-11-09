@@ -19,6 +19,8 @@ psql_n8n() {
 limpiar_datos() {
   psql_postgres "delete from auth.users where email like 'prueba_sh_%@example.com'" > /dev/null 2>&1
   psql_n8n "truncate autenticacion.intentos_inicio_sesion" > /dev/null 2>&1
+  psql_n8n "truncate autenticacion.eventos_codigo" > /dev/null 2>&1
+  curl -s -X DELETE http://127.0.0.1:8025/api/v1/messages > /dev/null 2>&1
 }
 trap 'limpiar_datos; rm -rf "$DIRECTORIO_TEMPORAL"' EXIT
 limpiar_datos
@@ -51,6 +53,31 @@ renovar_sesion() { # <valor de cookie o vacío>
     solicitar POST /autenticacion/renovar -H "Origin: $ORIGEN_FRONT" -H 'X-Solicitado-Con: front'
   fi
 }
+
+# --- Mailpit (SPEC 05): los correos de Supabase Auth llegan a este buzón de pruebas ---
+MAILPIT="http://127.0.0.1:8025"
+vaciar_mailpit() { curl -s -X DELETE "$MAILPIT/api/v1/messages" > /dev/null; }
+contar_correos() { # <destinatario>
+  curl -s -G "$MAILPIT/api/v1/search" --data-urlencode "query=to:$1" | python3 -c "import sys,json; print(json.load(sys.stdin)['messages_count'])"
+}
+# esperar_correos <destinatario> <cantidad>: espera (hasta 20 s) a que haya al menos esa cantidad
+esperar_correos() {
+  local n=0
+  until [ "$(contar_correos "$1")" -ge "$2" ] || [ "$n" -ge 40 ]; do sleep 0.5; n=$((n + 1)); done
+}
+# ultimo_correo <destinatario> <campo>: asunto | texto | html del correo más reciente
+ultimo_correo() {
+  curl -s -G "$MAILPIT/api/v1/search" --data-urlencode "query=to:$1" | python3 -c "
+import sys, json, urllib.request
+d = json.load(sys.stdin)
+if not d['messages']: sys.exit(0)
+m = d['messages'][0]
+c = json.load(urllib.request.urlopen('$MAILPIT/api/v1/message/' + m['ID']))
+print({'asunto': m['Subject'], 'texto': c['Text'], 'html': c['HTML']}['$2'])"
+}
+# codigo_de_correo <destinatario>: código de 6 dígitos del correo más reciente (vacío si no hay)
+codigo_de_correo() { ultimo_correo "$1" texto | grep -oE '\b[0-9]{6}\b' | head -1; }
+limpiar_eventos() { psql_n8n "truncate autenticacion.eventos_codigo" > /dev/null; }
 limpiar_intentos() { psql_n8n "truncate autenticacion.intentos_inicio_sesion" > /dev/null; }
 correo_nuevo() { echo "prueba_sh_${SUFIJO}_$1@example.com"; }
 
@@ -125,7 +152,7 @@ estado_es 403 "renovar sin X-Solicitado-Con -> 403"
 cuerpo_tiene '"ORIGEN_NO_PERMITIDO"' "renovar sin X-Solicitado-Con -> ORIGEN_NO_PERMITIDO"
 
 echo "== Acceso directo a n8n sin pasar por Caddy"
-for ruta in registro iniciar-sesion renovar cerrar-sesion yo; do  # se amplía con cada workflow nuevo
+for ruta in registro iniciar-sesion renovar cerrar-sesion yo recuperar; do  # se amplía con cada workflow nuevo
   metodo=POST; [ "$ruta" = yo ] && metodo=GET
   solicitar "$metodo" "/webhook/autenticacion/$ruta" -H 'Content-Type: application/json' -d '{}' --connect-timeout 3 2>/dev/null
   BASE_ORIGINAL="$BASE"; BASE="http://127.0.0.1:5678"
@@ -350,6 +377,54 @@ estado_es 401 "tras cerrar sesión, el token de acceso anterior ya no pasa yo"
 renovar_sesion "$COOKIE_YO"
 estado_es 401 "tras cerrar sesión, la cookie anterior ya no renueva"
 
+echo "== Recuperar contraseña"
+limpiar_eventos; vaciar_mailpit
+solicitar GET /autenticacion/recuperar
+estado_es 405 "GET recuperar -> 405"
+solicitar POST /autenticacion/recuperar -H 'Content-Type: text/plain' -d x
+estado_es 415 "POST recuperar con text/plain -> 415"
+registrar_usuario recuperar
+CORREO_REC="$CORREO_ACTUAL"
+publicar_json /autenticacion/recuperar "{\"correo\":\"$CORREO_REC\"}"
+estado_es 202 "recuperar de un correo registrado -> 202"
+cuerpo_registrado="$cuerpo"
+CORREO_FANTASMA_REC="$(correo_nuevo fantasma_rec)"
+publicar_json /autenticacion/recuperar "{\"correo\":\"$CORREO_FANTASMA_REC\"}"
+estado_es 202 "recuperar de un correo inexistente -> 202"
+[ "$cuerpo" = "$cuerpo_registrado" ]; verificar "recuperar: mismo cuerpo exista o no el correo" $?
+esperar_correos "$CORREO_REC" 1
+[ "$(contar_correos "$CORREO_REC")" = "1" ]; verificar "Mailpit recibe un solo correo para la cuenta registrada" $?
+[ -n "$(codigo_de_correo "$CORREO_REC")" ]; verificar "el correo trae un código de 6 dígitos" $?
+ultimo_correo "$CORREO_REC" asunto | grep -qi 'recuperar'; verificar "el asunto está en español (recuperar la contraseña)" $?
+! ultimo_correo "$CORREO_REC" html | grep -qE 'https?://|href='; verificar "el correo no trae enlaces" $?
+sleep 2
+[ "$(contar_correos "$CORREO_FANTASMA_REC")" = "0" ]; verificar "no llega correo a un correo inexistente" $?
+publicar_json /autenticacion/recuperar '{"correo":"no-es-un-correo"}'
+estado_es 422 "recuperar con correo mal formado -> 422"
+publicar_json /autenticacion/recuperar "{\"correo\":\"$CORREO_REC\",\"extra\":1}"
+estado_es 422 "recuperar con campo extra -> 422"
+publicar_json /autenticacion/recuperar '{}'
+estado_es 422 "recuperar sin correo -> 422"
+publicar_json /autenticacion/recuperar '{"correo":'
+estado_es 400 "recuperar con JSON roto -> 400"
+
+echo "== Límites de solicitud de código"
+limpiar_eventos
+LIMITE_CORREO="$(correo_nuevo limite_rec)"
+for i in 1 2 3; do publicar_json /autenticacion/recuperar "{\"correo\":\"$LIMITE_CORREO\"}"; done
+estado_es 202 "3.ª solicitud del mismo correo -> 202"
+publicar_json /autenticacion/recuperar "{\"correo\":\"$LIMITE_CORREO\"}"
+estado_es 429 "4.ª solicitud del mismo correo (inexistente) -> 429"
+cuerpo_tiene '"DEMASIADOS_INTENTOS"' "4.ª solicitud -> DEMASIADOS_INTENTOS"
+cabecera_tiene "Retry-After:" "4.ª solicitud: cabecera Retry-After"
+limpiar_eventos
+for i in $(seq 1 10); do publicar_json /autenticacion/recuperar "{\"correo\":\"$(correo_nuevo "ip_rec_$i")\"}"; done
+estado_es 202 "solicitud 10 de la misma IP -> 202"
+publicar_json /autenticacion/recuperar "{\"correo\":\"$(correo_nuevo ip_rec_11)\"}"
+estado_es 429 "solicitud 11 de la misma IP -> 429"
+cuerpo_tiene '"DEMASIADOS_INTENTOS"' "solicitud 11 de la IP -> DEMASIADOS_INTENTOS"
+limpiar_eventos
+
 echo "== Ejecuciones y secretos"
 for valor_env in SECRETO_PROXY JWT_SECRET CONTRASENA_BD_N8N POSTGRES_PASSWORD SERVICE_ROLE_KEY; do
   valor="$(leer_env "$valor_env")"
@@ -357,7 +432,7 @@ for valor_env in SECRETO_PROXY JWT_SECRET CONTRASENA_BD_N8N POSTGRES_PASSWORD SE
 done
 CORREO_OWNER="$(psql_n8n 'select email from "user" order by "createdAt" limit 1')"
 [ -n "$CORREO_OWNER" ] && [ -z "$(grep -rlF -- "$CORREO_OWNER" auth .env.example 2>/dev/null)" ]; verificar "ningún archivo de auth/ ni .env.example contiene el email del owner" $?
-IDS="'autRegistro01','autInicioSesion01','autRenovarSesion01','autQuienSoy01','autCierreSesion01'"
+IDS="'autRegistro01','autInicioSesion01','autRenovarSesion01','autQuienSoy01','autCierreSesion01','autRecuperar01'"
 echo "  (esperando el borrado definitivo de ejecuciones de n8n, hasta 2 minutos)"
 intentos=0
 until [ "$(psql_n8n "select (select count(*) from execution_entity where \"workflowId\" in ($IDS)) + (select count(*) from execution_data d join execution_entity e on e.id = d.\"executionId\" where e.\"workflowId\" in ($IDS))")" = "0" ] || [ "$intentos" -ge 40 ]; do
