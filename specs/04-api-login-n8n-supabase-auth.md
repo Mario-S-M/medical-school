@@ -1,6 +1,6 @@
 # SPEC 04 — API de login con n8n como backend, Supabase Auth detrás y Caddy delante
 
-**Estado:** Aprobado. 
+**Estado:** Implementado
 **Depende de:** SPEC 03 (y, a través de ella, SPEC 01 y SPEC 02)
 **Fecha:** 2026-11-09
 **Objetivo:** Exponer en `auth/` una API de autenticación por correo y contraseña (registro, inicio de sesión, renovar, cierre de sesión y "quién soy") cuyo único backend son workflows de n8n que delegan en Supabase Auth, protegida por Caddy y por validaciones estrictas, bloqueos por cuenta e IP y errores uniformes, lista para que un framework de front la consuma.
@@ -111,31 +111,31 @@ CREATE TABLE IF NOT EXISTS autenticacion.contrasenas_comunes (
 
 ## Criterios de aceptación
 
-- [ ] `auth/pruebas/pruebas.sh` termina con código 0 contra el stack levantado y cubre cada criterio de esta lista que lo permite.
-- [ ] `docker compose ps` muestra `caddy` en ejecución, publicado solo en `127.0.0.1:8080`, y `docker compose config -q` pasa.
-- [ ] Por Caddy, `GET /`, `GET /signin` y `GET /webhook/autenticacion/yo` devuelven `404` con `NO_ENCONTRADO`: el editor de n8n y las rutas internas no se alcanzan.
-- [ ] `GET /autenticacion/iniciar-sesion` devuelve `405`; un `POST` con `Content-Type: text/plain` devuelve `415`; un cuerpo de más de 10 KB devuelve `413`. Los tres usan el formato de error uniforme.
-- [ ] Toda respuesta lleva `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`, `Referrer-Policy: no-referrer` y una `Content-Security-Policy` restrictiva, y ninguna incluye la cabecera `Server`.
-- [ ] El preflight `OPTIONS` con `Origin: $ORIGEN_FRONT` devuelve `204` con `Access-Control-Allow-Origin` igual a ese origen y `Access-Control-Allow-Credentials: true`; con cualquier otro `Origin`, un `POST` devuelve `403` y no hay `Access-Control-Allow-Origin`.
-- [ ] Llamar a `http://127.0.0.1:5678/webhook/autenticacion/yo` directo, sin el secreto del proxy o con uno incorrecto, devuelve `403`.
-- [ ] Registro válido: `201` con `mensaje`; en `auth.users` existe un usuario con el correo en minúsculas y `raw_user_meta_data.nombre`; ninguna respuesta contiene la contraseña.
-- [ ] Registrar dos veces el mismo correo devuelve el mismo cuerpo y estado `201` las dos veces, y en `auth.users` sigue habiendo una sola fila para ese correo.
-- [ ] Una contraseña que incumple cada regla por separado (menos de 12, sin mayúscula, sin minúscula, sin número, sin símbolo, con espacio al inicio o al final, más de 72 bytes, que contiene el correo, que está en la lista de comunes) devuelve `422 CONTRASENA_INSEGURA` y `detalles` nombra la regla fallida; una contraseña que incumple varias lista todas.
-- [ ] Un JSON roto devuelve `400 JSON_INVALIDO`. Un correo mal formado o de más de 254 caracteres, un nombre vacío, de más de 80 caracteres o con caracteres de control, un campo de tipo incorrecto, un campo faltante o un campo extra devuelven `422 VALIDACION_FALLIDA`.
-- [ ] Inicio de sesión válido: `200` con `token_acceso`, `tipo_token`, `expira_en` = 900 y `usuario`; el JWT verifica con `JWT_SECRET`, tiene `role` = `authenticated` y `exp - iat` = 900.
-- [ ] La respuesta del inicio de sesión trae `Set-Cookie` con `token_renovacion`, `HttpOnly`, `SameSite=Strict`, `Path=/autenticacion` y `Max-Age=604800`, y el cuerpo no contiene el token de renovación.
-- [ ] Un correo inexistente y una contraseña incorrecta devuelven `401 CREDENCIALES_INVALIDAS` con cuerpos idénticos byte a byte.
-- [ ] Tras 5 fallos del mismo correo, el sexto intento (aun con la contraseña correcta, y también con un correo inexistente) devuelve `429 CUENTA_BLOQUEADA` con `Retry-After` mayor que 0; al envejecer esos intentos más de 15 min en la tabla, vuelve a poder iniciar sesión.
-- [ ] Con 20 fallos desde la misma IP con correos distintos, el intento 21 devuelve `429 DEMASIADOS_INTENTOS`.
-- [ ] `renovar` con la cookie devuelve `200` con un token nuevo y una cookie distinta; sin cookie o con una cookie inválida devuelve `401 TOKEN_INVALIDO`; sin `X-Solicitado-Con` o con otro `Origin` devuelve `403 ORIGEN_NO_PERMITIDO`.
-- [ ] Reusar una cookie de renovación ya rotada (pasado el intervalo de reutilización de Supabase Auth) devuelve `401 TOKEN_INVALIDO`.
-- [ ] `yo` con un token válido devuelve `200 { id, correo, nombre }` sin campos internos; sin token, con un token manipulado o expirado devuelve `401 TOKEN_INVALIDO`.
-- [ ] `cerrar-sesion` devuelve `204` y la cookie con `Max-Age=0`; después, esa cookie ya no renueva (`401`) y el token de acceso anterior ya no pasa `yo` (`401`).
-- [ ] En la base `n8n`, 2 minutos después de ejecutar `pruebas.sh`, ni `execution_entity` ni `execution_data` tienen filas de los cinco workflows, y ninguna contraseña de las pruebas aparece en `execution_data`.
-- [ ] Ningún JSON de `auth/workflows/`, el `.env.example` ni `auth/` contiene `SECRETO_PROXY`, `JWT_SECRET`, contraseñas ni el email del owner.
-- [ ] En n8n existen la credencial `Secreto proxy` y la carpeta `Autenticacion` con los cinco workflows publicados, y todos los nombres de workflows, nodos, campos, tablas y variables nuevas están en español (excepto `auth/`).
-- [ ] `auth/README.md` documenta los cinco endpoints con ejemplos de petición y respuesta, todos los códigos de error y la configuración de CORS para el front.
-- [ ] `auth/postman/` contiene una colección y un entorno de Postman v2.1 que son JSON válido, la colección tiene la carpeta `Autenticacion` con las cinco peticiones nombradas como sus workflows, y ninguno de los dos archivos contiene contraseñas, `SECRETO_PROXY` ni `JWT_SECRET`.
+- [x] `auth/pruebas/pruebas.sh` termina con código 0 contra el stack levantado y cubre cada criterio de esta lista que lo permite.
+- [x] `docker compose ps` muestra `caddy` en ejecución, publicado solo en `127.0.0.1:8080`, y `docker compose config -q` pasa.
+- [x] Por Caddy, `GET /`, `GET /signin` y `GET /webhook/autenticacion/yo` devuelven `404` con `NO_ENCONTRADO`: el editor de n8n y las rutas internas no se alcanzan.
+- [x] `GET /autenticacion/iniciar-sesion` devuelve `405`; un `POST` con `Content-Type: text/plain` devuelve `415`; un cuerpo de más de 10 KB devuelve `413`. Los tres usan el formato de error uniforme.
+- [x] Toda respuesta lleva `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`, `Referrer-Policy: no-referrer` y una `Content-Security-Policy` restrictiva, y ninguna incluye la cabecera `Server`.
+- [x] El preflight `OPTIONS` con `Origin: $ORIGEN_FRONT` devuelve `204` con `Access-Control-Allow-Origin` igual a ese origen y `Access-Control-Allow-Credentials: true`; con cualquier otro `Origin`, un `POST` devuelve `403` y no hay `Access-Control-Allow-Origin`.
+- [x] Llamar a `http://127.0.0.1:5678/webhook/autenticacion/yo` directo, sin el secreto del proxy o con uno incorrecto, devuelve `403`.
+- [x] Registro válido: `201` con `mensaje`; en `auth.users` existe un usuario con el correo en minúsculas y `raw_user_meta_data.nombre`; ninguna respuesta contiene la contraseña.
+- [x] Registrar dos veces el mismo correo devuelve el mismo cuerpo y estado `201` las dos veces, y en `auth.users` sigue habiendo una sola fila para ese correo.
+- [x] Una contraseña que incumple cada regla por separado (menos de 12, sin mayúscula, sin minúscula, sin número, sin símbolo, con espacio al inicio o al final, más de 72 bytes, que contiene el correo, que está en la lista de comunes) devuelve `422 CONTRASENA_INSEGURA` y `detalles` nombra la regla fallida; una contraseña que incumple varias lista todas.
+- [x] Un JSON roto devuelve `400 JSON_INVALIDO`. Un correo mal formado o de más de 254 caracteres, un nombre vacío, de más de 80 caracteres o con caracteres de control, un campo de tipo incorrecto, un campo faltante o un campo extra devuelven `422 VALIDACION_FALLIDA`.
+- [x] Inicio de sesión válido: `200` con `token_acceso`, `tipo_token`, `expira_en` = 900 y `usuario`; el JWT verifica con `JWT_SECRET`, tiene `role` = `authenticated` y `exp - iat` = 900.
+- [x] La respuesta del inicio de sesión trae `Set-Cookie` con `token_renovacion`, `HttpOnly`, `SameSite=Strict`, `Path=/autenticacion` y `Max-Age=604800`, y el cuerpo no contiene el token de renovación.
+- [x] Un correo inexistente y una contraseña incorrecta devuelven `401 CREDENCIALES_INVALIDAS` con cuerpos idénticos byte a byte.
+- [x] Tras 5 fallos del mismo correo, el sexto intento (aun con la contraseña correcta, y también con un correo inexistente) devuelve `429 CUENTA_BLOQUEADA` con `Retry-After` mayor que 0; al envejecer esos intentos más de 15 min en la tabla, vuelve a poder iniciar sesión.
+- [x] Con 20 fallos desde la misma IP con correos distintos, el intento 21 devuelve `429 DEMASIADOS_INTENTOS`.
+- [x] `renovar` con la cookie devuelve `200` con un token nuevo y una cookie distinta; sin cookie o con una cookie inválida devuelve `401 TOKEN_INVALIDO`; sin `X-Solicitado-Con` o con otro `Origin` devuelve `403 ORIGEN_NO_PERMITIDO`.
+- [x] Reusar una cookie de renovación ya rotada (pasado el intervalo de reutilización de Supabase Auth) devuelve `401 TOKEN_INVALIDO`.
+- [x] `yo` con un token válido devuelve `200 { id, correo, nombre }` sin campos internos; sin token, con un token manipulado o expirado devuelve `401 TOKEN_INVALIDO`.
+- [x] `cerrar-sesion` devuelve `204` y la cookie con `Max-Age=0`; después, esa cookie ya no renueva (`401`) y el token de acceso anterior ya no pasa `yo` (`401`).
+- [x] En la base `n8n`, 2 minutos después de ejecutar `pruebas.sh`, ni `execution_entity` ni `execution_data` tienen filas de los cinco workflows, y ninguna contraseña de las pruebas aparece en `execution_data`.
+- [x] Ningún JSON de `auth/workflows/`, el `.env.example` ni `auth/` contiene `SECRETO_PROXY`, `JWT_SECRET`, contraseñas ni el email del owner.
+- [x] En n8n existen la credencial `Secreto proxy` y la carpeta `Autenticacion` con los cinco workflows publicados, y todos los nombres de workflows, nodos, campos, tablas y variables nuevas están en español (excepto `auth/`).
+- [x] `auth/README.md` documenta los cinco endpoints con ejemplos de petición y respuesta, todos los códigos de error y la configuración de CORS para el front.
+- [x] `auth/postman/` contiene una colección y un entorno de Postman v2.1 que son JSON válido, la colección tiene la carpeta `Autenticacion` con las cinco peticiones nombradas como sus workflows, y ninguno de los dos archivos contiene contraseñas, `SECRETO_PROXY` ni `JWT_SECRET`.
 
 ## Decisiones tomadas y descartadas
 
