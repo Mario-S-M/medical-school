@@ -1,0 +1,11 @@
+---
+import LayoutBase from '../layouts/LayoutBase.astro';
+import TarjetaAuth from '../componentes/estructura/TarjetaAuth.astro';
+import FormularioVerificarCorreo from '../componentes/auth/FormularioVerificarCorreo';
+---
+
+<LayoutBase titulo="Verificar correo">
+  <TarjetaAuth titulo="Verifica tu correo" descripcion="Escribe el código de 6 dígitos que enviamos a tu correo. Vence en 15 minutos.">
+    <FormularioVerificarCorreo client:load />
+  </TarjetaAuth>
+</LayoutBase>
