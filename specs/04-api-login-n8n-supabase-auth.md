@@ -20,6 +20,7 @@
 - Los workflows no guardan datos de ejecución, para que ninguna contraseña quede en la base de n8n. *Hallazgo al implementar:* con `none`, n8n solo marca la ejecución como borrada y su contenido (el cuerpo con la contraseña) sigue en `execution_data` hasta el borrado definitivo, que por defecto tarda más de 1 h. Se fijan `EXECUTIONS_DATA_HARD_DELETE_BUFFER=0` y `EXECUTIONS_DATA_PRUNE_HARD_DELETE_INTERVAL=1` en el servicio `n8n` para que desaparezca en 1 o 2 minutos (comprobado: 0 filas a los 45 s). Estas variables afectan a todos los workflows de la instancia.
 - Credencial n8n `Secreto proxy` (Header Auth) y carpeta `Autenticacion` en n8n con los cinco workflows.
 - `auth/pruebas/pruebas.sh`: script con `curl` que recorre los criterios de aceptación y sale con error si alguno falla.
+- *Añadido a petición del usuario:* colección de Postman v2.1 en `auth/postman/` (`autenticacion.postman_collection.json` y `local.postman_environment.json`) con los cinco endpoints. Las carpetas de la colección repiten la estructura del proyecto: colección `Medical School` → carpeta `Autenticacion` (la misma de n8n), con una petición por workflow y el mismo nombre que él (`Registro de usuario`, `Inicio de sesion`, `Renovar sesion`, `Quien soy`, `Cierre de sesion`). Cada petición lleva ejemplos de respuesta correcta y de error, y las de inicio de sesión y renovar guardan `token_acceso` en una variable de colección con un script de prueba. La importación en la app de Postman la hace el usuario (*Import*); el entorno no lleva secretos.
 
 **No entra:**
 - Recuperación de contraseña, SMTP y verificación de correo (SPEC 05).
@@ -106,7 +107,7 @@ CREATE TABLE IF NOT EXISTS autenticacion.contrasenas_comunes (
 6. **Workflow `Inicio de sesion`.** Validación → comprobación de bloqueos por correo e IP → `auth:9999/token?grant_type=password` → registro del intento → respuesta con el token en el cuerpo y la cookie. Publicarlo, exportarlo y ampliar `pruebas.sh`.
 7. **Workflow `Renovar sesion`.** Lee la cookie, llama a `auth:9999/token?grant_type=refresh_token` y devuelve el nuevo token con la cookie rotada. Publicarlo, exportarlo y ampliar `pruebas.sh`.
 8. **Workflows `Quien soy` y `Cierre de sesion`.** `yo` valida el token con `auth:9999/user`; el cierre llama a `auth:9999/logout?scope=local` y borra la cookie. Publicarlos, exportarlos y ampliar `pruebas.sh`.
-9. **Contrato y verificación final.** Escribir `auth/README.md` (endpoints, ejemplos de petición y respuesta, todos los códigos de error, cookie, CORS y cómo se conecta un framework). Ejecutar `auth/pruebas/pruebas.sh` completo, comprobar que no quedaron ejecuciones guardadas ni secretos en los JSON y repasar los criterios.
+9. **Contrato y verificación final.** Escribir `auth/README.md` (endpoints, ejemplos de petición y respuesta, todos los códigos de error, cookie, CORS y cómo se conecta un framework). Generar la colección y el entorno de Postman en `auth/postman/`. Ejecutar `auth/pruebas/pruebas.sh` completo, comprobar que no quedaron ejecuciones guardadas ni secretos en los JSON y repasar los criterios.
 
 ## Criterios de aceptación
 
@@ -134,6 +135,7 @@ CREATE TABLE IF NOT EXISTS autenticacion.contrasenas_comunes (
 - [ ] Ningún JSON de `auth/workflows/`, el `.env.example` ni `auth/` contiene `SECRETO_PROXY`, `JWT_SECRET`, contraseñas ni el email del owner.
 - [ ] En n8n existen la credencial `Secreto proxy` y la carpeta `Autenticacion` con los cinco workflows publicados, y todos los nombres de workflows, nodos, campos, tablas y variables nuevas están en español (excepto `auth/`).
 - [ ] `auth/README.md` documenta los cinco endpoints con ejemplos de petición y respuesta, todos los códigos de error y la configuración de CORS para el front.
+- [ ] `auth/postman/` contiene una colección y un entorno de Postman v2.1 que son JSON válido, la colección tiene la carpeta `Autenticacion` con las cinco peticiones nombradas como sus workflows, y ninguno de los dos archivos contiene contraseñas, `SECRETO_PROXY` ni `JWT_SECRET`.
 
 ## Decisiones tomadas y descartadas
 
