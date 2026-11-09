@@ -1,0 +1,131 @@
+# Caddy: única entrada a la API de autenticación (SPEC 04).
+# Variables de entorno: ORIGEN_FRONT y SECRETO_PROXY (las pasa docker-compose).
+{
+	admin off
+	auto_https off
+}
+
+(cabeceras_seguras) {
+	header {
+		>X-Content-Type-Options nosniff
+		>Cache-Control no-store
+		>Referrer-Policy no-referrer
+		>Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+		-Server
+		Content-Type "application/json; charset=utf-8"
+	}
+}
+
+:8080 {
+	route {
+		import cabeceras_seguras
+
+		# Todo lo que no sea /autenticacion/* no existe (así el editor de n8n no se alcanza)
+		@fuera not path /autenticacion/*
+		respond @fuera `{"error":{"codigo":"NO_ENCONTRADO","mensaje":"Recurso no encontrado."}}` 404
+
+		# Origen distinto del front permitido
+		@origen_ajeno {
+			header Origin *
+			not header Origin {$ORIGEN_FRONT}
+		}
+		respond @origen_ajeno `{"error":{"codigo":"ORIGEN_NO_PERMITIDO","mensaje":"Origen no permitido."}}` 403
+
+		# CORS para el front permitido
+		@origen_ok header Origin {$ORIGEN_FRONT}
+		header @origen_ok {
+			>Access-Control-Allow-Origin {$ORIGEN_FRONT}
+			>Access-Control-Allow-Credentials true
+			>Access-Control-Expose-Headers Retry-After
+			>Vary Origin
+		}
+
+		# Preflight
+		@preflight {
+			method OPTIONS
+			header Origin {$ORIGEN_FRONT}
+			path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/renovar /autenticacion/cerrar-sesion /autenticacion/yo
+		}
+		header @preflight {
+			>Access-Control-Allow-Methods "GET, POST, OPTIONS"
+			>Access-Control-Allow-Headers "Content-Type, Authorization, X-Solicitado-Con"
+			>Access-Control-Max-Age 600
+		}
+		respond @preflight 204
+
+		# Rutas desconocidas dentro de /autenticacion/
+		@ruta_desconocida {
+			path /autenticacion/*
+			not path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/renovar /autenticacion/cerrar-sesion /autenticacion/yo
+		}
+		respond @ruta_desconocida `{"error":{"codigo":"NO_ENCONTRADO","mensaje":"Recurso no encontrado."}}` 404
+
+		# Métodos permitidos por ruta
+		@solo_post {
+			path /autenticacion/registro /autenticacion/iniciar-sesion /autenticacion/renovar /autenticacion/cerrar-sesion
+			not method POST
+		}
+		header @solo_post >Allow POST
+		respond @solo_post `{"error":{"codigo":"METODO_NO_PERMITIDO","mensaje":"Método no permitido."}}` 405
+
+		@solo_get {
+			path /autenticacion/yo
+			not method GET
+		}
+		header @solo_get >Allow GET
+		respond @solo_get `{"error":{"codigo":"METODO_NO_PERMITIDO","mensaje":"Método no permitido."}}` 405
+
+		# Las rutas con cuerpo exigen JSON
+		@sin_json {
+			path /autenticacion/registro /autenticacion/iniciar-sesion
+			not header Content-Type application/json*
+		}
+		respond @sin_json `{"error":{"codigo":"TIPO_CONTENIDO_NO_SOPORTADO","mensaje":"El tipo de contenido debe ser application/json."}}` 415
+
+		# Defensa CSRF en renovar: cabecera personalizada obligatoria
+		@renovar_sin_cabecera {
+			path /autenticacion/renovar
+			not header X-Solicitado-Con front
+		}
+		respond @renovar_sin_cabecera `{"error":{"codigo":"ORIGEN_NO_PERMITIDO","mensaje":"Falta la cabecera X-Solicitado-Con."}}` 403
+
+		request_body {
+			max_size 10KB
+		}
+
+		# Webhooks de n8n: IP real y secreto compartido (se pisa lo que mande el cliente)
+		rewrite * /webhook{uri}
+		reverse_proxy n8n:5678 {
+			header_up X-IP-Cliente {remote_host}
+			header_up X-Secreto-Proxy {$SECRETO_PROXY}
+			header_down -Server
+			header_down -X-Powered-By
+			header_down -X-Flujo
+
+			# Respuestas que no vienen de nuestros workflows (sin X-Flujo): n8n no pudo leer el JSON o falló
+			@json_roto {
+				status 422
+				header !X-Flujo
+			}
+			handle_response @json_roto {
+				header Content-Type "application/json; charset=utf-8"
+				respond `{"error":{"codigo":"JSON_INVALIDO","mensaje":"El cuerpo no es un JSON válido."}}` 400
+			}
+			@fallo_ajeno {
+				status 4xx 5xx
+				header !X-Flujo
+			}
+			handle_response @fallo_ajeno {
+				header Content-Type "application/json; charset=utf-8"
+				respond `{"error":{"codigo":"ERROR_INTERNO","mensaje":"Error interno del servidor."}}` 500
+			}
+		}
+	}
+
+	handle_errors {
+		import cabeceras_seguras
+		@cuerpo_grande expression {err.status_code} == 413
+		respond @cuerpo_grande `{"error":{"codigo":"CUERPO_DEMASIADO_GRANDE","mensaje":"El cuerpo supera el tamaño máximo permitido."}}` 413
+		respond `{"error":{"codigo":"ERROR_INTERNO","mensaje":"Error interno del servidor."}}` {err.status_code}
+	}
+}

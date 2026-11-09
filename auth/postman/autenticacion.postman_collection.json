@@ -1,0 +1,961 @@
+{
+  "info": {
+    "_postman_id": "78aa0f7e-b949-51aa-ac59-972a3fd67d3a",
+    "name": "Medical School",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "API de autenticación (SPEC 04). Entra por Caddy en {{url_base}}; el backend son workflows de n8n con Supabase Auth detrás. Contrato completo en auth/README.md."
+  },
+  "item": [
+    {
+      "id": "e5617b43-a31b-58d1-b450-7afb9f599091",
+      "name": "Autenticacion",
+      "description": "Misma carpeta que en n8n (proyecto Personal). Un workflow por petición.",
+      "item": [
+        {
+          "id": "6192f0dd-4641-5008-a06b-3205025cad64",
+          "name": "Registro de usuario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{origen_front}}"
+              }
+            ],
+            "url": {
+              "raw": "{{url_base}}/autenticacion/registro",
+              "host": [
+                "{{url_base}}"
+              ],
+              "path": [
+                "autenticacion",
+                "registro"
+              ]
+            },
+            "description": "POST /autenticacion/registro. Crea la cuenta; responde 201 igual exista o no el correo y no abre sesión.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"nombre\": \"{{nombre}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 Cuenta creada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/registro",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "registro"
+                  ]
+                },
+                "description": "POST /autenticacion/registro. Crea la cuenta; responde 201 igual exista o no el correo y no abre sesión.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"nombre\": \"{{nombre}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"mensaje\": \"Cuenta creada. Ya puedes iniciar sesión.\"}"
+            },
+            {
+              "name": "422 Contraseña insegura",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/registro",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "registro"
+                  ]
+                },
+                "description": "POST /autenticacion/registro. Crea la cuenta; responde 201 igual exista o no el correo y no abre sesión.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"nombre\": \"{{nombre}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"CONTRASENA_INSEGURA\",\n    \"mensaje\": \"La contraseña no cumple los requisitos.\",\n    \"detalles\": [\n      {\n        \"campo\": \"contrasena\",\n        \"regla\": \"minimo_12_caracteres\",\n        \"mensaje\": \"Debe tener al menos 12 caracteres.\"\n      },\n      {\n        \"campo\": \"contrasena\",\n        \"regla\": \"requiere_mayuscula\",\n        \"mensaje\": \"Debe incluir al menos una mayúscula.\"\n      }\n    ]\n  }\n}"
+            },
+            {
+              "name": "422 Validación fallida",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/registro",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "registro"
+                  ]
+                },
+                "description": "POST /autenticacion/registro. Crea la cuenta; responde 201 igual exista o no el correo y no abre sesión.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"nombre\": \"{{nombre}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"VALIDACION_FALLIDA\",\n    \"mensaje\": \"La solicitud no es válida.\",\n    \"detalles\": [\n      {\n        \"campo\": \"correo\",\n        \"regla\": \"formato_invalido\",\n        \"mensaje\": \"Debe ser un correo válido de hasta 254 caracteres.\"\n      }\n    ]\n  }\n}"
+            },
+            {
+              "name": "400 JSON inválido",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/registro",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "registro"
+                  ]
+                },
+                "description": "POST /autenticacion/registro. Crea la cuenta; responde 201 igual exista o no el correo y no abre sesión.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"nombre\": \"{{nombre}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"error\": {\"codigo\": \"JSON_INVALIDO\", \"mensaje\": \"El cuerpo no es un JSON válido.\"}}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "3a82b326-ccc7-5ea1-b0ff-4d25429935f3",
+          "name": "Inicio de sesion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{origen_front}}"
+              }
+            ],
+            "url": {
+              "raw": "{{url_base}}/autenticacion/iniciar-sesion",
+              "host": [
+                "{{url_base}}"
+              ],
+              "path": [
+                "autenticacion",
+                "iniciar-sesion"
+              ]
+            },
+            "description": "POST /autenticacion/iniciar-sesion. Devuelve token_acceso (15 min) y pone el token de renovación en una cookie HttpOnly. Guarda token_acceso en la variable de colección.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Sesión iniciada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/iniciar-sesion",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "iniciar-sesion"
+                  ]
+                },
+                "description": "POST /autenticacion/iniciar-sesion. Devuelve token_acceso (15 min) y pone el token de renovación en una cookie HttpOnly. Guarda token_acceso en la variable de colección.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "token_renovacion=zs37qxccacp2; HttpOnly; SameSite=Strict; Path=/autenticacion; Max-Age=604800"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"token_acceso\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.<carga>.<firma>\",\n  \"tipo_token\": \"Bearer\",\n  \"expira_en\": 900,\n  \"usuario\": {\n    \"id\": \"d3952a75-317c-48ed-b4b4-9025bf0c0930\",\n    \"correo\": \"ana@example.com\",\n    \"nombre\": \"Ana\"\n  }\n}"
+            },
+            {
+              "name": "401 Credenciales inválidas",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/iniciar-sesion",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "iniciar-sesion"
+                  ]
+                },
+                "description": "POST /autenticacion/iniciar-sesion. Devuelve token_acceso (15 min) y pone el token de renovación en una cookie HttpOnly. Guarda token_acceso en la variable de colección.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"error\": {\"codigo\": \"CREDENCIALES_INVALIDAS\", \"mensaje\": \"Correo o contraseña incorrectos.\"}}"
+            },
+            {
+              "name": "429 Cuenta bloqueada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/iniciar-sesion",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "iniciar-sesion"
+                  ]
+                },
+                "description": "POST /autenticacion/iniciar-sesion. Devuelve token_acceso (15 min) y pone el token de renovación en una cookie HttpOnly. Guarda token_acceso en la variable de colección.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "900"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"CUENTA_BLOQUEADA\",\n    \"mensaje\": \"Demasiados intentos fallidos. Inténtalo de nuevo más tarde.\",\n    \"reintentar_en_segundos\": 900\n  }\n}"
+            },
+            {
+              "name": "429 Demasiados intentos (IP)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/iniciar-sesion",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "iniciar-sesion"
+                  ]
+                },
+                "description": "POST /autenticacion/iniciar-sesion. Devuelve token_acceso (15 min) y pone el token de renovación en una cookie HttpOnly. Guarda token_acceso en la variable de colección.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "899"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"DEMASIADOS_INTENTOS\",\n    \"mensaje\": \"Demasiados intentos desde tu conexión. Inténtalo de nuevo más tarde.\",\n    \"reintentar_en_segundos\": 899\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const cuerpo = pm.response.json();",
+                  "pm.test('Trae token_acceso', () => pm.expect(cuerpo.token_acceso).to.be.a('string'));",
+                  "pm.collectionVariables.set('token_acceso', cuerpo.token_acceso);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "5fa79390-e609-57c7-8713-4b4f324a54ee",
+          "name": "Renovar sesion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Origin",
+                "value": "{{origen_front}}"
+              },
+              {
+                "key": "X-Solicitado-Con",
+                "value": "front"
+              }
+            ],
+            "url": {
+              "raw": "{{url_base}}/autenticacion/renovar",
+              "host": [
+                "{{url_base}}"
+              ],
+              "path": [
+                "autenticacion",
+                "renovar"
+              ]
+            },
+            "description": "POST /autenticacion/renovar. Canjea la cookie token_renovacion (Postman la guarda sola tras iniciar sesión) por un token_acceso nuevo y rota la cookie. Requiere X-Solicitado-Con."
+          },
+          "response": [
+            {
+              "name": "200 Sesión renovada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  },
+                  {
+                    "key": "X-Solicitado-Con",
+                    "value": "front"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/renovar",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "renovar"
+                  ]
+                },
+                "description": "POST /autenticacion/renovar. Canjea la cookie token_renovacion (Postman la guarda sola tras iniciar sesión) por un token_acceso nuevo y rota la cookie. Requiere X-Solicitado-Con."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "token_renovacion=zs37qxccacp2; HttpOnly; SameSite=Strict; Path=/autenticacion; Max-Age=604800"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"token_acceso\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.<carga>.<firma>\",\n  \"tipo_token\": \"Bearer\",\n  \"expira_en\": 900,\n  \"usuario\": {\n    \"id\": \"d3952a75-317c-48ed-b4b4-9025bf0c0930\",\n    \"correo\": \"ana@example.com\",\n    \"nombre\": \"Ana\"\n  }\n}"
+            },
+            {
+              "name": "401 Token inválido",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  },
+                  {
+                    "key": "X-Solicitado-Con",
+                    "value": "front"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/renovar",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "renovar"
+                  ]
+                },
+                "description": "POST /autenticacion/renovar. Canjea la cookie token_renovacion (Postman la guarda sola tras iniciar sesión) por un token_acceso nuevo y rota la cookie. Requiere X-Solicitado-Con."
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "token_renovacion=; HttpOnly; SameSite=Strict; Path=/autenticacion; Max-Age=0"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"error\": {\"codigo\": \"TOKEN_INVALIDO\", \"mensaje\": \"La sesión no es válida o expiró. Inicia sesión de nuevo.\"}}"
+            },
+            {
+              "name": "403 Origen no permitido",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  },
+                  {
+                    "key": "X-Solicitado-Con",
+                    "value": "front"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/renovar",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "renovar"
+                  ]
+                },
+                "description": "POST /autenticacion/renovar. Canjea la cookie token_renovacion (Postman la guarda sola tras iniciar sesión) por un token_acceso nuevo y rota la cookie. Requiere X-Solicitado-Con."
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"error\": {\"codigo\": \"ORIGEN_NO_PERMITIDO\", \"mensaje\": \"Falta la cabecera X-Solicitado-Con.\"}}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const cuerpo = pm.response.json();",
+                  "pm.test('Trae token_acceso', () => pm.expect(cuerpo.token_acceso).to.be.a('string'));",
+                  "pm.collectionVariables.set('token_acceso', cuerpo.token_acceso);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "58fd8eb4-e26b-577e-95c8-8c77be9870e7",
+          "name": "Quien soy",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Origin",
+                "value": "{{origen_front}}"
+              }
+            ],
+            "url": {
+              "raw": "{{url_base}}/autenticacion/yo",
+              "host": [
+                "{{url_base}}"
+              ],
+              "path": [
+                "autenticacion",
+                "yo"
+              ]
+            },
+            "description": "GET /autenticacion/yo. Devuelve el usuario dueño del token_acceso.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_acceso}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 Usuario",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/yo",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "yo"
+                  ]
+                },
+                "description": "GET /autenticacion/yo. Devuelve el usuario dueño del token_acceso.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token_acceso}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"id\": \"d3952a75-317c-48ed-b4b4-9025bf0c0930\",\n  \"correo\": \"ana@example.com\",\n  \"nombre\": \"Ana\"\n}"
+            },
+            {
+              "name": "401 Token inválido",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/yo",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "yo"
+                  ]
+                },
+                "description": "GET /autenticacion/yo. Devuelve el usuario dueño del token_acceso.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token_acceso}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"error\": {\"codigo\": \"TOKEN_INVALIDO\", \"mensaje\": \"El token de acceso falta, no es válido o expiró.\"}}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Solo id, correo y nombre', () => pm.expect(Object.keys(pm.response.json()).sort()).to.eql(['correo', 'id', 'nombre']));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "f9024dce-4f1b-50e7-9f15-98e1fa73d57c",
+          "name": "Cierre de sesion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Origin",
+                "value": "{{origen_front}}"
+              }
+            ],
+            "url": {
+              "raw": "{{url_base}}/autenticacion/cerrar-sesion",
+              "host": [
+                "{{url_base}}"
+              ],
+              "path": [
+                "autenticacion",
+                "cerrar-sesion"
+              ]
+            },
+            "description": "POST /autenticacion/cerrar-sesion. Revoca la sesión y borra la cookie token_renovacion.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_acceso}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "204 Sesión cerrada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/cerrar-sesion",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "cerrar-sesion"
+                  ]
+                },
+                "description": "POST /autenticacion/cerrar-sesion. Revoca la sesión y borra la cookie token_renovacion.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token_acceso}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "status": "No Content",
+              "code": 204,
+              "_postman_previewlanguage": "text",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "token_renovacion=; HttpOnly; SameSite=Strict; Path=/autenticacion; Max-Age=0"
+                }
+              ],
+              "cookie": [],
+              "body": ""
+            },
+            {
+              "name": "401 Token inválido",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/cerrar-sesion",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "cerrar-sesion"
+                  ]
+                },
+                "description": "POST /autenticacion/cerrar-sesion. Revoca la sesión y borra la cookie token_renovacion.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token_acceso}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "token_renovacion=; HttpOnly; SameSite=Strict; Path=/autenticacion; Max-Age=0"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"error\": {\"codigo\": \"TOKEN_INVALIDO\", \"mensaje\": \"El token de acceso falta, no es válido o expiró.\"}}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 204', () => pm.response.to.have.status(204));",
+                  "pm.collectionVariables.set('token_acceso', '');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "token_acceso",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

@@ -1,0 +1,233 @@
+[
+  {
+    "id": "autQuienSoy01",
+    "name": "Quien soy",
+    "description": "GET /autenticacion/yo. Valida el token de acceso contra Supabase Auth (auth:9999/user) y devuelve id, correo y nombre. No guarda ejecuciones.",
+    "active": false,
+    "isArchived": false,
+    "settings": {
+      "executionOrder": "v1",
+      "saveDataErrorExecution": "none",
+      "saveDataSuccessExecution": "none",
+      "saveManualExecutions": false,
+      "saveExecutionProgress": false,
+      "executionTimeout": 15
+    },
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "GET",
+          "path": "autenticacion/yo",
+          "authentication": "headerAuth",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "a0000004-0000-4000-8000-000000000001",
+        "name": "Recibir consulta",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          0
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "secretoProxy01",
+            "name": "Secreto proxy"
+          }
+        },
+        "webhookId": "c478fa3a-7c3d-52cb-9480-5d66c475bf05"
+      },
+      {
+        "parameters": {
+          "jsCode": "const entrada = $input.first().json;\nconst cabecera = String(entrada.headers['authorization'] || '');\nconst coincide = /^Bearer ([A-Za-z0-9_-]{10,2048}\\.[A-Za-z0-9_-]{10,2048}\\.[A-Za-z0-9_-]{10,2048})$/.exec(cabecera);\nif (!coincide) {\n  return [{ json: { ok: false, estado: 401,\n    cuerpo: { error: { codigo: 'TOKEN_INVALIDO', mensaje: 'El token de acceso falta, no es válido o expiró.' } } } }];\n}\nreturn [{ json: { ok: true, autorizacion: `Bearer ${coincide[1]}` } }];"
+        },
+        "id": "a0000004-0000-4000-8000-000000000002",
+        "name": "Extraer token",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          240,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "dd3687f8-0a13-5386-99d6-83b89ddec1a3",
+                "leftValue": "={{ $json.ok }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "a0000004-0000-4000-8000-000000000003",
+        "name": "Hay token",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          480,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "http://auth:9999/user",
+          "options": {
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          },
+          "sendHeaders": true,
+          "specifyHeaders": "keypair",
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "={{ $json.autorizacion }}"
+              }
+            ]
+          }
+        },
+        "id": "a0000004-0000-4000-8000-000000000004",
+        "name": "Consultar usuario en Supabase Auth",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          720,
+          -100
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const r = $input.first().json;\nconst estado = r.statusCode;\nconst gt = r.body && typeof r.body === 'object' ? r.body : {};\nif (estado === 200 && gt.id) {\n  return [{ json: { estado: 200, cuerpo: { id: gt.id, correo: gt.email, nombre: (gt.user_metadata || {}).nombre ?? null } } }];\n}\nif ([400, 401, 403, 404].includes(estado)) {\n  return [{ json: { estado: 401, cuerpo: { error: { codigo: 'TOKEN_INVALIDO', mensaje: 'El token de acceso falta, no es válido o expiró.' } } } }];\n}\nif (estado === 429) {\n  return [{ json: { estado: 429, cuerpo: { error: { codigo: 'DEMASIADOS_INTENTOS', mensaje: 'Demasiadas solicitudes. Inténtalo más tarde.' } } } }];\n}\nreturn [{ json: { estado: 500, cuerpo: { error: { codigo: 'ERROR_INTERNO', mensaje: 'Error interno del servidor.' } } } }];"
+        },
+        "id": "a0000004-0000-4000-8000-000000000005",
+        "name": "Clasificar respuesta",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          960,
+          -100
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify($json.cuerpo) }}",
+          "options": {
+            "responseCode": "={{ $json.estado }}",
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "name": "X-Flujo",
+                  "value": "autenticacion"
+                }
+              ]
+            }
+          }
+        },
+        "id": "a0000004-0000-4000-8000-000000000006",
+        "name": "Responder",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          1200,
+          0
+        ]
+      }
+    ],
+    "connections": {
+      "Recibir consulta": {
+        "main": [
+          [
+            {
+              "node": "Extraer token",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extraer token": {
+        "main": [
+          [
+            {
+              "node": "Hay token",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Hay token": {
+        "main": [
+          [
+            {
+              "node": "Consultar usuario en Supabase Auth",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Responder",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Consultar usuario en Supabase Auth": {
+        "main": [
+          [
+            {
+              "node": "Clasificar respuesta",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Clasificar respuesta": {
+        "main": [
+          [
+            {
+              "node": "Responder",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "pinData": {},
+    "meta": null,
+    "tags": []
+  }
+]
