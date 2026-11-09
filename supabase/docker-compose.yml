@@ -183,6 +183,9 @@ services:
       GOTRUE_SMTP_SENDER_NAME: ${SMTP_SENDER_NAME}
       # Los códigos de verificación y recuperación caducan a los 15 minutos
       GOTRUE_MAILER_OTP_EXP: "900"
+      # Todas las llamadas llegan desde n8n (una sola IP): los límites por IP de Supabase Auth no distinguen
+      # usuarios, así que los límites reales son los de n8n (tabla eventos_codigo)
+      GOTRUE_RATE_LIMIT_VERIFY: "1000"
       # Plantillas en español (las sirve Caddy por la red interna) y aviso de cambio de contraseña
       GOTRUE_MAILER_TEMPLATES_CONFIRMATION: http://caddy:8081/verificacion.html
       GOTRUE_MAILER_TEMPLATES_RECOVERY: http://caddy:8081/recuperacion.html

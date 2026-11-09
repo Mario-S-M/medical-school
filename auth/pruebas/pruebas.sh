@@ -152,7 +152,7 @@ estado_es 403 "renovar sin X-Solicitado-Con -> 403"
 cuerpo_tiene '"ORIGEN_NO_PERMITIDO"' "renovar sin X-Solicitado-Con -> ORIGEN_NO_PERMITIDO"
 
 echo "== Acceso directo a n8n sin pasar por Caddy"
-for ruta in registro iniciar-sesion renovar cerrar-sesion yo recuperar; do  # se amplía con cada workflow nuevo
+for ruta in registro iniciar-sesion renovar cerrar-sesion yo recuperar restablecer; do  # se amplía con cada workflow nuevo
   metodo=POST; [ "$ruta" = yo ] && metodo=GET
   solicitar "$metodo" "/webhook/autenticacion/$ruta" -H 'Content-Type: application/json' -d '{}' --connect-timeout 3 2>/dev/null
   BASE_ORIGINAL="$BASE"; BASE="http://127.0.0.1:5678"
@@ -425,6 +425,107 @@ estado_es 429 "solicitud 11 de la misma IP -> 429"
 cuerpo_tiene '"DEMASIADOS_INTENTOS"' "solicitud 11 de la IP -> DEMASIADOS_INTENTOS"
 limpiar_eventos
 
+echo "== Restablecer contraseña"
+limpiar_eventos; vaciar_mailpit
+solicitar GET /autenticacion/restablecer
+estado_es 405 "GET restablecer -> 405"
+solicitar POST /autenticacion/restablecer -H 'Content-Type: text/plain' -d x
+estado_es 415 "POST restablecer con text/plain -> 415"
+restablecer() { # <correo> <código> <contraseña nueva>
+  publicar_json /autenticacion/restablecer "{\"correo\":\"$1\",\"codigo\":\"$2\",\"contrasena_nueva\":\"$3\"}"
+}
+CONTRASENA_NUEVA='Otra#Clave-2026y'
+registrar_usuario restablecer
+CORREO_RES="$CORREO_ACTUAL"
+iniciar_sesion "$CORREO_RES" "$CONTRASENA_VALIDA"
+TOKEN_RES="$(campo_json token_acceso)"; COOKIE_RES="$(valor_cookie)"
+publicar_json /autenticacion/recuperar "{\"correo\":\"$CORREO_RES\"}"
+esperar_correos "$CORREO_RES" 1
+CODIGO_RES="$(codigo_de_correo "$CORREO_RES")"
+[ -n "$CODIGO_RES" ]; verificar "se obtuvo el código de Mailpit" $?
+
+restablecer "$CORREO_RES" "$CODIGO_RES" 'corta'
+estado_es 422 "restablecer con contraseña débil -> 422"
+cuerpo_tiene '"CONTRASENA_INSEGURA"' "contraseña débil -> CONTRASENA_INSEGURA"
+cuerpo_tiene '"regla":"minimo_12_caracteres"' "contraseña débil: lista la regla incumplida"
+restablecer "$CORREO_RES" "$CODIGO_RES" 'Password123!'
+cuerpo_tiene '"regla":"no_es_comun"' "contraseña común rechazada en restablecer"
+restablecer "$CORREO_RES" "$CODIGO_RES" "$(echo "$CORREO_RES" | cut -d@ -f1)#Aa1"
+cuerpo_tiene '"regla":"no_contiene_correo"' "contraseña con el correo rechazada en restablecer"
+
+restablecer "$CORREO_RES" "000000" "$CONTRASENA_NUEVA"
+estado_es 400 "código erróneo -> 400"
+cuerpo_tiene '"CODIGO_INVALIDO"' "código erróneo -> CODIGO_INVALIDO"
+cuerpo_codigo_malo="$cuerpo"
+restablecer "$(correo_nuevo fantasma_res)" "000000" "$CONTRASENA_NUEVA"
+estado_es 400 "correo inexistente -> 400"
+[ "$cuerpo" = "$cuerpo_codigo_malo" ]; verificar "código erróneo y correo inexistente: cuerpos idénticos" $?
+
+publicar_json /autenticacion/restablecer "{\"correo\":\"$CORREO_RES\",\"codigo\":\"12345\",\"contrasena_nueva\":\"$CONTRASENA_NUEVA\"}"
+estado_es 422 "código de 5 dígitos -> 422"
+publicar_json /autenticacion/restablecer "{\"correo\":\"$CORREO_RES\",\"codigo\":\"abcdef\",\"contrasena_nueva\":\"$CONTRASENA_NUEVA\"}"
+estado_es 422 "código con letras -> 422"
+cuerpo_tiene '"VALIDACION_FALLIDA"' "código con letras -> VALIDACION_FALLIDA"
+publicar_json /autenticacion/restablecer "{\"correo\":\"$CORREO_RES\",\"codigo\":123456,\"contrasena_nueva\":\"$CONTRASENA_NUEVA\"}"
+estado_es 422 "código de tipo incorrecto -> 422"
+publicar_json /autenticacion/restablecer "{\"correo\":\"$CORREO_RES\",\"codigo\":\"$CODIGO_RES\"}"
+estado_es 422 "campo faltante -> 422"
+publicar_json /autenticacion/restablecer "{\"correo\":\"$CORREO_RES\",\"codigo\":\"$CODIGO_RES\",\"contrasena_nueva\":\"$CONTRASENA_NUEVA\",\"extra\":1}"
+estado_es 422 "campo extra -> 422"
+publicar_json /autenticacion/restablecer '{"correo":'
+estado_es 400 "JSON roto -> 400"
+
+restablecer "$CORREO_RES" "$CODIGO_RES" "$CONTRASENA_NUEVA"
+estado_es 200 "restablecer con el código correcto -> 200 (el código seguía vigente tras los rechazos)"
+cuerpo_tiene '"mensaje"' "restablecer correcto -> mensaje"
+iniciar_sesion "$CORREO_RES" "$CONTRASENA_NUEVA"
+estado_es 200 "iniciar sesión con la contraseña nueva -> 200"
+iniciar_sesion "$CORREO_RES" "$CONTRASENA_VALIDA"
+estado_es 401 "iniciar sesión con la contraseña vieja -> 401"
+renovar_sesion "$COOKIE_RES"
+estado_es 401 "la cookie de una sesión abierta antes ya no renueva"
+solicitar GET /autenticacion/yo -H "Origin: $ORIGEN_FRONT" -H "Authorization: Bearer $TOKEN_RES"
+estado_es 401 "el token de acceso de una sesión abierta antes ya no pasa yo"
+esperar_correos "$CORREO_RES" 2
+ultimo_correo "$CORREO_RES" asunto | grep -qi 'cambiada'; verificar "llega el aviso de contraseña cambiada" $?
+restablecer "$CORREO_RES" "$CODIGO_RES" "$CONTRASENA_NUEVA"
+estado_es 400 "reusar el mismo código -> 400"
+cuerpo_tiene '"CODIGO_INVALIDO"' "reusar el mismo código -> CODIGO_INVALIDO"
+
+echo "== Código vencido y bloqueo por códigos erróneos"
+registrar_usuario vencido
+CORREO_VENCIDO="$CORREO_ACTUAL"
+publicar_json /autenticacion/recuperar "{\"correo\":\"$CORREO_VENCIDO\"}"
+esperar_correos "$CORREO_VENCIDO" 1
+CODIGO_VENCIDO="$(codigo_de_correo "$CORREO_VENCIDO")"
+psql_postgres "update auth.users set recovery_sent_at = now() - interval '16 minutes' where email = '$CORREO_VENCIDO'" > /dev/null
+restablecer "$CORREO_VENCIDO" "$CODIGO_VENCIDO" "$CONTRASENA_NUEVA"
+estado_es 400 "código vencido (16 min) -> 400"
+cuerpo_tiene '"CODIGO_INVALIDO"' "código vencido -> CODIGO_INVALIDO"
+
+limpiar_eventos
+registrar_usuario bloqueo_codigo
+CORREO_BC="$CORREO_ACTUAL"
+publicar_json /autenticacion/recuperar "{\"correo\":\"$CORREO_BC\"}"
+esperar_correos "$CORREO_BC" 1
+CODIGO_BC="$(codigo_de_correo "$CORREO_BC")"
+for i in 1 2 3 4 5; do restablecer "$CORREO_BC" "00000$i" "$CONTRASENA_NUEVA"; done
+restablecer "$CORREO_BC" "$CODIGO_BC" "$CONTRASENA_NUEVA"
+estado_es 429 "6.º intento con el código correcto tras 5 erróneos -> 429"
+cuerpo_tiene '"CODIGO_BLOQUEADO"' "6.º intento -> CODIGO_BLOQUEADO"
+cabecera_tiene "Retry-After:" "6.º intento: cabecera Retry-After"
+CORREO_FANTASMA_BC="$(correo_nuevo fantasma_bc)"
+for i in 1 2 3 4 5; do restablecer "$CORREO_FANTASMA_BC" "00000$i" "$CONTRASENA_NUEVA"; done
+restablecer "$CORREO_FANTASMA_BC" "000006" "$CONTRASENA_NUEVA"
+estado_es 429 "un correo inexistente también se bloquea tras 5 códigos erróneos"
+limpiar_eventos
+for i in $(seq 1 20); do restablecer "$(correo_nuevo "ip_err_$i")" "000000" "$CONTRASENA_NUEVA"; done
+estado_es 400 "código erróneo 20 de la IP todavía se evalúa (400)"
+restablecer "$(correo_nuevo ip_err_21)" "000000" "$CONTRASENA_NUEVA"
+estado_es 429 "código erróneo 21 de la IP -> 429"
+cuerpo_tiene '"DEMASIADOS_INTENTOS"' "código erróneo 21 de la IP -> DEMASIADOS_INTENTOS"
+limpiar_eventos
+
 echo "== Ejecuciones y secretos"
 for valor_env in SECRETO_PROXY JWT_SECRET CONTRASENA_BD_N8N POSTGRES_PASSWORD SERVICE_ROLE_KEY; do
   valor="$(leer_env "$valor_env")"
@@ -432,7 +533,7 @@ for valor_env in SECRETO_PROXY JWT_SECRET CONTRASENA_BD_N8N POSTGRES_PASSWORD SE
 done
 CORREO_OWNER="$(psql_n8n 'select email from "user" order by "createdAt" limit 1')"
 [ -n "$CORREO_OWNER" ] && [ -z "$(grep -rlF -- "$CORREO_OWNER" auth .env.example 2>/dev/null)" ]; verificar "ningún archivo de auth/ ni .env.example contiene el email del owner" $?
-IDS="'autRegistro01','autInicioSesion01','autRenovarSesion01','autQuienSoy01','autCierreSesion01','autRecuperar01'"
+IDS="'autRegistro01','autInicioSesion01','autRenovarSesion01','autQuienSoy01','autCierreSesion01','autRecuperar01','autRestablecer01'"
 echo "  (esperando el borrado definitivo de ejecuciones de n8n, hasta 2 minutos)"
 intentos=0
 until [ "$(psql_n8n "select (select count(*) from execution_entity where \"workflowId\" in ($IDS)) + (select count(*) from execution_data d join execution_entity e on e.id = d.\"executionId\" where e.\"workflowId\" in ($IDS))")" = "0" ] || [ "$intentos" -ge 40 ]; do
