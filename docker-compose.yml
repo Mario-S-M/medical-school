@@ -49,6 +49,22 @@ services:
       db:
         condition: service_healthy
 
+  mailpit:
+    image: axllent/mailpit:v1.33.1
+    restart: unless-stopped
+    environment:
+      # Buzón de pruebas: sin autenticación ni TLS; no envía nada a internet
+      MP_MAX_MESSAGES: "500"
+    ports:
+      - "127.0.0.1:8025:8025"
+    tmpfs:
+      - /tmp
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
   caddy:
     image: caddy:2.11.9-alpine
     restart: unless-stopped

@@ -75,7 +75,7 @@ CREATE INDEX IF NOT EXISTS eventos_codigo_ip_idx     ON autenticacion.eventos_co
 
 `registro` pasa a responder `201 { mensaje: "Cuenta creada. Revisa tu correo y verifícala con el código que te enviamos." }`, igual exista o no el correo.
 
-**Variables del `.env`:** `SMTP_HOST=mailpit`, `SMTP_PORT=1025`, `SMTP_USER`, `SMTP_PASS`, `SMTP_ADMIN_EMAIL` y `SMTP_SENDER_NAME` (nombres impuestos por Supabase; Mailpit acepta cualquier usuario), `ENABLE_EMAIL_AUTOCONFIRM=false`. En el servicio `auth` de `supabase/docker-compose.yml`: `GOTRUE_MAILER_OTP_EXP=900`, `GOTRUE_MAILER_TEMPLATES_CONFIRMATION`, `GOTRUE_MAILER_TEMPLATES_RECOVERY`, `GOTRUE_MAILER_TEMPLATES_PASSWORD_CHANGED_NOTIFICATION`, los `GOTRUE_MAILER_SUBJECTS_*` correspondientes y `GOTRUE_MAILER_NOTIFICATIONS_PASSWORD_CHANGED_ENABLED=true`.
+**Variables del `.env`:** `SMTP_HOST=mailpit`, `SMTP_PORT=1025`, `SMTP_USER`, `SMTP_PASS`, `SMTP_ADMIN_EMAIL` y `SMTP_SENDER_NAME` (nombres impuestos por Supabase). Con Mailpit, `SMTP_USER` y `SMTP_PASS` van **vacíos**: Supabase Auth se niega a mandar credenciales por una conexión sin cifrar (`unencrypted connection`); se rellenan al pasar a un SMTP real con TLS, `ENABLE_EMAIL_AUTOCONFIRM=false`. En el servicio `auth` de `supabase/docker-compose.yml`: `GOTRUE_MAILER_OTP_EXP=900`, `GOTRUE_MAILER_TEMPLATES_CONFIRMATION`, `GOTRUE_MAILER_TEMPLATES_RECOVERY`, `GOTRUE_MAILER_TEMPLATES_PASSWORD_CHANGED_NOTIFICATION`, los `GOTRUE_MAILER_SUBJECTS_*` correspondientes y `GOTRUE_MAILER_NOTIFICATIONS_PASSWORD_CHANGED_ENABLED=true`.
 
 ## Plan de implementación
 
