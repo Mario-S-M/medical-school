@@ -1,0 +1,488 @@
+[
+  {
+    "id": "autRecuperar01",
+    "name": "Recuperar contrasena",
+    "description": "POST /autenticacion/recuperar. Valida el correo, aplica el límite de solicitudes (3 por correo y 10 por IP cada hora), responde 202 de inmediato y después pide el código a Supabase Auth (auth:9999/recover); la respuesta es igual exista o no el correo. No guarda ejecuciones.",
+    "active": false,
+    "isArchived": false,
+    "settings": {
+      "executionOrder": "v1",
+      "saveDataErrorExecution": "none",
+      "saveDataSuccessExecution": "none",
+      "saveManualExecutions": false,
+      "saveExecutionProgress": false,
+      "executionTimeout": 15
+    },
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "autenticacion/recuperar",
+          "authentication": "headerAuth",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "a0000006-0000-4000-8000-000000000001",
+        "name": "Recibir recuperacion",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          0
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "secretoProxy01",
+            "name": "Secreto proxy"
+          }
+        },
+        "webhookId": "a8f05264-0534-5f59-a129-e769768382d5"
+      },
+      {
+        "parameters": {
+          "jsCode": "const entrada = $input.first().json;\nconst cuerpo = entrada.body;\nconst falla = (detalles) => ({\n  ok: false, estado: 422,\n  cuerpo: { error: { codigo: 'VALIDACION_FALLIDA', mensaje: 'La solicitud no es válida.', detalles } },\n});\nif (cuerpo === null || typeof cuerpo !== 'object' || Array.isArray(cuerpo)) {\n  return [{ json: falla([{ campo: 'cuerpo', regla: 'debe_ser_objeto', mensaje: 'El cuerpo debe ser un objeto JSON.' }]) }];\n}\nconst detalles = [];\nfor (const clave of Object.keys(cuerpo)) {\n  if (clave !== 'correo') detalles.push({ campo: clave.slice(0, 40), regla: 'campo_no_permitido', mensaje: 'Este campo no está permitido.' });\n}\nif (!('correo' in cuerpo)) detalles.push({ campo: 'correo', regla: 'obligatorio', mensaje: 'Este campo es obligatorio.' });\nelse if (typeof cuerpo.correo !== 'string') detalles.push({ campo: 'correo', regla: 'debe_ser_texto', mensaje: 'Debe ser un texto.' });\nconst correo = typeof cuerpo.correo === 'string' ? cuerpo.correo.trim().toLowerCase() : '';\nif (typeof cuerpo.correo === 'string') {\n  const formato = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;\n  const local = correo.split('@')[0] || '';\n  if (correo.length === 0 || correo.length > 254 || local.length > 64 || !formato.test(correo)) {\n    detalles.push({ campo: 'correo', regla: 'formato_invalido', mensaje: 'Debe ser un correo válido de hasta 254 caracteres.' });\n  }\n}\nif (detalles.length > 0) return [{ json: falla(detalles) }];\nconst ipCruda = String(entrada.headers['x-ip-cliente'] || '');\nconst ip = /^[0-9a-fA-F:.]{2,45}$/.test(ipCruda) && (ipCruda.includes('.') || ipCruda.includes(':')) ? ipCruda : '0.0.0.0';\nreturn [{ json: { ok: true, correo, ip } }];"
+        },
+        "id": "a0000006-0000-4000-8000-000000000002",
+        "name": "Validar solicitud",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          240,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "ae82c7b5-1d43-55b9-a2a6-c8d7aa1df561",
+                "leftValue": "={{ $json.ok }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "a0000006-0000-4000-8000-000000000003",
+        "name": "Solicitud valida",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          480,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH limpieza AS (\n  DELETE FROM autenticacion.eventos_codigo WHERE creado_en < now() - interval '1 day'\n),\npor_correo AS (\n  SELECT count(*) AS n, min(creado_en) AS primero\n  FROM autenticacion.eventos_codigo\n  WHERE correo = $1 AND proposito = $3 AND tipo = 'solicitud' AND creado_en > now() - interval '1 hour'\n),\npor_ip AS (\n  SELECT count(*) AS n, min(creado_en) AS primero\n  FROM autenticacion.eventos_codigo\n  WHERE ip = $2::inet AND tipo = 'solicitud' AND creado_en > now() - interval '1 hour'\n)\nSELECT pc.n AS solicitudes_correo,\n       GREATEST(1, CEIL(EXTRACT(EPOCH FROM (pc.primero + interval '1 hour' - now()))))::int AS reintentar_correo,\n       pi.n AS solicitudes_ip,\n       GREATEST(1, CEIL(EXTRACT(EPOCH FROM (pi.primero + interval '1 hour' - now()))))::int AS reintentar_ip\nFROM por_correo pc, por_ip pi;",
+          "options": {
+            "queryReplacement": "={{ [$json.correo, $json.ip, 'recuperacion'] }}"
+          }
+        },
+        "id": "a0000006-0000-4000-8000-000000000004",
+        "name": "Consultar limites",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          720,
+          -150
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "pgSupabase01",
+            "name": "Postgres n8n (Supabase)"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "alwaysOutputData": true
+      },
+      {
+        "parameters": {
+          "jsCode": "const c = $input.first().json;\nif (c.error || c.solicitudes_correo === undefined) {\n  return [{ json: { ruta: 'error', estado: 500, cuerpo: { error: { codigo: 'ERROR_INTERNO', mensaje: 'Error interno del servidor.' } } } }];\n}\nconst bloqueo = (segundos) => ({ json: { ruta: 'bloqueo', estado: 429, retry_after: segundos, cuerpo: { error: {\n  codigo: 'DEMASIADOS_INTENTOS', mensaje: 'Demasiadas solicitudes de código. Inténtalo de nuevo más tarde.', reintentar_en_segundos: segundos } } } });\nif (Number(c.solicitudes_correo) >= 3) return [bloqueo(Number(c.reintentar_correo))];\nif (Number(c.solicitudes_ip) >= 10) return [bloqueo(Number(c.reintentar_ip))];\nreturn [{ json: { ruta: 'continuar' } }];"
+        },
+        "id": "a0000006-0000-4000-8000-000000000005",
+        "name": "Evaluar limites",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          960,
+          -150
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "258b6c01-ea76-5908-ba0e-2f48ce011bac",
+                "leftValue": "={{ $json.ruta === 'continuar' }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "a0000006-0000-4000-8000-000000000006",
+        "name": "Puede continuar",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1200,
+          -150
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO autenticacion.eventos_codigo (proposito, tipo, correo, ip) VALUES ($3, 'solicitud', $1, $2::inet);",
+          "options": {
+            "queryReplacement": "={{ [$('Validar solicitud').first().json.correo, $('Validar solicitud').first().json.ip, 'recuperacion'] }}"
+          }
+        },
+        "id": "a0000006-0000-4000-8000-000000000007",
+        "name": "Registrar solicitud",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          1440,
+          -250
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "pgSupabase01",
+            "name": "Postgres n8n (Supabase)"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "alwaysOutputData": true
+      },
+      {
+        "parameters": {
+          "jsCode": "return [{ json: { estado: 202, cuerpo: { mensaje: 'Si el correo está registrado, te enviamos un código.' } } }];"
+        },
+        "id": "a0000006-0000-4000-8000-000000000008",
+        "name": "Armar respuesta aceptada",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1680,
+          -250
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify($json.cuerpo) }}",
+          "options": {
+            "responseCode": "={{ $json.estado }}",
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "name": "X-Flujo",
+                  "value": "autenticacion"
+                }
+              ]
+            }
+          }
+        },
+        "id": "a0000006-0000-4000-8000-000000000009",
+        "name": "Responder aceptada",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          1920,
+          -250
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://auth:9999/recover",
+          "options": {
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            }
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ email: $('Validar solicitud').first().json.correo }) }}"
+        },
+        "id": "a0000006-0000-4000-8000-000000000010",
+        "name": "Pedir codigo a Supabase Auth",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2160,
+          -250
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "2dc0c6fa-63e9-5901-9729-87bf18ed91e2",
+                "leftValue": "={{ $json.ruta === 'bloqueo' }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "a0000006-0000-4000-8000-000000000011",
+        "name": "Es bloqueo",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1440,
+          50
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify($json.cuerpo) }}",
+          "options": {
+            "responseCode": "={{ $json.estado }}",
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "name": "X-Flujo",
+                  "value": "autenticacion"
+                },
+                {
+                  "name": "Retry-After",
+                  "value": "={{ $json.retry_after }}"
+                }
+              ]
+            }
+          }
+        },
+        "id": "a0000006-0000-4000-8000-000000000012",
+        "name": "Responder bloqueo",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          1680,
+          150
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify($json.cuerpo) }}",
+          "options": {
+            "responseCode": "={{ $json.estado }}",
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "name": "X-Flujo",
+                  "value": "autenticacion"
+                }
+              ]
+            }
+          }
+        },
+        "id": "a0000006-0000-4000-8000-000000000013",
+        "name": "Responder",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          1680,
+          350
+        ]
+      }
+    ],
+    "connections": {
+      "Recibir recuperacion": {
+        "main": [
+          [
+            {
+              "node": "Validar solicitud",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validar solicitud": {
+        "main": [
+          [
+            {
+              "node": "Solicitud valida",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Solicitud valida": {
+        "main": [
+          [
+            {
+              "node": "Consultar limites",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Responder",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Consultar limites": {
+        "main": [
+          [
+            {
+              "node": "Evaluar limites",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Evaluar limites": {
+        "main": [
+          [
+            {
+              "node": "Puede continuar",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Puede continuar": {
+        "main": [
+          [
+            {
+              "node": "Registrar solicitud",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Es bloqueo",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Registrar solicitud": {
+        "main": [
+          [
+            {
+              "node": "Armar respuesta aceptada",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Armar respuesta aceptada": {
+        "main": [
+          [
+            {
+              "node": "Responder aceptada",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Responder aceptada": {
+        "main": [
+          [
+            {
+              "node": "Pedir codigo a Supabase Auth",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Es bloqueo": {
+        "main": [
+          [
+            {
+              "node": "Responder bloqueo",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Responder",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "pinData": {},
+    "meta": null,
+    "tags": []
+  }
+]

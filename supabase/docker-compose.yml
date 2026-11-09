@@ -181,6 +181,20 @@ services:
       GOTRUE_SMTP_USER: ${SMTP_USER}
       GOTRUE_SMTP_PASS: ${SMTP_PASS}
       GOTRUE_SMTP_SENDER_NAME: ${SMTP_SENDER_NAME}
+      # Los códigos de verificación y recuperación caducan a los 15 minutos
+      GOTRUE_MAILER_OTP_EXP: "900"
+      # Todas las llamadas llegan desde n8n (una sola IP): los límites por IP de Supabase Auth no distinguen
+      # usuarios, así que los límites reales son los de n8n (tabla eventos_codigo)
+      GOTRUE_RATE_LIMIT_VERIFY: "1000"
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: "1000"
+      # Plantillas en español (las sirve Caddy por la red interna) y aviso de cambio de contraseña
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: http://caddy:8081/verificacion.html
+      GOTRUE_MAILER_TEMPLATES_RECOVERY: http://caddy:8081/recuperacion.html
+      GOTRUE_MAILER_TEMPLATES_PASSWORD_CHANGED_NOTIFICATION: http://caddy:8081/cambio_contrasena.html
+      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: Tu código de verificación
+      GOTRUE_MAILER_SUBJECTS_RECOVERY: Tu código para recuperar la contraseña
+      GOTRUE_MAILER_SUBJECTS_PASSWORD_CHANGED_NOTIFICATION: Tu contraseña fue cambiada
+      GOTRUE_MAILER_NOTIFICATIONS_PASSWORD_CHANGED_ENABLED: "true"
       GOTRUE_MAILER_URLPATHS_INVITE: ${MAILER_URLPATHS_INVITE}
       GOTRUE_MAILER_URLPATHS_CONFIRMATION: ${MAILER_URLPATHS_CONFIRMATION}
       GOTRUE_MAILER_URLPATHS_RECOVERY: ${MAILER_URLPATHS_RECOVERY}

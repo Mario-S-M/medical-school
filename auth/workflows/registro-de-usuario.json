@@ -2,7 +2,7 @@
   {
     "id": "autRegistro01",
     "name": "Registro de usuario",
-    "description": "POST /autenticacion/registro. Valida campos y contraseña, registra en Supabase Auth (auth:9999/signup) y responde 201 igual exista o no el correo. No guarda ejecuciones.",
+    "description": "POST /autenticacion/registro. Valida campos y contraseña, registra en Supabase Auth (auth:9999/signup) y responde 201 igual exista o no el correo; Supabase Auth envía el código de verificación por correo. No guarda ejecuciones.",
     "active": false,
     "isArchived": false,
     "settings": {
@@ -186,7 +186,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const respuesta = $input.first().json;\nconst estado = respuesta.statusCode;\nconst cuerpoAuth = respuesta.body && typeof respuesta.body === 'object' ? respuesta.body : {};\nconst creada = { estado: 201, cuerpo: { mensaje: 'Cuenta creada. Ya puedes iniciar sesión.' } };\n\nif (estado >= 200 && estado < 300) return [{ json: creada }];\n// Correo ya registrado: misma respuesta que una cuenta nueva (no revela qué correos existen)\nif (['user_already_exists', 'email_exists'].includes(cuerpoAuth.error_code)) return [{ json: creada }];\nif (estado === 400 || estado === 422) {\n  return [{ json: { estado: 422, cuerpo: { error: { codigo: 'VALIDACION_FALLIDA', mensaje: 'La solicitud no es válida.', detalles: [\n    { campo: 'correo', regla: 'rechazado', mensaje: 'El correo no fue aceptado.' },\n  ] } } } }];\n}\nif (estado === 429) {\n  return [{ json: { estado: 429, cuerpo: { error: { codigo: 'DEMASIADOS_INTENTOS', mensaje: 'Demasiadas solicitudes. Inténtalo más tarde.' } } } }];\n}\nreturn [{ json: { estado: 500, cuerpo: { error: { codigo: 'ERROR_INTERNO', mensaje: 'Error interno del servidor.' } } } }];"
+          "jsCode": "const respuesta = $input.first().json;\nconst estado = respuesta.statusCode;\nconst cuerpoAuth = respuesta.body && typeof respuesta.body === 'object' ? respuesta.body : {};\nconst creada = { estado: 201, cuerpo: { mensaje: 'Cuenta creada. Revisa tu correo y verifícala con el código que te enviamos.' } };\n\nif (estado >= 200 && estado < 300) return [{ json: creada }];\n// Correo ya registrado: misma respuesta que una cuenta nueva (no revela qué correos existen)\nif (['user_already_exists', 'email_exists'].includes(cuerpoAuth.error_code)) return [{ json: creada }];\n// Cuenta sin verificar registrada otra vez dentro del minuto de envío: mismo cuerpo que una cuenta nueva\nif (cuerpoAuth.error_code === 'over_email_send_rate_limit') return [{ json: creada }];\nif (estado === 400 || estado === 422) {\n  return [{ json: { estado: 422, cuerpo: { error: { codigo: 'VALIDACION_FALLIDA', mensaje: 'La solicitud no es válida.', detalles: [\n    { campo: 'correo', regla: 'rechazado', mensaje: 'El correo no fue aceptado.' },\n  ] } } } }];\n}\nif (estado === 429) {\n  return [{ json: { estado: 429, cuerpo: { error: { codigo: 'DEMASIADOS_INTENTOS', mensaje: 'Demasiadas solicitudes. Inténtalo más tarde.' } } } }];\n}\nreturn [{ json: { estado: 500, cuerpo: { error: { codigo: 'ERROR_INTERNO', mensaje: 'Error interno del servidor.' } } } }];"
         },
         "id": "a0000001-0000-4000-8000-000000000008",
         "name": "Armar respuesta",

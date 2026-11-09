@@ -36,7 +36,7 @@
                 "registro"
               ]
             },
-            "description": "POST /autenticacion/registro. Crea la cuenta; responde 201 igual exista o no el correo y no abre sesión.",
+            "description": "POST /autenticacion/registro. Crea la cuenta sin verificar y envía un código de 6 dígitos por correo (en local, a Mailpit: http://127.0.0.1:8025). Responde 201 igual exista o no el correo y no abre sesión.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"nombre\": \"{{nombre}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
@@ -72,7 +72,7 @@
                     "registro"
                   ]
                 },
-                "description": "POST /autenticacion/registro. Crea la cuenta; responde 201 igual exista o no el correo y no abre sesión.",
+                "description": "POST /autenticacion/registro. Crea la cuenta sin verificar y envía un código de 6 dígitos por correo (en local, a Mailpit: http://127.0.0.1:8025). Responde 201 igual exista o no el correo y no abre sesión.",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"nombre\": \"{{nombre}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
@@ -93,7 +93,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"mensaje\": \"Cuenta creada. Ya puedes iniciar sesión.\"}"
+              "body": "{\"mensaje\": \"Cuenta creada. Revisa tu correo y verifícala con el código que te enviamos.\"}"
             },
             {
               "name": "422 Contraseña insegura",
@@ -119,7 +119,7 @@
                     "registro"
                   ]
                 },
-                "description": "POST /autenticacion/registro. Crea la cuenta; responde 201 igual exista o no el correo y no abre sesión.",
+                "description": "POST /autenticacion/registro. Crea la cuenta sin verificar y envía un código de 6 dígitos por correo (en local, a Mailpit: http://127.0.0.1:8025). Responde 201 igual exista o no el correo y no abre sesión.",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"nombre\": \"{{nombre}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
@@ -166,7 +166,7 @@
                     "registro"
                   ]
                 },
-                "description": "POST /autenticacion/registro. Crea la cuenta; responde 201 igual exista o no el correo y no abre sesión.",
+                "description": "POST /autenticacion/registro. Crea la cuenta sin verificar y envía un código de 6 dígitos por correo (en local, a Mailpit: http://127.0.0.1:8025). Responde 201 igual exista o no el correo y no abre sesión.",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"nombre\": \"{{nombre}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
@@ -213,7 +213,7 @@
                     "registro"
                   ]
                 },
-                "description": "POST /autenticacion/registro. Crea la cuenta; responde 201 igual exista o no el correo y no abre sesión.",
+                "description": "POST /autenticacion/registro. Crea la cuenta sin verificar y envía un código de 6 dígitos por correo (en local, a Mailpit: http://127.0.0.1:8025). Responde 201 igual exista o no el correo y no abre sesión.",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"nombre\": \"{{nombre}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
@@ -244,6 +244,396 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Estado 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "2dd42c4b-e6dd-528c-9ce3-90090b7375a5",
+          "name": "Verificar correo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{origen_front}}"
+              }
+            ],
+            "url": {
+              "raw": "{{url_base}}/autenticacion/verificar-correo",
+              "host": [
+                "{{url_base}}"
+              ],
+              "path": [
+                "autenticacion",
+                "verificar-correo"
+              ]
+            },
+            "description": "POST /autenticacion/verificar-correo. Canjea el código de 6 dígitos del correo de verificación (en local, míralo en Mailpit: http://127.0.0.1:8025). Solo confirma el correo: no abre sesión.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Correo verificado",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/verificar-correo",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "verificar-correo"
+                  ]
+                },
+                "description": "POST /autenticacion/verificar-correo. Canjea el código de 6 dígitos del correo de verificación (en local, míralo en Mailpit: http://127.0.0.1:8025). Solo confirma el correo: no abre sesión.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"mensaje\": \"Correo verificado. Ya puedes iniciar sesión.\"}"
+            },
+            {
+              "name": "400 Código inválido",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/verificar-correo",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "verificar-correo"
+                  ]
+                },
+                "description": "POST /autenticacion/verificar-correo. Canjea el código de 6 dígitos del correo de verificación (en local, míralo en Mailpit: http://127.0.0.1:8025). Solo confirma el correo: no abre sesión.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"error\": {\"codigo\": \"CODIGO_INVALIDO\", \"mensaje\": \"El código no es válido o expiró.\"}}"
+            },
+            {
+              "name": "422 Validación fallida",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/verificar-correo",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "verificar-correo"
+                  ]
+                },
+                "description": "POST /autenticacion/verificar-correo. Canjea el código de 6 dígitos del correo de verificación (en local, míralo en Mailpit: http://127.0.0.1:8025). Solo confirma el correo: no abre sesión.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"VALIDACION_FALLIDA\",\n    \"mensaje\": \"La solicitud no es válida.\",\n    \"detalles\": [\n      {\n        \"campo\": \"codigo\",\n        \"regla\": \"formato_invalido\",\n        \"mensaje\": \"Debe ser un código de exactamente 6 dígitos.\"\n      }\n    ]\n  }\n}"
+            },
+            {
+              "name": "429 Código bloqueado",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/verificar-correo",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "verificar-correo"
+                  ]
+                },
+                "description": "POST /autenticacion/verificar-correo. Canjea el código de 6 dígitos del correo de verificación (en local, míralo en Mailpit: http://127.0.0.1:8025). Solo confirma el correo: no abre sesión.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "900"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"CODIGO_BLOQUEADO\",\n    \"mensaje\": \"Demasiados códigos erróneos. Inténtalo de nuevo más tarde.\",\n    \"reintentar_en_segundos\": 900\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "8385a8f9-c9dd-5b19-beb8-7d921d077087",
+          "name": "Reenviar verificacion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{origen_front}}"
+              }
+            ],
+            "url": {
+              "raw": "{{url_base}}/autenticacion/reenviar-verificacion",
+              "host": [
+                "{{url_base}}"
+              ],
+              "path": [
+                "autenticacion",
+                "reenviar-verificacion"
+              ]
+            },
+            "description": "POST /autenticacion/reenviar-verificacion. Manda un código de verificación nuevo. Responde 202 igual exista el correo, esté verificado o no.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "202 Aceptada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/reenviar-verificacion",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "reenviar-verificacion"
+                  ]
+                },
+                "description": "POST /autenticacion/reenviar-verificacion. Manda un código de verificación nuevo. Responde 202 igual exista el correo, esté verificado o no.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Accepted",
+              "code": 202,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"mensaje\": \"Si el correo está registrado y sin verificar, te enviamos un código.\"}"
+            },
+            {
+              "name": "429 Demasiadas solicitudes",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/reenviar-verificacion",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "reenviar-verificacion"
+                  ]
+                },
+                "description": "POST /autenticacion/reenviar-verificacion. Manda un código de verificación nuevo. Responde 202 igual exista el correo, esté verificado o no.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "3597"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"DEMASIADOS_INTENTOS\",\n    \"mensaje\": \"Demasiadas solicitudes de código. Inténtalo de nuevo más tarde.\",\n    \"reintentar_en_segundos\": 3597\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 202', () => pm.response.to.have.status(202));"
                 ]
               }
             }
@@ -336,6 +726,53 @@
               ],
               "cookie": [],
               "body": "{\n  \"token_acceso\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.<carga>.<firma>\",\n  \"tipo_token\": \"Bearer\",\n  \"expira_en\": 900,\n  \"usuario\": {\n    \"id\": \"d3952a75-317c-48ed-b4b4-9025bf0c0930\",\n    \"correo\": \"ana@example.com\",\n    \"nombre\": \"Ana\"\n  }\n}"
+            },
+            {
+              "name": "403 Correo no verificado",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/iniciar-sesion",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "iniciar-sesion"
+                  ]
+                },
+                "description": "POST /autenticacion/iniciar-sesion. Devuelve token_acceso (15 min) y pone el token de renovación en una cookie HttpOnly. Guarda token_acceso en la variable de colección.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"error\": {\"codigo\": \"CORREO_NO_VERIFICADO\", \"mensaje\": \"Debes verificar tu correo antes de iniciar sesión.\"}}"
             },
             {
               "name": "401 Credenciales inválidas",
@@ -942,6 +1379,397 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Estado 204', () => pm.response.to.have.status(204));",
+                  "pm.collectionVariables.set('token_acceso', '');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "a1fac372-9901-5254-ab23-34ed37decc0a",
+          "name": "Recuperar contrasena",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{origen_front}}"
+              }
+            ],
+            "url": {
+              "raw": "{{url_base}}/autenticacion/recuperar",
+              "host": [
+                "{{url_base}}"
+              ],
+              "path": [
+                "autenticacion",
+                "recuperar"
+              ]
+            },
+            "description": "POST /autenticacion/recuperar. Manda un código de 6 dígitos para elegir una contraseña nueva (en local, a Mailpit). Responde 202 igual exista o no el correo.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "202 Aceptada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/recuperar",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "recuperar"
+                  ]
+                },
+                "description": "POST /autenticacion/recuperar. Manda un código de 6 dígitos para elegir una contraseña nueva (en local, a Mailpit). Responde 202 igual exista o no el correo.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Accepted",
+              "code": 202,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"mensaje\": \"Si el correo está registrado, te enviamos un código.\"}"
+            },
+            {
+              "name": "429 Demasiadas solicitudes",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/recuperar",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "recuperar"
+                  ]
+                },
+                "description": "POST /autenticacion/recuperar. Manda un código de 6 dígitos para elegir una contraseña nueva (en local, a Mailpit). Responde 202 igual exista o no el correo.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "3597"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"DEMASIADOS_INTENTOS\",\n    \"mensaje\": \"Demasiadas solicitudes de código. Inténtalo de nuevo más tarde.\",\n    \"reintentar_en_segundos\": 3597\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 202', () => pm.response.to.have.status(202));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "53251514-62cf-5d73-b111-41a7d43a56ee",
+          "name": "Restablecer contrasena",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{origen_front}}"
+              }
+            ],
+            "url": {
+              "raw": "{{url_base}}/autenticacion/restablecer",
+              "host": [
+                "{{url_base}}"
+              ],
+              "path": [
+                "autenticacion",
+                "restablecer"
+              ]
+            },
+            "description": "POST /autenticacion/restablecer. Cambia la contraseña con el código recibido y revoca todas las sesiones del usuario. Una contraseña que no cumple la política no gasta el código.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\",\n  \"contrasena_nueva\": \"{{contrasena_nueva}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Contraseña actualizada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/restablecer",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "restablecer"
+                  ]
+                },
+                "description": "POST /autenticacion/restablecer. Cambia la contraseña con el código recibido y revoca todas las sesiones del usuario. Una contraseña que no cumple la política no gasta el código.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\",\n  \"contrasena_nueva\": \"{{contrasena_nueva}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"mensaje\": \"Contraseña actualizada. Inicia sesión con la nueva.\"}"
+            },
+            {
+              "name": "422 Contraseña insegura",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/restablecer",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "restablecer"
+                  ]
+                },
+                "description": "POST /autenticacion/restablecer. Cambia la contraseña con el código recibido y revoca todas las sesiones del usuario. Una contraseña que no cumple la política no gasta el código.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\",\n  \"contrasena_nueva\": \"{{contrasena_nueva}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"CONTRASENA_INSEGURA\",\n    \"mensaje\": \"La contraseña no cumple los requisitos.\",\n    \"detalles\": [\n      {\n        \"campo\": \"contrasena_nueva\",\n        \"regla\": \"minimo_12_caracteres\",\n        \"mensaje\": \"Debe tener al menos 12 caracteres.\"\n      }\n    ]\n  }\n}"
+            },
+            {
+              "name": "400 Código inválido",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/restablecer",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "restablecer"
+                  ]
+                },
+                "description": "POST /autenticacion/restablecer. Cambia la contraseña con el código recibido y revoca todas las sesiones del usuario. Una contraseña que no cumple la política no gasta el código.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\",\n  \"contrasena_nueva\": \"{{contrasena_nueva}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"error\": {\"codigo\": \"CODIGO_INVALIDO\", \"mensaje\": \"El código no es válido o expiró.\"}}"
+            },
+            {
+              "name": "429 Código bloqueado",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Origin",
+                    "value": "{{origen_front}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{url_base}}/autenticacion/restablecer",
+                  "host": [
+                    "{{url_base}}"
+                  ],
+                  "path": [
+                    "autenticacion",
+                    "restablecer"
+                  ]
+                },
+                "description": "POST /autenticacion/restablecer. Cambia la contraseña con el código recibido y revoca todas las sesiones del usuario. Una contraseña que no cumple la política no gasta el código.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\",\n  \"contrasena_nueva\": \"{{contrasena_nueva}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "900"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"CODIGO_BLOQUEADO\",\n    \"mensaje\": \"Demasiados códigos erróneos. Inténtalo de nuevo más tarde.\",\n    \"reintentar_en_segundos\": 900\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
                   "pm.collectionVariables.set('token_acceso', '');"
                 ]
               }
