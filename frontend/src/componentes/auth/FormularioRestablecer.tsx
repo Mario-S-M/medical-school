@@ -13,6 +13,7 @@ import CampoCodigo from '../ui/CampoCodigo';
 import CampoContrasena from '../ui/CampoContrasena';
 import CampoTexto from '../ui/CampoTexto';
 import ListaReglas from '../ui/ListaReglas';
+import { navegar } from '../../sesion/navegar';
 
 export default function FormularioRestablecer() {
   const correo = useCampo(validarCorreo);
@@ -23,7 +24,7 @@ export default function FormularioRestablecer() {
     () => restablecer({ correo: correo.valor.trim(), codigo: codigo.valor, contrasena_nueva: contrasena.valor }),
     () => {
       borrarCorreoPendiente();
-      window.location.assign('/iniciar-sesion');
+      navegar('/iniciar-sesion');
     },
   );
   const alEnviar = (e: React.FormEvent) => {

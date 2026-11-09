@@ -11,6 +11,7 @@ import BotonEnvio from '../ui/BotonEnvio';
 import CampoContrasena from '../ui/CampoContrasena';
 import CampoTexto from '../ui/CampoTexto';
 import ListaReglas from '../ui/ListaReglas';
+import { navegar } from '../../sesion/navegar';
 
 export default function FormularioRegistro() {
   const nombre = useCampo(validarNombre);
@@ -20,7 +21,7 @@ export default function FormularioRegistro() {
     () => registro({ correo: correo.valor.trim(), nombre: nombre.valor.trim(), contrasena: contrasena.valor }),
     () => {
       guardarCorreoPendiente(correo.valor.trim());
-      window.location.assign('/verificar-correo');
+      navegar('/verificar-correo');
     },
   );
   const alEnviar = (e: React.FormEvent) => {

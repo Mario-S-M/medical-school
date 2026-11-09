@@ -7,6 +7,7 @@ import { validarCorreo } from '../../validacion/correo';
 import AlertaError from '../ui/AlertaError';
 import BotonEnvio from '../ui/BotonEnvio';
 import CampoTexto from '../ui/CampoTexto';
+import { navegar } from '../../sesion/navegar';
 
 export default function FormularioRecuperar() {
   const correo = useCampo(validarCorreo);
@@ -14,7 +15,7 @@ export default function FormularioRecuperar() {
     () => recuperar({ correo: correo.valor.trim() }),
     () => {
       guardarCorreoPendiente(correo.valor.trim());
-      window.location.assign('/restablecer');
+      navegar('/restablecer');
     },
   );
   const alEnviar = (e: React.FormEvent) => {
