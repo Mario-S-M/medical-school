@@ -24,7 +24,7 @@ services:
     ports:
       - "127.0.0.1:5678:5678"
     volumes:
-      - n8n_data:/home/node/.n8n
+      - ./n8n:/home/node/.n8n
     depends_on:
       db:
         condition: service_healthy
@@ -46,5 +46,4 @@ services:
         condition: service_healthy
 
 volumes:
-  n8n_data:
   pgadmin_data:

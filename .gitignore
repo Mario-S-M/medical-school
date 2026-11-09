@@ -9,3 +9,4 @@ pgadmin/
 supabase/volumes/db/data/
 supabase/volumes/storage/
 supabase/volumes/logs/*.log
+n8n/

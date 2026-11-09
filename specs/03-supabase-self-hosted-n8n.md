@@ -17,6 +17,7 @@
 - n8n vacío: se crean a mano la cuenta owner y la licencia gratuita. Se recrean la credencial `Postgres n8n (Supabase)`, los workflows `Prueba Postgres` y `Estado base de datos` (importando los JSON de `workflows/`) y la carpeta `Estado` en la UI.
 - pgAdmin: `pgadmin/servers.json` apunta a `db`; se recrea el volumen `pgadmin_data` para que lo reimporte.
 - `.gitignore`: datos de Supabase (`supabase/volumes/db/data/`, `supabase/volumes/storage/`, logs).
+- *Añadido a petición del usuario:* la config de n8n pasa del volumen `n8n_data` a la carpeta `./n8n` (bind mount, gitignored) para que `docker compose down -v` no la borre.
 - `.env.example` actualizado con todas las variables nuevas y sin secretos.
 
 **No entra:**
@@ -89,6 +90,7 @@ CREATE DATABASE n8n OWNER <USUARIO_BD_N8N>;
 - **Tomada: base `n8n` con un rol propio no superusuario**, conectado directo a `db:5432`. Supavisor en modo transacción no es compatible con n8n, y el rol aislado evita que n8n toque los esquemas de Supabase (`auth`, `storage`…).
 - **Tomada: `supabase/` + `include:` y un solo `.env`.** Mantiene separado el compose oficial para poder actualizarlo. **Descartada:** fusionar sus ~12 servicios en el compose raíz.
 - **Tomada: secretos con openssl sin dejar scripts** (convención de SPEC 01).
+- **Tomada: bind mount `./n8n` para `/home/node/.n8n`**, a petición del usuario, con el mismo criterio que `./postgres` en SPEC 01. **Descartada:** mantener `n8n_data`, que `down -v` borra.
 - **Tomada: conservar `./postgres` como respaldo.** **Descartada:** borrarla en esta spec.
 - **Tomada: pgAdmin se queda**, apuntando a `db`, junto a Studio.
 - **Tomada: dividir en 4 specs (03 a 06).** Infra, login, recuperación y social se verifican por separado.
