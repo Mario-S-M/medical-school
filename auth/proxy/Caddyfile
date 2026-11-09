@@ -129,3 +129,10 @@
 		respond `{"error":{"codigo":"ERROR_INTERNO","mensaje":"Error interno del servidor."}}` {err.status_code}
 	}
 }
+
+# Plantillas de correo de Supabase Auth: solo dentro de la red de compose (el puerto no se publica)
+:8081 {
+	root * /plantillas
+	file_server
+	header -Server
+}

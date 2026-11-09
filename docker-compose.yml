@@ -75,6 +75,7 @@ services:
       - "127.0.0.1:8080:8080"
     volumes:
       - ./auth/proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./auth/plantillas:/plantillas:ro
     tmpfs:
       - /data
       - /config
