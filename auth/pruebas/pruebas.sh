@@ -42,6 +42,15 @@ iniciar_sesion() { # <correo> <contraseña> [argumentos de curl...]
   local c="$1" k="$2"; shift 2
   publicar_json /autenticacion/iniciar-sesion "{\"correo\":\"$c\",\"contrasena\":\"$k\"}" "$@"
 }
+# valor_cookie: valor de token_renovacion en el Set-Cookie de la última respuesta
+valor_cookie() { echo "$cabeceras" | grep -i '^set-cookie: token_renovacion=' | sed -E 's/^[^=]*=([^;]*);.*/\1/'; }
+renovar_sesion() { # <valor de cookie o vacío>
+  if [ -n "$1" ]; then
+    solicitar POST /autenticacion/renovar -H "Origin: $ORIGEN_FRONT" -H 'X-Solicitado-Con: front' -H "Cookie: token_renovacion=$1"
+  else
+    solicitar POST /autenticacion/renovar -H "Origin: $ORIGEN_FRONT" -H 'X-Solicitado-Con: front'
+  fi
+}
 limpiar_intentos() { psql_n8n "truncate autenticacion.intentos_inicio_sesion" > /dev/null; }
 correo_nuevo() { echo "prueba_sh_${SUFIJO}_$1@example.com"; }
 
@@ -116,7 +125,7 @@ estado_es 403 "renovar sin X-Solicitado-Con -> 403"
 cuerpo_tiene '"ORIGEN_NO_PERMITIDO"' "renovar sin X-Solicitado-Con -> ORIGEN_NO_PERMITIDO"
 
 echo "== Acceso directo a n8n sin pasar por Caddy"
-for ruta in registro iniciar-sesion; do  # se amplía con cada workflow nuevo
+for ruta in registro iniciar-sesion renovar; do  # se amplía con cada workflow nuevo
   metodo=POST; [ "$ruta" = yo ] && metodo=GET
   solicitar "$metodo" "/webhook/autenticacion/$ruta" -H 'Content-Type: application/json' -d '{}' --connect-timeout 3 2>/dev/null
   BASE_ORIGINAL="$BASE"; BASE="http://127.0.0.1:5678"
@@ -264,6 +273,42 @@ estado_es 429 "el intento 21 desde la misma IP -> 429"
 cuerpo_tiene '"DEMASIADOS_INTENTOS"' "intento 21 -> DEMASIADOS_INTENTOS"
 cabecera_tiene "Retry-After:" "intento 21: cabecera Retry-After"
 limpiar_intentos
+
+echo "== Renovar sesión"
+limpiar_intentos
+registrar_usuario renovar
+iniciar_sesion "$CORREO_ACTUAL" "$CONTRASENA_VALIDA"
+COOKIE_1="$(valor_cookie)"
+renovar_sesion "$COOKIE_1"
+estado_es 200 "renovar con la cookie -> 200"
+COOKIE_2="$(valor_cookie)"
+[ -n "$COOKIE_2" ] && [ "$COOKIE_2" != "$COOKIE_1" ]; verificar "renovar devuelve una cookie distinta (rotación)" $?
+for atributo in HttpOnly SameSite=Strict Path=/autenticacion Max-Age=604800; do
+  cabecera_tiene "$atributo" "renovar: cookie con $atributo"
+done
+[ -n "$(campo_json token_acceso)" ] && [ "$(campo_json expira_en)" = "900" ]; verificar "renovar devuelve token_acceso con expira_en = 900" $?
+cuerpo_no_tiene "$COOKIE_2" "renovar: el token de renovación no aparece en el cuerpo"
+renovar_sesion ""
+estado_es 401 "renovar sin cookie -> 401"
+cuerpo_tiene '"TOKEN_INVALIDO"' "renovar sin cookie -> TOKEN_INVALIDO"
+renovar_sesion "tokeninventado123"
+estado_es 401 "renovar con cookie inválida -> 401"
+cabecera_tiene "Max-Age=0" "renovar con cookie inválida: la cookie se borra"
+solicitar POST /autenticacion/renovar -H 'Origin: http://malo.example' -H 'X-Solicitado-Con: front' -H "Cookie: token_renovacion=$COOKIE_2"
+estado_es 403 "renovar con Origin ajeno -> 403"
+solicitar POST /autenticacion/renovar -H "Origin: $ORIGEN_FRONT" -H "Cookie: token_renovacion=$COOKIE_2"
+estado_es 403 "renovar sin X-Solicitado-Con -> 403"
+# Supabase Auth devuelve el mismo sucesor si la cookie vieja se reusa antes de consumir el nuevo, y tolera
+# reusos dentro de 10 s (pestañas simultáneas); el reuso se detecta con el sucesor consumido y fuera del intervalo.
+renovar_sesion "$COOKIE_2"
+estado_es 200 "renovar con la cookie rotada (consume el sucesor) -> 200"
+COOKIE_3="$(valor_cookie)"
+echo "  (esperando 11 s: intervalo de reutilización de 10 s de Supabase Auth)"
+sleep 11
+renovar_sesion "$COOKIE_1"
+estado_es 401 "reusar una cookie ya rotada y consumida -> 401"
+cuerpo_tiene '"TOKEN_INVALIDO"' "reusar una cookie ya rotada y consumida -> TOKEN_INVALIDO"
+cabecera_tiene "Max-Age=0" "reuso detectado: la cookie se borra"
 
 echo
 echo "Casos: $total, fallos: $fallos"

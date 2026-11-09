@@ -152,6 +152,10 @@ services:
       GOTRUE_JWT_EXP: ${JWT_EXPIRY}
       # Vida máxima de la sesión (token de renovación): 7 días
       GOTRUE_SESSIONS_TIMEBOX: 168h
+      # Rotación del token de renovación: reusar uno cuyo sucesor ya se consumió falla (refresh_token_already_used) y revoca la familia
+      GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED: "true"
+      GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL: "10"
+      GOTRUE_SECURITY_REFRESH_TOKEN_ALLOW_REUSE: "false"
 
       # Legacy symmetric HS256 key
       GOTRUE_JWT_SECRET: ${JWT_SECRET}
