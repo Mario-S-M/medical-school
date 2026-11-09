@@ -1,0 +1,133 @@
+[
+  {
+    "updatedAt": "2026-11-09T05:52:52.590Z",
+    "createdAt": "2026-11-09T05:52:52.590Z",
+    "id": "estadoBaseDatos01",
+    "name": "Estado base de datos",
+    "description": null,
+    "active": false,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {},
+        "id": "7d0a1c10-0101-4a00-8000-000000000101",
+        "name": "Ejecutar estado",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT now() AS ahora, current_database() AS base_de_datos, current_user AS usuario_conectado, version() AS version_postgres, pg_is_in_recovery() AS en_recuperacion;",
+          "options": {}
+        },
+        "id": "7d0a1c10-0102-4a00-8000-000000000102",
+        "name": "Consultar salud",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          240,
+          0
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "pgPruebaLocal01",
+            "name": "Postgres n8n (local)"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "a1000000-0000-4000-8000-000000000001",
+                "name": "estado",
+                "value": "sano",
+                "type": "string"
+              },
+              {
+                "id": "a1000000-0000-4000-8000-000000000002",
+                "name": "ahora",
+                "value": "={{ $json.ahora }}",
+                "type": "string"
+              },
+              {
+                "id": "a1000000-0000-4000-8000-000000000003",
+                "name": "base_de_datos",
+                "value": "={{ $json.base_de_datos }}",
+                "type": "string"
+              },
+              {
+                "id": "a1000000-0000-4000-8000-000000000004",
+                "name": "usuario_conectado",
+                "value": "={{ $json.usuario_conectado }}",
+                "type": "string"
+              },
+              {
+                "id": "a1000000-0000-4000-8000-000000000005",
+                "name": "version_postgres",
+                "value": "={{ $json.version_postgres }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "7d0a1c10-0103-4a00-8000-000000000103",
+        "name": "Armar resultado",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          480,
+          0
+        ]
+      }
+    ],
+    "connections": {
+      "Ejecutar estado": {
+        "main": [
+          [
+            {
+              "node": "Consultar salud",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Consultar salud": {
+        "main": [
+          [
+            {
+              "node": "Armar resultado",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "staticData": null,
+    "meta": null,
+    "nodeGroups": [],
+    "pinData": null,
+    "versionId": "e0076351-7104-4335-8947-2c2b88714b14",
+    "activeVersionId": null,
+    "versionCounter": 1,
+    "triggerCount": 0,
+    "sourceWorkflowId": null,
+    "tags": [],
+    "versionMetadata": {
+      "name": null,
+      "description": null
+    }
+  }
+]
