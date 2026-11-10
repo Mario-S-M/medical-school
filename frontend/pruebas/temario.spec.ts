@@ -29,7 +29,7 @@ test('el instructor arma el temario: secciones, clases, orden y borrado', async 
   await primera.getByLabel('Duración estimada (minutos)').fill('4');
   await primera.getByLabel('Clase muestra (la verá cualquier visitante)').check();
   await primera.getByRole('button', { name: 'Añadir clase' }).click();
-  await expect(primera.getByText('Bienvenida')).toBeVisible();
+  await expect(primera.getByText('Bienvenida').first()).toBeVisible();
   await expect(primera.getByText('Muestra', { exact: true })).toBeVisible();
   await expect(primera.getByText('4 min')).toBeVisible();
 

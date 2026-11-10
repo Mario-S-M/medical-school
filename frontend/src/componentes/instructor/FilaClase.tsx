@@ -6,6 +6,7 @@ import Boton from '../ui/Boton';
 import BotonBorrar from './BotonBorrar';
 import BotonesOrden from './BotonesOrden';
 import FormularioClase from './FormularioClase';
+import VideoClase from './VideoClase';
 
 type Props = { clase: Clase; seccionId: number; primera: boolean; ultima: boolean; bloqueado: boolean; alCambiar: () => void };
 
@@ -33,6 +34,7 @@ export default function FilaClase({ clase, seccionId, primera, ultima, bloqueado
           <BotonBorrar nombre={clase.titulo} accion={() => conSesion((t) => borrarClase(t, clase.id))} alBorrar={alCambiar} />
         </span>
       )}
+      {!bloqueado && <div className="w-full"><VideoClase clase={clase} alCambiar={alCambiar} /></div>}
     </li>
   );
 }

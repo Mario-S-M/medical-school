@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { crearCategoriaE2E, darRol, limpiarLimites, ponerPortadaCursoE2E } from './ayudas/base_datos';
+import { crearCategoriaE2E, darRol, limpiarLimites, ponerPortadaCursoE2E, ponerVideoListoE2E } from './ayudas/base_datos';
 import { entrarComoAdministrador } from './ayudas/escuela';
 import { correoUnico, crearUsuarioVerificado, iniciarSesionEnPagina, irA } from './ayudas/usuarios';
 
@@ -41,8 +41,11 @@ test('ciclo completo: faltantes, envío, devolución con comentario, reenvío y 
   await page.getByRole('button', { name: 'Añadir sección' }).click();
   await page.getByLabel('Título de la clase').fill('Clase uno');
   await page.getByRole('button', { name: 'Añadir clase' }).click();
-  await expect(page.getByText('Clase uno')).toBeVisible();
+  await expect(page.getByText('Clase uno').first()).toBeVisible();
   ponerPortadaCursoE2E(TITULO);
+  await page.getByRole('button', { name: 'Enviar a revisión' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Hay clases sin video listo.' })).toBeVisible();
+  ponerVideoListoE2E(TITULO);
   await page.reload();
   await page.getByRole('button', { name: 'Enviar a revisión' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'En revisión' })).toBeVisible();

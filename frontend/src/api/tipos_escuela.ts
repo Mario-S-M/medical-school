@@ -1,3 +1,5 @@
+import type { Seccion } from './tipos_temario';
+
 export type Equipo = { instructor_id: string; nombre_publico: string | null };
 export type MisRoles = { roles: string[]; equipos: Equipo[] };
 
@@ -26,15 +28,7 @@ export type ResumenCurso = {
   es_mio: boolean;
   instructor: string;
 };
-export type Clase = {
-  id: number;
-  titulo: string;
-  descripcion: string | null;
-  duracion_estimada_minutos: number | null;
-  es_muestra: boolean;
-  posicion: number;
-};
-export type Seccion = { id: number; titulo: string; posicion: number; clases: Clase[] };
+export type { Clase, Seccion } from './tipos_temario';
 export type CursoEdicion = Omit<ResumenCurso, 'es_mio' | 'instructor'> & {
   subtitulo: string | null;
   descripcion: string | null;

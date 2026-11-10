@@ -21,6 +21,7 @@ export function limpiarEscuelaE2E() {
   const propios = ids ? `usuario_id::text in (${ids})` : 'false';
   const duenos = ids ? `instructor_id::text in (${ids})` : 'false';
   borrarPortadasE2E(duenos);
+  borrarVideosE2E(duenos);
   sql('n8n', `delete from escuela.cursos where ${duenos} or slug like 'e2e-%'; delete from escuela.roles_usuario where ${propios}; delete from escuela.perfiles_instructor where ${propios}; delete from escuela.categorias where nombre like 'E2E %'`);
 }
 
@@ -74,3 +75,22 @@ export function crearCursoPublicadoE2E(titulo: string, slug: string, nivel = 'ba
     s as (insert into escuela.secciones (curso_id, titulo, posicion) select id, 'Sección uno', 1 from c returning id)
     insert into escuela.clases (seccion_id, titulo, es_muestra, duracion_estimada_minutos, posicion) select id, 'Clase de muestra', true, 5, 1 from s`);
 }
+
+// Borra de Storage los archivos de video de los cursos E2E (reutiliza el ayudante de las pruebas de la API).
+function borrarVideosE2E(duenos: string) {
+  const ids = execFileSync('docker', ['compose', 'exec', '-T', 'db', 'psql', '-U', 'supabase_admin', '-d', 'n8n', '-tA', '-c',
+    `select id from escuela.cursos where ${duenos} or slug like 'e2e-%'`], { cwd: RAIZ }).toString().split('\n').filter(Boolean);
+  if (ids.length === 0) return;
+  const env = readFileSync(path.join(RAIZ, '.env'), 'utf8');
+  const leer = (k: string) => env.match(new RegExp(`^${k}=(.*)$`, 'm'))?.[1] ?? '';
+  execFileSync('python3', ['escuela/pruebas/limpiar_bucket.py', 'videos', ...ids.map((id) => `cursos/${id}`)], {
+    cwd: RAIZ,
+    env: { ...process.env, ALMACEN: `http://127.0.0.1:${leer('KONG_HTTP_PORT')}/storage/v1`, CLAVE_SERVICIO: leer('SERVICE_ROLE_KEY') },
+  });
+}
+
+// Deja un video listo y vigente en cada clase del curso (para los flujos que solo necesitan que las clases tengan video).
+export const ponerVideoListoE2E = (titulo: string) =>
+  sql('n8n', `insert into escuela.videos_clase (clase_id, estado, vigente, nombre_original, tipo_contenido, tamano_bytes, duracion_segundos, ruta_base, listo_en)
+    select k.id, 'listo', true, 'a.mp4', 'video/mp4', 10, 60, 'x', now() from escuela.clases k join escuela.secciones s on s.id = k.seccion_id
+    join escuela.cursos c on c.id = s.curso_id where c.titulo = '${titulo}'`);
