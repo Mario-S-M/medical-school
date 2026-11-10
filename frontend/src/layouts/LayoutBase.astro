@@ -7,8 +7,9 @@ import Pie from '../componentes/estructura/Pie.astro';
 
 interface Props {
   titulo: string;
+  arriba?: boolean; // contenido largo: se alinea arriba en vez de centrarse
 }
-const { titulo } = Astro.props;
+const { titulo, arriba = false } = Astro.props;
 ---
 
 <html lang="es">
@@ -21,7 +22,7 @@ const { titulo } = Astro.props;
   </head>
   <body class="flex min-h-screen flex-col bg-gradient-to-b from-sky-50 via-white to-slate-50 text-slate-900">
     <Cabecera><MenuSesion client:load transition:persist="menu-sesion" /></Cabecera>
-    <main class="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center px-4 py-10">
+    <main class:list={["mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-10", !arriba && "justify-center"]}>
       <slot />
     </main>
     <Pie />

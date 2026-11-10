@@ -1,0 +1,354 @@
+{
+  "id": "escCursos01",
+  "name": "Cursos",
+  "description": "GET /escuela/cursos?q=&categoria=&nivel=&pagina=. Catálogo público de cursos publicados con búsqueda de texto completo en español (sin acentos), filtros y 12 cursos por página. No guarda ejecuciones.",
+  "active": false,
+  "isArchived": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "executionTimeout": 15
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Entrada\nWebhook protegido por el secreto del proxy (Caddy es la única entrada).",
+        "height": 430,
+        "width": 240,
+        "color": 4
+      },
+      "id": "9254c725-1b14-5997-bd4a-fdae392a49fa",
+      "name": "Nota Entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -70,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Validar entrada\nSubworkflow `Validar campos`: tipos, largos y campos extra. Si falla, `422 VALIDACION_FALLIDA` con la lista de reglas.",
+        "height": 430,
+        "width": 780,
+        "color": 4
+      },
+      "id": "94501a30-3338-5e0d-b065-4076512844af",
+      "name": "Nota Validar entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        260,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Buscar y paginar\nSolo cursos `publicado`. La búsqueda ignora acentos y mayúsculas, usa raíces del español y mira título, subtítulo, descripción y nombre del instructor; ordena por relevancia y luego por fecha. 12 por página.",
+        "height": 430,
+        "width": 480,
+        "color": 6
+      },
+      "id": "b94bdf97-5734-534f-a10c-a1cfdad7a3b8",
+      "name": "Nota Buscar y paginar",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Respuesta\nDevuelve el resultado o el error de cualquier paso anterior.",
+        "height": 430,
+        "width": 240,
+        "color": 5
+      },
+      "id": "acd7121d-fcd1-5281-9c8a-61dbe901b4c5",
+      "name": "Nota Respuesta",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1730,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Cursos\n`GET /escuela/cursos?q=&categoria=&nivel=&pagina=` · público, sin sesión.\n\nResponde `{ cursos, total, pagina, paginas }`. Cada tarjeta trae título, subtítulo, nivel, categoría, instructor, portada y cuántas secciones y clases tiene; nunca datos internos.",
+        "height": 150,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "a3ca177a-2f93-5610-9e96-b9277f21cb12",
+      "name": "Nota Cursos",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -450
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "escuela/cursos",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "41fa3ef2-4147-567c-9531-0cdf43f6ada9",
+      "name": "Recibir solicitud",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "secretoProxy01",
+          "name": "Secreto proxy"
+        }
+      },
+      "webhookId": "96b18e5b-a4cd-5682-bbbb-1f7c050c653b"
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $input.first().json;\nreturn [{ json: { datos: e.query, reglas: {\"q\": {\"tipo\": \"texto\", \"opcional\": true, \"maximo\": 100}, \"categoria\": {\"tipo\": \"texto\", \"opcional\": true, \"maximo\": 80}, \"nivel\": {\"tipo\": \"opcion\", \"opcional\": true, \"valores\": [\"basico\", \"intermedio\", \"avanzado\"]}, \"pagina\": {\"tipo\": \"entero\", \"opcional\": true, \"minimo\": 1, \"maximo\": 10000}} } }];"
+      },
+      "id": "0648210a-3592-58e5-9230-7480a576f97b",
+      "name": "Definir reglas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escValidarCampos01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "4b53008d-9e1d-5e0d-8a15-c699d309e436",
+      "name": "Validar campos",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2400b1ae-a5d7-5332-a702-027fee5a26a1",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cd63efbd-1123-5c99-aea2-6c4f48b783c9",
+      "name": "Entrada valida",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH p AS (\n  SELECT NULLIF($1::text, '') AS q, NULLIF($2::text, '') AS categoria, NULLIF($3::text, '') AS nivel, coalesce($4::int, 1) AS pagina,\n         CASE WHEN NULLIF($1::text, '') IS NULL THEN NULL ELSE websearch_to_tsquery('spanish', escuela.sin_acentos($1::text)) END AS consulta\n), filtrados AS (\n  SELECT c.id, c.slug, c.titulo, c.subtitulo, c.nivel, c.portada_ruta, c.publicado_en,\n         cat.nombre AS categoria, cat.slug AS categoria_slug, coalesce(i.nombre_publico, 'Instructor') AS instructor,\n         (SELECT count(*) FROM escuela.secciones s WHERE s.curso_id = c.id) AS secciones,\n         (SELECT count(*) FROM escuela.clases k JOIN escuela.secciones s ON s.id = k.seccion_id WHERE s.curso_id = c.id) AS clases,\n         CASE WHEN p.consulta IS NULL THEN 0 ELSE ts_rank(c.busqueda, p.consulta) END AS relevancia\n  FROM escuela.cursos c\n  LEFT JOIN escuela.categorias cat ON cat.id = c.categoria_id\n  LEFT JOIN escuela.perfiles_instructor i ON i.usuario_id = c.instructor_id\n  CROSS JOIN p\n  WHERE c.estado = 'publicado'\n    AND (p.categoria IS NULL OR cat.slug = p.categoria)\n    AND (p.nivel IS NULL OR c.nivel = p.nivel)\n    AND (p.consulta IS NULL OR c.busqueda @@ p.consulta\n         OR to_tsvector('spanish', escuela.sin_acentos(coalesce(i.nombre_publico, ''))) @@ p.consulta)\n)\nSELECT (SELECT count(*) FROM filtrados)::int AS total, (SELECT pagina FROM p) AS pagina,\n  coalesce((SELECT json_agg(json_build_object('slug', t.slug, 'titulo', t.titulo, 'subtitulo', t.subtitulo, 'nivel', t.nivel,\n              'categoria', t.categoria, 'categoria_slug', t.categoria_slug, 'instructor', t.instructor, 'portada_ruta', t.portada_ruta,\n              'secciones', t.secciones, 'clases', t.clases) ORDER BY t.relevancia DESC, t.publicado_en DESC, t.id DESC)\n            FROM (SELECT * FROM filtrados ORDER BY relevancia DESC, publicado_en DESC, id DESC\n                  OFFSET ((SELECT pagina FROM p) - 1) * 12 LIMIT 12) t), '[]'::json) AS cursos;",
+        "options": {
+          "queryReplacement": "={{ [$json.datos.q, $json.datos.categoria, $json.datos.nivel, $json.datos.pagina] }}"
+        }
+      },
+      "id": "94e63876-3d00-5ad8-8a94-57040140deed",
+      "name": "Buscar cursos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1200,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgSupabase01",
+          "name": "Postgres n8n (Supabase)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nreturn [{ json: { estado: 200, cuerpo: { cursos: r.cursos, total: r.total, pagina: r.pagina, paginas: Math.ceil(r.total / 12) } } }];"
+      },
+      "id": "48f6b991-8226-5b4a-8f49-a00d7d3b68f4",
+      "name": "Armar respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.cuerpo === null ? '' : JSON.stringify($json.cuerpo) }}",
+        "options": {
+          "responseCode": "={{ $json.estado }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "X-Flujo",
+                "value": "escuela"
+              }
+            ]
+          }
+        }
+      },
+      "id": "1837fe67-6711-5c5a-b2ee-bc78586e2284",
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1800,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Recibir solicitud": {
+      "main": [
+        [
+          {
+            "node": "Definir reglas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Definir reglas": {
+      "main": [
+        [
+          {
+            "node": "Validar campos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar campos": {
+      "main": [
+        [
+          {
+            "node": "Entrada valida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrada valida": {
+      "main": [
+        [
+          {
+            "node": "Buscar cursos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar cursos": {
+      "main": [
+        [
+          {
+            "node": "Armar respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar respuesta": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [
+    {
+      "id": "83de13e7-cc7f-57a1-a392-b621465c72c3",
+      "name": "Validar entrada",
+      "nodeIds": [
+        "0648210a-3592-58e5-9230-7480a576f97b",
+        "4b53008d-9e1d-5e0d-8a15-c699d309e436",
+        "cd63efbd-1123-5c99-aea2-6c4f48b783c9"
+      ],
+      "description": "Valida y normaliza los campos con el subworkflow compartido."
+    },
+    {
+      "id": "b7ece424-6325-5330-92e6-3e2e93d9e5f7",
+      "name": "Buscar y paginar",
+      "nodeIds": [
+        "94e63876-3d00-5ad8-8a94-57040140deed",
+        "48f6b991-8226-5b4a-8f49-a00d7d3b68f4"
+      ],
+      "description": "Solo cursos publicado. La búsqueda ignora acentos y mayúsculas, usa raíces del español y mira título, subtítulo, descripción y nombre del instructor; "
+    }
+  ],
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}

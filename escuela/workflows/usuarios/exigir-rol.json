@@ -1,0 +1,244 @@
+{
+  "id": "escExigirRol01",
+  "name": "Exigir rol",
+  "description": "Subworkflow. Recibe la solicitud del webhook más rol_requerido (un rol, una lista de roles —basta con uno— o `cualquiera`: solo exige sesión), valida la sesión con Validar sesion y roles y comprueba que el usuario lo tenga. Devuelve el mismo item con { ok, usuario, roles, equipos } o { ok: false, estado: 401 o 403, cuerpo }.",
+  "active": false,
+  "isArchived": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "executionTimeout": 15
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Entrada\nRecibe la solicitud y el `rol_requerido`.",
+        "height": 430,
+        "width": 240,
+        "color": 4
+      },
+      "id": "8356f9f3-1b56-584e-9ab3-be911ad2cc8f",
+      "name": "Nota Entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -70,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Comprobar sesion\nReutiliza el subworkflow `Validar sesion y roles`.",
+        "height": 430,
+        "width": 480,
+        "color": 1
+      },
+      "id": "99fc72ed-4a2a-53fa-b15a-da339148cb0e",
+      "name": "Nota Comprobar sesion",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        260,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Comprobar rol\nSi el usuario no tiene el rol pedido, responde `403 SIN_PERMISO`.",
+        "height": 430,
+        "width": 240,
+        "color": 1
+      },
+      "id": "2e865dd6-31e1-507c-ad61-0a1568c4189d",
+      "name": "Nota Comprobar rol",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        830,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Salida con error\nUn error de sesión sale tal cual.",
+        "height": 430,
+        "width": 240,
+        "color": 3
+      },
+      "id": "0c373590-eeb7-5f48-bfbb-371abaed43bc",
+      "name": "Nota Salida con error",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        830,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Exigir rol\nSubworkflow compartido: **ningún endpoint protegido repite la comprobación de permisos**.\n\nEntrada: la solicitud del webhook y `rol_requerido` (un rol o una lista de roles: basta con uno). Salida: el mismo item con `usuario`, `roles` y `equipos`, o `{ ok: false, estado, cuerpo }`.",
+        "height": 150,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "82ba7180-44e6-5047-ba09-32a81b00c452",
+      "name": "Nota Exigir rol",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -550
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "9a095b99-6aa0-5cc9-a3f0-97ab842aceeb",
+      "name": "Disparador",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escValidar01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "9cec96b1-d7de-5c65-9e6d-39ce3596a14d",
+      "name": "Validar sesion y roles",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ad078852-7900-5d85-aa08-09e8e4d8dfa5",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b7287409-f381-544a-b9ad-3ee78d73027e",
+      "name": "Sesion valida",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const contexto = $input.first().json;\nconst original = $('Disparador').first().json;\nconst requeridos = [].concat(original.rol_requerido);\nif (!requeridos.includes('cualquiera') && !requeridos.some((r) => contexto.roles.includes(r))) {\n  return [{ json: { ok: false, estado: 403, cuerpo: { error: { codigo: 'SIN_PERMISO', mensaje: 'No tienes permiso para hacer esto.' } } } }];\n}\nreturn [{ json: { ...original, ...contexto } }];"
+      },
+      "id": "7dfb79b7-1449-51a5-a84e-fda7860bb4c8",
+      "name": "Comprobar rol",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        -100
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "56a95593-a420-5e06-bd39-49a81409ce4c",
+      "name": "Devolver error",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Disparador": {
+      "main": [
+        [
+          {
+            "node": "Validar sesion y roles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar sesion y roles": {
+      "main": [
+        [
+          {
+            "node": "Sesion valida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sesion valida": {
+      "main": [
+        [
+          {
+            "node": "Comprobar rol",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Devolver error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [
+    {
+      "id": "f74a6101-73fc-5364-9a0c-4ac6df2e06d1",
+      "name": "Comprobar sesion",
+      "nodeIds": [
+        "9cec96b1-d7de-5c65-9e6d-39ce3596a14d",
+        "b7287409-f381-544a-b9ad-3ee78d73027e"
+      ],
+      "description": "Valida el token y carga los roles con el subworkflow compartido."
+    }
+  ],
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}

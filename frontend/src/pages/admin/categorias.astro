@@ -1,0 +1,8 @@
+---
+import LayoutBase from '../../layouts/LayoutBase.astro';
+import PaginaCategorias from '../../componentes/admin/PaginaCategorias';
+---
+
+<LayoutBase arriba titulo="Categorías">
+  <PaginaCategorias client:only="react" />
+</LayoutBase>

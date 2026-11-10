@@ -1,0 +1,570 @@
+{
+  "id": "escBorrarClase01",
+  "name": "Borrar clase",
+  "description": "POST /escuela/borrar-clase. Borra una clase y renumera las de su sección (instructor dueño o su equipo; no en revisión). No guarda ejecuciones.",
+  "active": false,
+  "isArchived": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "executionTimeout": 15
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Entrada\nWebhook protegido por el secreto del proxy (Caddy es la única entrada).",
+        "height": 430,
+        "width": 240,
+        "color": 4
+      },
+      "id": "799f8e79-2ef8-51c0-b940-337401f79ebe",
+      "name": "Nota Entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -70,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Comprobar permiso\nExige el rol `['instructor', 'equipo_apoyo']` con el subworkflow `Exigir rol`. Sin sesión da `401`; sin el rol, `403`.",
+        "height": 430,
+        "width": 780,
+        "color": 1
+      },
+      "id": "7da3befc-3315-5cdb-a0d5-769df4d7fcf2",
+      "name": "Nota Comprobar permiso",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        260,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Validar entrada\nSubworkflow `Validar campos`: tipos, largos y campos extra. Si falla, `422 VALIDACION_FALLIDA` con la lista de reglas.",
+        "height": 430,
+        "width": 480,
+        "color": 4
+      },
+      "id": "af08e8ee-e168-5cdf-b9b0-9801c81d29a0",
+      "name": "Nota Validar entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Comprobar curso\nSubworkflow `Validar acceso a curso`: solo el dueño o su equipo de apoyo. Curso ajeno: `403`; inexistente: `404`; en revisión: `409`.",
+        "height": 430,
+        "width": 480,
+        "color": 1
+      },
+      "id": "d4c0bd95-e627-5be3-8b61-0a108931f77f",
+      "name": "Nota Comprobar curso",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Borrar la clase\nBorra la clase y deja las demás de su sección numeradas `1..n` sin huecos.",
+        "height": 430,
+        "width": 480,
+        "color": 6
+      },
+      "id": "ab478607-18e2-5436-aa3b-eb4aed62cef1",
+      "name": "Nota Borrar la clase",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2360,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Respuesta\nDevuelve el resultado o el error de cualquier paso anterior.",
+        "height": 430,
+        "width": 240,
+        "color": 5
+      },
+      "id": "91059251-1c17-5ba0-b617-a7fdbde86e2a",
+      "name": "Nota Respuesta",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2930,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Borrar clase\n`POST /escuela/borrar-clase` · instructor dueño o equipo de apoyo.\n\nEntrada: `{ clase_id }`. Responde `204`.",
+        "height": 150,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "f8c2138a-2903-51e8-b8ac-8c3394b01294",
+      "name": "Nota Borrar clase",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -450
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "escuela/borrar-clase",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "92bac8d8-03d0-5665-b5c1-04576ce3ea73",
+      "name": "Recibir solicitud",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "secretoProxy01",
+          "name": "Secreto proxy"
+        }
+      },
+      "webhookId": "12502371-2a98-5f04-995a-37ed187c0104"
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $input.first().json;\nreturn [{ json: { headers: e.headers, rol_requerido: [\"instructor\", \"equipo_apoyo\"], datos: e.body, reglas: {\"clase_id\": {\"tipo\": \"entero\", \"minimo\": 1, \"maximo\": 9007199254740}}, acceso: {\"modo\": \"dueno_o_equipo\", \"editable\": true, \"tipo\": \"clase\", \"campo\": \"clase_id\"} } }];"
+      },
+      "id": "b6507ac7-8b19-5da7-acd6-b411c7432457",
+      "name": "Definir reglas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escExigirRol01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "0355b31a-7914-5777-ad72-628351540853",
+      "name": "Exigir rol",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "97850dab-a95f-5dd6-aabb-46e5d70f90b3",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d9294fac-b5e1-52ab-a957-46af7c39f60a",
+      "name": "Permiso valido",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escValidarCampos01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "059ca059-19d8-5d94-bf9f-b91f4b5fb487",
+      "name": "Validar campos",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "11c5b947-b82b-57d5-933b-233598126770",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b72137c5-48fc-586b-907e-1750ccf52387",
+      "name": "Entrada valida",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escValidarAcceso01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "6d1891e5-0350-5a2b-a839-04f8a97f1a14",
+      "name": "Validar acceso a curso",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1800,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "601ac6a9-c967-52a2-a9ca-a2fd246464c2",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a371eb77-846c-58d1-9e54-4ab5898c51ff",
+      "name": "Acceso valido",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH borrada AS (\n  DELETE FROM escuela.clases WHERE id = $1::bigint RETURNING seccion_id\n), renumeradas AS (\n  UPDATE escuela.clases k SET posicion = n.nueva\n  FROM (SELECT id, row_number() OVER (ORDER BY posicion) AS nueva FROM escuela.clases\n        WHERE seccion_id = (SELECT seccion_id FROM borrada) AND id <> $1::bigint) n\n  WHERE k.id = n.id RETURNING k.id\n)\nSELECT EXISTS (SELECT 1 FROM borrada) AS borrada;",
+        "options": {
+          "queryReplacement": "={{ [$json.datos.clase_id] }}"
+        }
+      },
+      "id": "e1139cc4-5041-5df1-8bc1-5ae544f88a1f",
+      "name": "Borrar y renumerar",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2400,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgSupabase01",
+          "name": "Postgres n8n (Supabase)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nif (r.borrada) return [{ json: { estado: 204, cuerpo: null } }];\nreturn [{ json: { estado: 404, cuerpo: { error: { codigo: 'NO_ENCONTRADO', mensaje: 'La clase no existe en este curso.' } } } }];"
+      },
+      "id": "2e0434a3-5e5e-57a7-9669-ea9816ef94a7",
+      "name": "Armar respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2700,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.cuerpo === null ? '' : JSON.stringify($json.cuerpo) }}",
+        "options": {
+          "responseCode": "={{ $json.estado }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "X-Flujo",
+                "value": "escuela"
+              }
+            ]
+          }
+        }
+      },
+      "id": "8b26d1d0-3055-5432-b6b3-990ee4b7ba27",
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        3000,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Recibir solicitud": {
+      "main": [
+        [
+          {
+            "node": "Definir reglas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Definir reglas": {
+      "main": [
+        [
+          {
+            "node": "Exigir rol",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exigir rol": {
+      "main": [
+        [
+          {
+            "node": "Permiso valido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Permiso valido": {
+      "main": [
+        [
+          {
+            "node": "Validar campos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar campos": {
+      "main": [
+        [
+          {
+            "node": "Entrada valida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrada valida": {
+      "main": [
+        [
+          {
+            "node": "Validar acceso a curso",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar acceso a curso": {
+      "main": [
+        [
+          {
+            "node": "Acceso valido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acceso valido": {
+      "main": [
+        [
+          {
+            "node": "Borrar y renumerar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Borrar y renumerar": {
+      "main": [
+        [
+          {
+            "node": "Armar respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar respuesta": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [
+    {
+      "id": "f77dd157-348e-5bff-8d75-d20ea1d85d9c",
+      "name": "Comprobar permiso",
+      "nodeIds": [
+        "b6507ac7-8b19-5da7-acd6-b411c7432457",
+        "0355b31a-7914-5777-ad72-628351540853",
+        "d9294fac-b5e1-52ab-a957-46af7c39f60a"
+      ],
+      "description": "Exige el rol ['instructor', 'equipo_apoyo'] con el subworkflow compartido."
+    },
+    {
+      "id": "6dbf04f7-2a70-5b92-89a1-c5dddee26a0f",
+      "name": "Validar entrada",
+      "nodeIds": [
+        "059ca059-19d8-5d94-bf9f-b91f4b5fb487",
+        "b72137c5-48fc-586b-907e-1750ccf52387"
+      ],
+      "description": "Valida y normaliza los campos con el subworkflow compartido."
+    },
+    {
+      "id": "a2c7ccaf-59e1-5f50-8c0f-802d8a61a85c",
+      "name": "Comprobar curso",
+      "nodeIds": [
+        "6d1891e5-0350-5a2b-a839-04f8a97f1a14",
+        "a371eb77-846c-58d1-9e54-4ab5898c51ff"
+      ],
+      "description": "Comprueba que el curso existe y que el usuario puede tocarlo."
+    },
+    {
+      "id": "e6c71b33-420c-5e84-8318-0559b238e65e",
+      "name": "Borrar la clase",
+      "nodeIds": [
+        "e1139cc4-5041-5df1-8bc1-5ae544f88a1f",
+        "2e0434a3-5e5e-57a7-9669-ea9816ef94a7"
+      ],
+      "description": "Borra la clase y deja las demás de su sección numeradas 1..n sin huecos."
+    }
+  ],
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}

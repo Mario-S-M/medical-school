@@ -1,0 +1,462 @@
+{
+  "id": "escMiEquipo01",
+  "name": "Mi equipo",
+  "description": "GET /escuela/mi-equipo. Miembros del equipo de apoyo del instructor e invitaciones pendientes vigentes. No guarda ejecuciones.",
+  "active": false,
+  "isArchived": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "executionTimeout": 15
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Entrada\nWebhook protegido por el secreto del proxy (Caddy es la única entrada).",
+        "height": 430,
+        "width": 240,
+        "color": 4
+      },
+      "id": "4d364121-e597-5f3d-95e4-d70bc69c1973",
+      "name": "Nota Entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -70,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Comprobar permiso\nExige el rol `instructor` con el subworkflow `Exigir rol`. Sin sesión da `401`; sin el rol, `403`.",
+        "height": 430,
+        "width": 780,
+        "color": 1
+      },
+      "id": "96f01f45-8dd9-5602-a72e-5d86e46f98ab",
+      "name": "Nota Comprobar permiso",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        260,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Validar entrada\nSubworkflow `Validar campos`: tipos, largos y campos extra. Si falla, `422 VALIDACION_FALLIDA` con la lista de reglas.",
+        "height": 430,
+        "width": 480,
+        "color": 4
+      },
+      "id": "e9910535-bbee-56d3-8047-6c525137fab7",
+      "name": "Nota Validar entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Leer el equipo\nMiembros (con el correo con el que aceptaron) e invitaciones `pendiente` que todavía no vencen.",
+        "height": 430,
+        "width": 480,
+        "color": 6
+      },
+      "id": "7eb5509b-e9de-52a0-b589-20955537ec13",
+      "name": "Nota Leer el equipo",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Respuesta\nDevuelve el resultado o el error de cualquier paso anterior.",
+        "height": 430,
+        "width": 240,
+        "color": 5
+      },
+      "id": "6983b6a0-9a57-54e9-992b-971ec09dad43",
+      "name": "Nota Respuesta",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2330,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Mi equipo\n`GET /escuela/mi-equipo` · solo `instructor`.\n\nAlimenta la pantalla *Mi equipo de apoyo*.",
+        "height": 150,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "fa5f7374-4792-5e68-b0a9-dd4e410183c6",
+      "name": "Nota Mi equipo",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -450
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "escuela/mi-equipo",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b34fc345-5b7e-5c06-828f-a94b59c3a4ac",
+      "name": "Recibir solicitud",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "secretoProxy01",
+          "name": "Secreto proxy"
+        }
+      },
+      "webhookId": "62c5f22d-58c7-5573-8965-7d489dc320d3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $input.first().json;\nreturn [{ json: { headers: e.headers, rol_requerido: \"instructor\", datos: e.query, reglas: {} } }];"
+      },
+      "id": "2b70963f-23d2-5e51-bed3-d079185a19cf",
+      "name": "Definir reglas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escExigirRol01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "a793a352-b016-5b8e-a847-9c8e88806c13",
+      "name": "Exigir rol",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "700a92aa-7238-590f-8ee0-0a34df8ccb59",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "32ecc1e7-6e84-59c7-8a6d-0c85b6c557f8",
+      "name": "Permiso valido",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escValidarCampos01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "04573705-747d-5f4e-9774-e6e72bd9ee95",
+      "name": "Validar campos",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a1560a3c-e066-5349-9f6c-0b9bc7fc942c",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a5bb7a31-8dcd-5bbd-a274-271180f789b4",
+      "name": "Entrada valida",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  coalesce((SELECT json_agg(json_build_object('miembro_id', e.miembro_id, 'desde', e.creado_en,\n      'correo', (SELECT i.correo FROM escuela.invitaciones_equipo i WHERE i.instructor_id = e.instructor_id AND i.miembro_id = e.miembro_id AND i.estado = 'aceptada' ORDER BY i.respondida_en DESC LIMIT 1)) ORDER BY e.creado_en)\n    FROM escuela.equipos_apoyo e WHERE e.instructor_id = $1::uuid), '[]'::json) AS miembros,\n  coalesce((SELECT json_agg(json_build_object('id', i.id, 'correo', i.correo, 'expira_en', i.expira_en) ORDER BY i.creado_en DESC)\n    FROM escuela.invitaciones_equipo i WHERE i.instructor_id = $1::uuid AND i.estado = 'pendiente' AND i.expira_en >= now()), '[]'::json) AS invitaciones;",
+        "options": {
+          "queryReplacement": "={{ [$json.usuario.id] }}"
+        }
+      },
+      "id": "a8d7d4a6-54c6-5465-b347-59ef4ef1e00f",
+      "name": "Consultar equipo",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1800,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgSupabase01",
+          "name": "Postgres n8n (Supabase)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nreturn [{ json: { estado: 200, cuerpo: { miembros: r.miembros, invitaciones: r.invitaciones } } }];"
+      },
+      "id": "1622a46b-e088-573e-af1e-f032efd20bb1",
+      "name": "Armar respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.cuerpo === null ? '' : JSON.stringify($json.cuerpo) }}",
+        "options": {
+          "responseCode": "={{ $json.estado }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "X-Flujo",
+                "value": "escuela"
+              }
+            ]
+          }
+        }
+      },
+      "id": "2cb722f1-f3be-59f0-803e-dd04fc316a4d",
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2400,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Recibir solicitud": {
+      "main": [
+        [
+          {
+            "node": "Definir reglas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Definir reglas": {
+      "main": [
+        [
+          {
+            "node": "Exigir rol",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exigir rol": {
+      "main": [
+        [
+          {
+            "node": "Permiso valido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Permiso valido": {
+      "main": [
+        [
+          {
+            "node": "Validar campos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar campos": {
+      "main": [
+        [
+          {
+            "node": "Entrada valida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrada valida": {
+      "main": [
+        [
+          {
+            "node": "Consultar equipo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar equipo": {
+      "main": [
+        [
+          {
+            "node": "Armar respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar respuesta": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [
+    {
+      "id": "9b1bd887-7eda-5fc1-8c04-67fb0343cce6",
+      "name": "Comprobar permiso",
+      "nodeIds": [
+        "2b70963f-23d2-5e51-bed3-d079185a19cf",
+        "a793a352-b016-5b8e-a847-9c8e88806c13",
+        "32ecc1e7-6e84-59c7-8a6d-0c85b6c557f8"
+      ],
+      "description": "Exige el rol instructor con el subworkflow compartido."
+    },
+    {
+      "id": "a65e3a33-01dc-5099-ab8b-a109dba74a1b",
+      "name": "Validar entrada",
+      "nodeIds": [
+        "04573705-747d-5f4e-9774-e6e72bd9ee95",
+        "a5bb7a31-8dcd-5bbd-a274-271180f789b4"
+      ],
+      "description": "Valida y normaliza los campos con el subworkflow compartido."
+    },
+    {
+      "id": "331026f6-ad69-5f23-a6de-420d9b13a7ed",
+      "name": "Leer el equipo",
+      "nodeIds": [
+        "a8d7d4a6-54c6-5465-b347-59ef4ef1e00f",
+        "1622a46b-e088-573e-af1e-f032efd20bb1"
+      ],
+      "description": "Miembros (con el correo con el que aceptaron) e invitaciones pendiente que todavía no vencen."
+    }
+  ],
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}

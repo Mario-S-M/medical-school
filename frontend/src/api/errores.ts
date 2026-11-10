@@ -1,3 +1,4 @@
+import { MENSAJES_ESCUELA } from './mensajes_escuela';
 import type { DetalleError } from './tipos';
 
 export class ErrorApi extends Error {
@@ -20,6 +21,7 @@ const MENSAJES: Record<string, string> = {
   DEMASIADOS_INTENTOS: 'Demasiados intentos. Espera para volver a intentar.',
   VALIDACION_FALLIDA: 'Revisa los datos del formulario.',
   CONTRASENA_INSEGURA: 'La contraseña no cumple los requisitos.',
+  ...MENSAJES_ESCUELA,
 };
 
 export const MENSAJE_GENERICO = 'Algo salió mal. Inténtalo de nuevo.';

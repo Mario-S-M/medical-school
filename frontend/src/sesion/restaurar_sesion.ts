@@ -4,7 +4,9 @@ import { guardarSesion } from './almacen_sesion';
 let pendiente: Promise<void> | null = null;
 
 // Pide `renovar` una sola vez por página aunque varias islas lo soliciten.
-export function restaurarSesion(): Promise<void> {
+// Con `otraVez` fuerza una renovación nueva (cuando el token de acceso venció).
+export function restaurarSesion(otraVez = false): Promise<void> {
+  if (otraVez) pendiente = null;
   pendiente ??= renovar()
     .then((r) => guardarSesion({ token_acceso: r.token_acceso, usuario: r.usuario }))
     .catch(() => guardarSesion(null));

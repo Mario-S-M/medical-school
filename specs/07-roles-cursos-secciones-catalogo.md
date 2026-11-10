@@ -1,6 +1,6 @@
 # SPEC 07 — Roles, cursos con secciones y catálogo público con buscador
 
-**Estado:** Aprobado  
+**Estado:** Implementado  
 **Depende de:** SPEC 06 (y, a través de ella, SPEC 05, 04, 03, 02 y 01)
 **Fecha:** 2026-11-09
 **Objetivo:** Añadir roles (instructor, equipo de apoyo y administrador) y cursos con secciones y clases que el instructor arma y un administrador aprueba, publicados en un catálogo público con categorías y buscador, sobre workflows de n8n y el front de Astro.
@@ -41,7 +41,9 @@ El usuario pidió una escuela en línea completa (instructores, videos protegido
 - **Portada:** imagen JPG, PNG o WebP de hasta 2 MB en un bucket público `portadas` de Supabase Storage. n8n entrega una URL firmada de subida y el navegador sube el archivo por el proxy de Astro `/almacen` hacia Kong.
 - **Backend:**
   - carpeta nueva `escuela/` (`sql/`, `workflows/`, `plantillas/`, `postman/`, `pruebas/`, `scripts/`, `README.md`);
-  - workflows en la carpeta `Escuela` de n8n, uno por endpoint, más el subworkflow `Validar sesion y roles`;
+  - workflows de n8n, uno por endpoint, generados por `escuela/scripts/generar_workflows.py` e importados con `escuela/scripts/importar_workflows.sh`. Los de roles y sesión (`Validar sesion y roles`, `Mis roles`, `Buscar usuario`, `Asignar rol`) van en la carpeta `Usuarios` de n8n y el resto en la carpeta `Escuela`;
+  - cada workflow se divide en **grupos de nodos colapsables** (un grupo por tramo de lógica) y lleva **notas adhesivas** (una general y una por sección);
+  - la lógica que se repite en varios workflows vive en un **subworkflow** (hoy `Validar sesion y roles`) y se llama con *Execute Workflow*, nunca se copia;
   - rutas `/escuela/*` en Caddy y en el proxy de Astro.
 - **Front:**
   - páginas `/cursos`, `/curso`, `/instructor`, `/instructor/curso`, `/instructor/equipo`, `/admin/roles`, `/admin/categorias` y `/admin/revision`;
@@ -121,7 +123,7 @@ CREATE UNIQUE INDEX invitaciones_pendiente_unica ON escuela.invitaciones_equipo 
 ```
 
 **Reglas:**
-- **Slug:** se genera del título (minúsculas, sin acentos, guiones) con sufijo `-2`, `-3`… si ya existe. No cambia tras la primera publicación.
+- **Slug:** se genera del título (minúsculas, sin acentos, guiones) con sufijo `-2`, `-3`… si ya existe. Se fija al crear el curso y no cambia aunque se renombre (así los enlaces nunca se rompen).
 - **Caducidad:** una invitación `pendiente` con `expira_en < now()` se trata como caducada y se puede reenviar.
 - **Rol `equipo_apoyo`:** se quita cuando el usuario ya no pertenece a ningún equipo.
 - **Perfil del instructor:** `perfiles_instructor` se rellena desde Supabase Auth (`user_metadata.nombre`) al dar el rol `instructor`.
@@ -142,7 +144,7 @@ CREATE UNIQUE INDEX invitaciones_pendiente_unica ON escuela.invitaciones_equipo 
 
 | Método y ruta | Auth | Entrada → salida |
 |---|---|---|
-| `GET /escuela/categorias` | no | → `{ categorias: [{ id, nombre, slug }] }` |
+| `GET /escuela/categorias` | no | → `{ categorias: [{ id, nombre, slug, posicion }] }` (la posición permite al administrador reordenar) |
 | `GET /escuela/cursos?q=&categoria=&nivel=&pagina=` | no | → `{ cursos: [tarjeta], total, pagina, paginas }` (solo `publicado`, 12 por página) |
 | `GET /escuela/curso?slug=` | no | → ficha con `secciones[].clases[]` (sin campos internos) o `404` |
 | `GET /escuela/mis-roles` | sí | → `{ roles: [...], equipos: [{ instructor_id, nombre_publico }] }` |
@@ -184,6 +186,7 @@ CREATE UNIQUE INDEX invitaciones_pendiente_unica ON escuela.invitaciones_equipo 
 | `INVITACION_DUPLICADA` / `YA_ES_MIEMBRO` | 409 | ya hay una invitación vigente o el usuario ya está en el equipo |
 | `USUARIO_NO_REGISTRADO` | 404 | invitar a un correo sin cuenta verificada |
 | `CATEGORIA_EN_USO` | 409 | borrar una categoría con cursos |
+| `CATEGORIA_DUPLICADA` | 409 | crear o renombrar una categoría con un nombre que ya existe |
 | `PORTADA_INVALIDA` | 422 | tipo distinto de JPG, PNG o WebP, más de 2 MB, o archivo no subido al confirmar |
 
 **Storage:**
@@ -255,34 +258,36 @@ CREATE UNIQUE INDEX invitaciones_pendiente_unica ON escuela.invitaciones_equipo 
 
 ## Criterios de aceptación
 
-- [ ] `escuela/pruebas/pruebas.sh` y `auth/pruebas/pruebas.sh` terminan con código 0 contra el stack levantado.
-- [ ] `npx playwright test` termina con código 0, `npm run build` y `npx astro check` pasan, y `frontend/scripts/verificar_tamano.sh` pasa (ningún archivo de `src/` supera 50 líneas).
-- [ ] `escuela/sql/*.sql` se puede aplicar dos veces seguidas sin errores, y `escuela.sin_acentos('Fisiología')` devuelve `Fisiologia`.
-- [ ] `crear_administrador.sh` con un correo registrado deja una fila `administrador` en `roles_usuario`; con un correo inexistente termina con código distinto de 0 y no inserta nada.
-- [ ] `GET /escuela/mis-roles` sin token da `401 TOKEN_INVALIDO`; un usuario recién registrado recibe `{ "roles": [], "equipos": [] }`.
-- [ ] Cualquier endpoint de `/escuela/admin/*` llamado por un usuario sin rol `administrador` devuelve `403 SIN_PERMISO`.
-- [ ] Tras `asignar-rol` con `instructor`, el usuario ve el enlace "Instructor" en la cabecera y existe su fila en `perfiles_instructor`. Con `activo: false` pierde el rol y el enlace.
-- [ ] `crear-curso` por un usuario sin rol `instructor` da `403`. Por un instructor da `201` con un slug sin acentos; un segundo curso con el mismo título recibe el sufijo `-2`.
-- [ ] Editar, mover o borrar en un curso ajeno (de otro instructor, sin pertenecer a su equipo) da `403 SIN_PERMISO`.
-- [ ] Tras subir, bajar y borrar secciones y clases, las posiciones de cada nivel son exactamente `1..n`, y `mover` para subir el primer elemento no cambia nada.
-- [ ] `enviar-revision` de un curso sin portada y con una sección vacía da `422 CURSO_INCOMPLETO` con `falta_portada` y `seccion_vacia` en `detalles`.
-- [ ] Un curso `en_revision` rechaza `editar-curso`, `guardar-seccion` y `guardar-clase` con `409 CURSO_EN_REVISION`.
-- [ ] `resolver-revision` con `aprobar: false` y sin comentario da `422`. Con comentario, el curso vuelve a `borrador` y el instructor lo ve en el editor.
-- [ ] Al aprobar un curso se fija `publicado_en` y el curso aparece en `/cursos`. Tras `retirar-curso`, desaparece del catálogo y su ficha da `404`.
-- [ ] Sin sesión, `/cursos` y `/curso?c=<slug>` muestran los cursos publicados y el temario. Las clases con `es_muestra` llevan la etiqueta "Muestra", y en la página no hay ningún elemento `<video>` ni ninguna URL de video.
-- [ ] Buscar `anatomia`, `ANATOMÍA` y el nombre del instructor encuentra el curso "Anatomía básica". El filtro de categoría y el de nivel reducen el resultado, y con 13 cursos publicados hay 2 páginas.
-- [ ] `GET /escuela/curso` no devuelve `instructor_id`, `comentario_revision`, `estado` ni ningún correo.
-- [ ] La cabecera muestra el menú de categorías y el buscador en todas las páginas; elegir una categoría lleva a `/cursos?categoria=<slug>`.
-- [ ] `url-subida-portada` con `image/gif` o con más de 2 097 152 bytes da `422 PORTADA_INVALIDA`. Subir un PNG válido por la URL firmada y confirmar deja `portada_url` accesible sin sesión, y la portada anterior se borra del bucket.
-- [ ] `invitar-equipo` con un correo sin cuenta da `404 USUARIO_NO_REGISTRADO`. Con un correo registrado da `201` y Mailpit recibe un correo en español sin enlaces; repetirlo da `409 INVITACION_DUPLICADA`.
-- [ ] El invitado ve la invitación en `/panel`; al aceptarla obtiene el rol `equipo_apoyo` y puede editar el temario y marcar clases muestra de los cursos de ese instructor, pero no `editar-curso`, `enviar-revision`, la portada ni `invitar-equipo` (`403`).
-- [ ] Una invitación con `expira_en` en el pasado no aparece en `mis-invitaciones`, `responder-invitacion` la rechaza con `404`, y el instructor puede invitar de nuevo a ese correo.
-- [ ] `quitar-miembro` retira el acceso al temario. Si el usuario no está en otro equipo, pierde el rol `equipo_apoyo`.
-- [ ] `borrar-categoria` con cursos asignados da `409 CATEGORIA_EN_USO`.
-- [ ] Las rutas `/escuela/*` responden por Caddy `405` ante un método no permitido, `415` en `POST` sin JSON y `413` ante más de 10 KB, y por el puerto 5678 directo sin el secreto del proxy responden `403`.
-- [ ] Ningún workflow de `Escuela` guarda ejecuciones correctas, todos están publicados en la carpeta `Escuela` de n8n, y los nombres de workflows, nodos, campos, tablas y variables nuevas están en español.
-- [ ] Ningún archivo de `escuela/` ni de `frontend/` contiene la `SERVICE_ROLE_KEY`, `SECRETO_PROXY`, `JWT_SECRET` ni el email del owner.
-- [ ] `escuela/README.md` documenta cada endpoint, los errores, los permisos, cómo crear el primer administrador y cómo crear el bucket. La colección de Postman es JSON válido sin secretos.
+- [x] `escuela/pruebas/pruebas.sh` y `auth/pruebas/pruebas.sh` terminan con código 0 contra el stack levantado.
+- [x] `npx playwright test` termina con código 0, `npm run build` y `npx astro check` pasan, y `frontend/scripts/verificar_tamano.sh` pasa (ningún archivo de `src/` supera 50 líneas).
+- [x] `escuela/sql/*.sql` se puede aplicar dos veces seguidas sin errores, y `escuela.sin_acentos('Fisiología')` devuelve `Fisiologia`.
+- [x] `crear_administrador.sh` con un correo registrado deja una fila `administrador` en `roles_usuario`; con un correo inexistente termina con código distinto de 0 y no inserta nada.
+- [x] `GET /escuela/mis-roles` sin token da `401 TOKEN_INVALIDO`; un usuario recién registrado recibe `{ "roles": [], "equipos": [] }`.
+- [x] Cualquier endpoint de `/escuela/admin/*` llamado por un usuario sin rol `administrador` devuelve `403 SIN_PERMISO`.
+- [x] Tras `asignar-rol` con `instructor`, el usuario ve el enlace "Instructor" en la cabecera y existe su fila en `perfiles_instructor`. Con `activo: false` pierde el rol y el enlace.
+- [x] `crear-curso` por un usuario sin rol `instructor` da `403`. Por un instructor da `201` con un slug sin acentos; un segundo curso con el mismo título recibe el sufijo `-2`.
+- [x] Editar, mover o borrar en un curso ajeno (de otro instructor, sin pertenecer a su equipo) da `403 SIN_PERMISO`.
+- [x] Tras subir, bajar y borrar secciones y clases, las posiciones de cada nivel son exactamente `1..n`, y `mover` para subir el primer elemento no cambia nada.
+- [x] `enviar-revision` de un curso sin portada y con una sección vacía da `422 CURSO_INCOMPLETO` con `falta_portada` y `seccion_vacia` en `detalles`.
+- [x] Un curso `en_revision` rechaza `editar-curso`, `guardar-seccion` y `guardar-clase` con `409 CURSO_EN_REVISION`.
+- [x] `resolver-revision` con `aprobar: false` y sin comentario da `422`. Con comentario, el curso vuelve a `borrador` y el instructor lo ve en el editor.
+- [x] Al aprobar un curso se fija `publicado_en` y el curso aparece en `/cursos`. Tras `retirar-curso`, desaparece del catálogo y su ficha da `404`.
+- [x] Sin sesión, `/cursos` y `/curso?c=<slug>` muestran los cursos publicados y el temario. Las clases con `es_muestra` llevan la etiqueta "Muestra", y en la página no hay ningún elemento `<video>` ni ninguna URL de video.
+- [x] Buscar `anatomia`, `ANATOMÍA` y el nombre del instructor encuentra el curso "Anatomía básica". El filtro de categoría y el de nivel reducen el resultado, y con 13 cursos publicados hay 2 páginas.
+- [x] `GET /escuela/curso` no devuelve `instructor_id`, `comentario_revision`, `estado` ni ningún correo.
+- [x] La cabecera muestra el menú de categorías y el buscador en todas las páginas; elegir una categoría lleva a `/cursos?categoria=<slug>`.
+- [x] `url-subida-portada` con `image/gif` o con más de 2 097 152 bytes da `422 PORTADA_INVALIDA`. Subir un PNG válido por la URL firmada y confirmar deja `portada_url` accesible sin sesión, y la portada anterior se borra del bucket.
+- [x] `invitar-equipo` con un correo sin cuenta da `404 USUARIO_NO_REGISTRADO`. Con un correo registrado da `201` y Mailpit recibe un correo en español sin enlaces; repetirlo da `409 INVITACION_DUPLICADA`.
+- [x] El invitado ve la invitación en `/panel`; al aceptarla obtiene el rol `equipo_apoyo` y puede editar el temario y marcar clases muestra de los cursos de ese instructor, pero no `editar-curso`, `enviar-revision`, la portada ni `invitar-equipo` (`403`).
+- [x] Una invitación con `expira_en` en el pasado no aparece en `mis-invitaciones`, `responder-invitacion` la rechaza con `404`, y el instructor puede invitar de nuevo a ese correo.
+- [x] `quitar-miembro` retira el acceso al temario. Si el usuario no está en otro equipo, pierde el rol `equipo_apoyo`.
+- [x] `borrar-categoria` con cursos asignados da `409 CATEGORIA_EN_USO`.
+- [x] Las rutas `/escuela/*` responden por Caddy `405` ante un método no permitido, `415` en `POST` sin JSON y `413` ante más de 10 KB, y por el puerto 5678 directo sin el secreto del proxy responden `403`.
+- [x] Ningún workflow de la escuela guarda ejecuciones correctas, todos están publicados (los subworkflows también, n8n no ejecuta uno inactivo), los de roles y sesión están en la carpeta `Usuarios` y el resto en `Escuela`, y los nombres de workflows, nodos, campos, tablas y variables nuevas están en español.
+- [x] Cada workflow tiene una nota general y una nota por sección, y los grupos de nodos (que n8n exige conexos, con una entrada y una salida) se pueden colapsar. `python3 escuela/scripts/revisar_notas.py` termina con código 0 (cada nodo queda dentro de una sola nota y ninguna nota pisa a otra) y, abierto en el editor de n8n con Playwright, ningún workflow muestra notas cortadas ni superpuestas a los nodos.
+- [x] Ninguna lógica está copiada entre workflows: la comprobación de la sesión y los roles solo existe en `Validar sesion y roles`, y los demás la llaman.
+- [x] Ningún archivo de `escuela/` ni de `frontend/` contiene la `SERVICE_ROLE_KEY`, `SECRETO_PROXY`, `JWT_SECRET` ni el email del owner.
+- [x] `escuela/README.md` documenta cada endpoint, los errores, los permisos, cómo crear el primer administrador y cómo crear el bucket. La colección de Postman es JSON válido sin secretos.
 
 ## Decisiones tomadas y descartadas
 
@@ -300,6 +305,8 @@ CREATE UNIQUE INDEX invitaciones_pendiente_unica ON escuela.invitaciones_equipo 
 - **Tomada: un instructor dueño por curso.** **Descartados:** los coinstructores.
 - **Tomada: equipo de apoyo por instructor, modelado ya en esta spec.** SPEC 10 solo añade la moderación. **Descartados:** equipo por curso y dejarlo todo para la 10.
 - **Tomada: invitar solo a usuarios registrados**, por decisión del usuario, aunque eso le revela al instructor qué correos tienen cuenta. **Descartado:** aceptar cualquier correo con una respuesta idéntica.
+- **Tomada (al implementar): una invitación vencida se cierra como `cancelada` al reinvitar** (el enum no tiene `caducada`), porque el índice único de invitaciones pendientes no deja insertar otra mientras la vencida siga `pendiente`. Mientras tanto, deja de aparecer en `mis-invitaciones`.
+- **Tomada (al implementar): el correo de invitación sale sin la atribución que n8n añade por defecto** (`appendAttribution: false`), porque esa atribución lleva un enlace y la spec pide correos sin enlaces.
 - **Tomada: el correo solo avisa; se acepta en `/panel`, con caducidad de 7 días.** No hay enlaces ni códigos, igual que SPEC 05. **Descartados:** el código de 6 dígitos y que no caduque.
 
 **Publicación y catálogo:**
@@ -307,12 +314,16 @@ CREATE UNIQUE INDEX invitaciones_pendiente_unica ON escuela.invitaciones_equipo 
 - **Tomada: editar un curso publicado no lo devuelve a revisión.** Mantiene la spec manejable; el admin puede retirarlo. **Descartado:** versionar cursos publicados.
 - **Tomada: catálogo y ficha públicos, y todo video con cuenta (SPEC 08).** Atrae gente sin romper la regla de "sí o sí con cuenta" para ver clases. **Descartados:** todo cerrado y muestras sin cuenta.
 - **Tomada: fichas estáticas con carga en el cliente (`/curso?c=`).** Respeta SPEC 06. **Descartado:** SSR con `@astrojs/node` (mejor SEO; puede volver en otra spec).
+- **Tomada (al implementar): el slug se fija al crear el curso** y `editar-curso` no lo acepta. **Descartado:** regenerarlo mientras sea borrador, que complicaba las reglas sin dar nada a cambio.
 - **Tomada: reordenar con botones subir y bajar.** **Descartado:** arrastrar y soltar.
 
 **Infraestructura:**
 - **Tomada: Supabase Storage con URL firmada de subida por Kong** y el proxy `/almacen` de Astro. Es el mismo camino que usarán los videos y los archivos nunca pasan por n8n ni por el límite de 10 KB de Caddy. **Descartados:** subir a través de n8n y un disco local con Caddy.
+- **Tomada (al implementar): el servicio `storage` guarda sus archivos en un volumen nombrado de Docker (`storage-data`)** y no en `supabase/volumes/storage`. El backend de archivos de Storage usa atributos extendidos (xattr) y las carpetas montadas desde macOS no los admiten: toda subida daba `500`. Es también el volumen donde guardará los videos la SPEC 08. **Descartado:** el almacenamiento S3 (MinIO), que añadía un servicio más.
 - **Tomada: nuevo `GET /escuela/mis-roles`.** **Descartado:** ampliar `/autenticacion/yo`, que cambiaba un workflow cerrado de SPEC 04.
 - **Tomada: carpeta `escuela/` y prefijo `/escuela/*`.** **Descartado:** mezclarlo en `auth/`.
+- **Tomada (petición del usuario al implementar): grupos de nodos, notas adhesivas y subworkflows.** Cada tramo de lógica es un grupo colapsable con su nota, y lo repetido va en un subworkflow. **Descartada:** workflows planos de 10 a 15 nodos con la lógica copiada en cada endpoint. Los workflows se generan con un script y no se dibujan a mano, para que las notas y los grupos sean coherentes.
+- **Tomada (petición del usuario al implementar): los workflows de roles van en una carpeta `Usuarios` de n8n** y el resto en `Escuela`; cambia lo escrito en el alcance original, que decía una sola carpeta `Escuela`.
 
 **Fuera de esta spec:**
 - **Tomada: conocimientos previos como texto plano; la IA con Ollama va en SPEC 12.**
@@ -326,6 +337,8 @@ CREATE UNIQUE INDEX invitaciones_pendiente_unica ON escuela.invitaciones_equipo 
 - **`invitar-equipo` revela si un correo tiene cuenta**, aunque solo a instructores (decisión del usuario).
 - **`unaccent` requiere crear la extensión como superusuario** en la base `n8n`. Si la imagen de Postgres no la trae, el paso 1 lo detecta y se ajusta la spec.
 - **Subida directa a Kong:** Kong publica `/storage/v1` en `127.0.0.1:8000`. El paso 7 confirma que la subida firmada funciona sin la clave `anon` y que el proxy de Astro la reenvía. Como en SPEC 06, el proxy solo existe en desarrollo.
+- **Los archivos de Storage viven en el volumen `storage-data`:** `docker compose down -v` los borra, y copiarlos exige `docker run --volumes-from` o un respaldo de ese volumen (la carpeta `supabase/volumes/storage` ya no se usa).
+- **Portadas huérfanas:** si el navegador sube un archivo y nunca confirma, queda en el bucket sin curso. Es un archivo de hasta 2 MB; una limpieza periódica queda fuera de esta spec.
 - **Bucket `portadas` público:** cualquiera con la URL ve la imagen, lo cual se busca. Nunca debe usarse para videos (SPEC 08 usará un bucket privado).
 - **Las ediciones de un curso publicado se ven al momento sin revisión:** un instructor podría cambiar el contenido aprobado. Se mitiga con `retirar-curso`.
 - **Credencial `Supabase rol de servicio` en n8n:** salta todas las políticas de Storage y de Auth. Solo la usan los workflows de portada, invitación y búsqueda de usuarios, y nunca sale de n8n.

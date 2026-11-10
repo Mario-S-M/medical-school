@@ -1,0 +1,429 @@
+{
+  "id": "escValidar01",
+  "name": "Validar sesion y roles",
+  "description": "Subworkflow. Recibe la solicitud del webhook (con la cabecera Authorization), valida el token contra Supabase Auth (auth:9999/user) y devuelve { ok, usuario, roles, equipos } o { ok: false, estado, cuerpo }. Lo llaman todos los workflows protegidos de la escuela.",
+  "active": false,
+  "isArchived": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "executionTimeout": 15
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Entrada\nRecibe la solicitud del webhook que lo llamó.",
+        "height": 430,
+        "width": 240,
+        "color": 4
+      },
+      "id": "169f8b15-f1d9-5bd2-926a-16a6786bd664",
+      "name": "Nota Entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -70,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Leer token\nSaca el `Bearer` de la cabecera `Authorization`. Si falta o está mal formado, responde `401`.",
+        "height": 430,
+        "width": 480,
+        "color": 4
+      },
+      "id": "3d713417-1560-57fc-8ee6-d2f15b456dae",
+      "name": "Nota Leer token",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        260,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Consultar Supabase Auth\nPregunta a `auth:9999/user` quién es el dueño del token. Un token vencido o falso da `401`.",
+        "height": 430,
+        "width": 780,
+        "color": 1
+      },
+      "id": "68c264e7-f902-5ccc-aa73-378ccd8e9481",
+      "name": "Nota Consultar Supabase Auth",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        860,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Cargar roles y equipos\nLee en `escuela` los roles extra (el estudiante es implícito) y los equipos de apoyo del usuario.",
+        "height": 430,
+        "width": 480,
+        "color": 6
+      },
+      "id": "8f134825-9dee-59ed-aacb-ecaf77ad3676",
+      "name": "Nota Cargar roles y equipos",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -460
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Salida con error\nCualquier fallo termina aquí y se devuelve tal cual al workflow que llamó.",
+        "height": 430,
+        "width": 240,
+        "color": 3
+      },
+      "id": "fdd9ab5e-0516-5ee5-bce5-8eb0f4b12448",
+      "name": "Nota Salida con error",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1730,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Validar sesion y roles\nSubworkflow compartido: **ningún workflow protegido repite esta lógica**, todos lo llaman con *Execute Workflow* y le pasan la solicitud del webhook.\n\nSalida: `{ ok, usuario, roles, equipos }` o `{ ok: false, estado, cuerpo }`.",
+        "height": 150,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "15c62343-53b9-5290-98b7-91e84b97825f",
+      "name": "Nota Validar sesion y roles",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -650
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "8cd89494-2b91-525b-94c6-1a266aae5c40",
+      "name": "Disparador",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cabecera = String(($input.first().json.headers || {})['authorization'] || '');\nconst coincide = /^Bearer ([A-Za-z0-9_-]{10,2048}\\.[A-Za-z0-9_-]{10,2048}\\.[A-Za-z0-9_-]{10,2048})$/.exec(cabecera);\nif (!coincide) return [{ json: { ok: false, estado: 401, cuerpo: { error: { codigo: 'TOKEN_INVALIDO', mensaje: 'El token de acceso falta, no es válido o expiró.' } } } }];\nreturn [{ json: { ok: true, autorizacion: `Bearer ${coincide[1]}` } }];"
+      },
+      "id": "d4090e23-5561-5462-b381-494d9c935ce3",
+      "name": "Extraer token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6c780aa5-a00b-56d9-bdf6-5ee7a29cf5f9",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b3b5e496-ba81-5a7a-87ba-b72e5607ea4d",
+      "name": "Hay token",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://auth:9999/user",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $json.autorizacion }}"
+            }
+          ]
+        }
+      },
+      "id": "9a1b6120-951e-5f44-b678-4c470a625147",
+      "name": "Consultar usuario en Supabase Auth",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        -100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst gt = r.body && typeof r.body === 'object' ? r.body : {};\nif (r.statusCode === 200 && gt.id) {\n  return [{ json: { ok: true, usuario: { id: gt.id, correo: gt.email, nombre: (gt.user_metadata || {}).nombre ?? null } } }];\n}\nif ([400, 401, 403, 404].includes(r.statusCode)) return [{ json: { ok: false, estado: 401, cuerpo: { error: { codigo: 'TOKEN_INVALIDO', mensaje: 'El token de acceso falta, no es válido o expiró.' } } } }];\nif (r.statusCode === 429) return [{ json: { ok: false, estado: 429, cuerpo: { error: { codigo: 'DEMASIADOS_INTENTOS', mensaje: 'Demasiadas solicitudes. Inténtalo más tarde.' } } } }];\nreturn [{ json: { ok: false, estado: 500, cuerpo: { error: { codigo: 'ERROR_INTERNO', mensaje: 'Error interno del servidor.' } } } }];"
+      },
+      "id": "07e1a041-b240-5569-a721-137cf7a11fa4",
+      "name": "Clasificar respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "29df6f96-7cb3-5888-877b-12433ad36f43",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "67c9f39e-28e4-5b7b-b422-f8e8927fc78e",
+      "name": "Sesion valida",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1500,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  coalesce((SELECT array_agg(rol ORDER BY rol) FROM escuela.roles_usuario WHERE usuario_id = $1::uuid), '{}') AS roles,\n  coalesce((SELECT json_agg(json_build_object('instructor_id', e.instructor_id, 'nombre_publico', p.nombre_publico) ORDER BY e.creado_en)\n            FROM escuela.equipos_apoyo e LEFT JOIN escuela.perfiles_instructor p ON p.usuario_id = e.instructor_id\n            WHERE e.miembro_id = $1::uuid), '[]'::json) AS equipos;",
+        "options": {
+          "queryReplacement": "={{ [$json.usuario.id] }}"
+        }
+      },
+      "id": "8df6d96e-fa83-5894-bab9-c40605a54cb6",
+      "name": "Consultar roles y equipos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1800,
+        -200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgSupabase01",
+          "name": "Postgres n8n (Supabase)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const fila = $input.first().json;\nif (!Array.isArray(fila.roles)) return [{ json: { ok: false, estado: 500, cuerpo: { error: { codigo: 'ERROR_INTERNO', mensaje: 'Error interno del servidor.' } } } }];\nreturn [{ json: { ok: true, usuario: $('Clasificar respuesta').first().json.usuario, roles: fila.roles, equipos: fila.equipos || [] } }];"
+      },
+      "id": "5fd512f8-6ae9-51cc-a642-d3219c283ea6",
+      "name": "Armar contexto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2100,
+        -200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "3100f0ff-a6a6-57e9-a61d-5e3049bfce61",
+      "name": "Devolver error",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Disparador": {
+      "main": [
+        [
+          {
+            "node": "Extraer token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer token": {
+      "main": [
+        [
+          {
+            "node": "Hay token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hay token": {
+      "main": [
+        [
+          {
+            "node": "Consultar usuario en Supabase Auth",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Devolver error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar usuario en Supabase Auth": {
+      "main": [
+        [
+          {
+            "node": "Clasificar respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clasificar respuesta": {
+      "main": [
+        [
+          {
+            "node": "Sesion valida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sesion valida": {
+      "main": [
+        [
+          {
+            "node": "Consultar roles y equipos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Devolver error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar roles y equipos": {
+      "main": [
+        [
+          {
+            "node": "Armar contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [
+    {
+      "id": "8dd61e49-7029-57aa-b2e9-e1ba93ca6e00",
+      "name": "Leer token",
+      "nodeIds": [
+        "d4090e23-5561-5462-b381-494d9c935ce3",
+        "b3b5e496-ba81-5a7a-87ba-b72e5607ea4d"
+      ],
+      "description": "Extrae el token de la cabecera Authorization y corta con 401 si no es válido."
+    },
+    {
+      "id": "6fee23f2-3709-567b-819f-1de9554f757b",
+      "name": "Consultar Supabase Auth",
+      "nodeIds": [
+        "9a1b6120-951e-5f44-b678-4c470a625147",
+        "07e1a041-b240-5569-a721-137cf7a11fa4",
+        "67c9f39e-28e4-5b7b-b422-f8e8927fc78e"
+      ],
+      "description": "Valida el token contra Supabase Auth y traduce su respuesta."
+    },
+    {
+      "id": "b15a8067-ecac-5a42-98bb-fdb1a2e1059d",
+      "name": "Cargar roles y equipos",
+      "nodeIds": [
+        "8df6d96e-fa83-5894-bab9-c40605a54cb6",
+        "5fd512f8-6ae9-51cc-a642-d3219c283ea6"
+      ],
+      "description": "Lee los roles y equipos del usuario en el esquema escuela."
+    }
+  ],
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}

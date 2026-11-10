@@ -1,3 +1,4 @@
+import useRoles from '../../hooks/useRoles';
 import useSesion from '../../hooks/useSesion';
 import BotonCerrarSesion from '../auth/BotonCerrarSesion';
 
@@ -6,6 +7,7 @@ const primario = 'rounded-lg bg-sky-700 px-3.5 py-1.5 text-sm font-medium text-w
 
 export default function MenuSesion() {
   const { estado } = useSesion();
+  const { roles } = useRoles();
   if (estado === 'cargando') return <div className="h-8" aria-hidden="true" />;
   if (estado === 'anonima') {
     return (
@@ -17,6 +19,8 @@ export default function MenuSesion() {
   }
   return (
     <div className="flex items-center gap-1">
+      {(roles.includes('instructor') || roles.includes('equipo_apoyo')) && <a className={ghost} href="/instructor">Instructor</a>}
+      {roles.includes('administrador') && <a className={ghost} href="/admin/roles">Admin</a>}
       <a className={ghost} href="/panel">Panel</a>
       <BotonCerrarSesion />
     </div>

@@ -1,0 +1,799 @@
+{
+  "id": "escInvitarEquipo01",
+  "name": "Invitar al equipo",
+  "description": "POST /escuela/invitar-equipo. El instructor invita por correo a una cuenta ya registrada y verificada a su equipo de apoyo; el invitado recibe un aviso sin enlaces y responde en su panel. La invitación vence a los 7 días. No guarda ejecuciones.",
+  "active": false,
+  "isArchived": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "executionTimeout": 15
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Entrada\nWebhook protegido por el secreto del proxy (Caddy es la única entrada).",
+        "height": 430,
+        "width": 240,
+        "color": 4
+      },
+      "id": "2da6df41-2616-5148-a143-0198925b8eca",
+      "name": "Nota Entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -70,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Comprobar permiso\nExige el rol `instructor` con el subworkflow `Exigir rol`. Sin sesión da `401`; sin el rol, `403`.",
+        "height": 430,
+        "width": 780,
+        "color": 1
+      },
+      "id": "c47a73a2-111a-50b5-bc11-7fdfcb7e4e2f",
+      "name": "Nota Comprobar permiso",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        260,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Validar entrada\nSubworkflow `Validar campos`: tipos, largos y campos extra. Si falla, `422 VALIDACION_FALLIDA` con la lista de reglas.",
+        "height": 430,
+        "width": 480,
+        "color": 4
+      },
+      "id": "de563910-b75e-5b41-9e33-7cac2a92fcb3",
+      "name": "Nota Validar entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Buscar al invitado\nSubworkflow `Buscar cuenta por correo`. Solo se invita a cuentas **registradas y verificadas** (`404 USUARIO_NO_REGISTRADO`); nadie se invita a sí mismo (`409`).",
+        "height": 430,
+        "width": 780,
+        "color": 1
+      },
+      "id": "00588763-5e28-5c0d-a8ac-97a7adbddc7e",
+      "name": "Nota Buscar al invitado",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Crear la invitacion\nPrimero cierra las invitaciones vencidas de esa persona (así se puede reinvitar) y luego inserta la nueva con vigencia de 7 días. Ya miembro: `409 YA_ES_MIEMBRO`; ya invitado: `409 INVITACION_DUPLICADA`.",
+        "height": 430,
+        "width": 1080,
+        "color": 6
+      },
+      "id": "35dcb26f-d4a3-5f56-ae9d-f7e6e04a0a66",
+      "name": "Nota Crear la invitacion",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2660,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Avisar por correo\nLa plantilla `escuela/plantillas/invitacion_equipo.html` va en español y **sin enlaces**: solo avisa. El nombre se escapa para HTML. Si el SMTP falla la invitación igual queda creada (`correo_enviado: false`).",
+        "height": 430,
+        "width": 780,
+        "color": 5
+      },
+      "id": "8cdbac8e-b62a-5ec1-8970-1111f327189d",
+      "name": "Nota Avisar por correo",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3860,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Respuesta\nDevuelve el `201` o el error de cualquier paso anterior.",
+        "height": 430,
+        "width": 240,
+        "color": 5
+      },
+      "id": "9563016c-2d81-562d-ab5a-748c619c36e9",
+      "name": "Nota Respuesta",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        4730,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Invitar al equipo\n`POST /escuela/invitar-equipo` · solo `instructor`.\n\nEntrada: `{ correo }`. Responde `201 { id, expira_en, correo_enviado }`. El invitado acepta o rechaza en su panel (*Responder invitacion*); no hay enlaces ni códigos en el correo.",
+        "height": 150,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "0cc5d61a-946f-5c5c-8ea9-7d61ce6e7e45",
+      "name": "Nota Invitar al equipo",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -450
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "escuela/invitar-equipo",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f4265039-45a4-5dfd-a1cd-ec3a825abe32",
+      "name": "Recibir solicitud",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "secretoProxy01",
+          "name": "Secreto proxy"
+        }
+      },
+      "webhookId": "e77973e8-7d80-5a63-a10d-654de6e9163d"
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $input.first().json;\nreturn [{ json: { headers: e.headers, rol_requerido: \"instructor\", datos: e.body, reglas: {\"correo\": {\"tipo\": \"correo\"}} } }];"
+      },
+      "id": "f0334f0f-2b23-5b14-9415-996b987d1cdb",
+      "name": "Definir reglas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escExigirRol01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "74ce7a25-80e8-5a29-afd7-e87a8ca1f3e7",
+      "name": "Exigir rol",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "668163ca-af65-52bc-b6cb-1af51938cd49",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ea0551b4-30de-56a4-adca-bdb763c5f111",
+      "name": "Permiso valido",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escValidarCampos01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "9e9842e7-02a3-5c29-af8f-6c4019c68c5f",
+      "name": "Validar campos",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4f0d748a-ba51-5790-acfa-db18bed0af77",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "32c63028-b759-56a9-abc7-82d6b5a6b2e8",
+      "name": "Entrada valida",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escBuscarCuenta01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "59a6b464-8cca-5a60-aada-6ee542a9c34f",
+      "name": "Buscar cuenta por correo",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1800,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $input.first().json;\nconst yo = $('Entrada valida').first().json.usuario.id;\nconst error = (estado, codigo, mensaje) => [{ json: { ok: false, estado, cuerpo: { error: { codigo, mensaje } } } }];\nif (!c.ok && c.estado === 404) return error(404, 'USUARIO_NO_REGISTRADO', 'Ese correo no tiene una cuenta registrada.');\nif (!c.ok) return [{ json: c }];\nif (!c.verificado) return error(404, 'USUARIO_NO_REGISTRADO', 'Esa cuenta todavía no verificó su correo.');\nif (c.id === yo) return error(409, 'ESTADO_INVALIDO', 'No puedes invitarte a ti mismo.');\nreturn [{ json: { ok: true, miembro_id: c.id, correo: c.correo } }];"
+      },
+      "id": "34c3249a-5c11-5aab-b22b-19556e1bbdd7",
+      "name": "Revisar invitado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "89416697-fa81-50de-8e83-bf72a0302e3b",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "701e2af4-0a25-5886-afc2-ba4c7697cccf",
+      "name": "Invitado valido",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE escuela.invitaciones_equipo SET estado = 'cancelada', respondida_en = now() WHERE instructor_id = $1::uuid AND miembro_id = $2::uuid AND estado = 'pendiente' AND expira_en < now() RETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$('Entrada valida').first().json.usuario.id, $json.miembro_id] }}"
+        }
+      },
+      "id": "7be23a04-dda4-54fc-a888-904aa80e0641",
+      "name": "Cerrar invitaciones caducadas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2700,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgSupabase01",
+          "name": "Postgres n8n (Supabase)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH miembro AS (SELECT 1 FROM escuela.equipos_apoyo WHERE instructor_id = $1::uuid AND miembro_id = $2::uuid),\nvigente AS (SELECT 1 FROM escuela.invitaciones_equipo WHERE instructor_id = $1::uuid AND miembro_id = $2::uuid AND estado = 'pendiente' AND expira_en >= now()),\nnueva AS (\n  INSERT INTO escuela.invitaciones_equipo (instructor_id, miembro_id, correo)\n  SELECT $1::uuid, $2::uuid, $3::text WHERE NOT EXISTS (SELECT 1 FROM miembro) AND NOT EXISTS (SELECT 1 FROM vigente) RETURNING id, expira_en\n)\nSELECT CASE WHEN EXISTS (SELECT 1 FROM miembro) THEN 'ya_es_miembro' WHEN EXISTS (SELECT 1 FROM vigente) THEN 'duplicada' ELSE 'ok' END AS resultado,\n       (SELECT id FROM nueva) AS id, (SELECT expira_en FROM nueva) AS expira_en,\n       coalesce((SELECT nombre_publico FROM escuela.perfiles_instructor WHERE usuario_id = $1::uuid), 'Un instructor') AS instructor;",
+        "options": {
+          "queryReplacement": "={{ [$('Entrada valida').first().json.usuario.id, $('Revisar invitado').first().json.miembro_id, $('Revisar invitado').first().json.correo] }}"
+        }
+      },
+      "id": "03e0b35f-e542-51df-aaaf-5d2476c1deff",
+      "name": "Crear la invitacion",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3000,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgSupabase01",
+          "name": "Postgres n8n (Supabase)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst error = (estado, codigo, mensaje) => [{ json: { ok: false, estado, cuerpo: { error: { codigo, mensaje } } } }];\nif (r.resultado === 'ya_es_miembro') return error(409, 'YA_ES_MIEMBRO', 'Esa persona ya está en tu equipo.');\nif (r.resultado === 'duplicada') return error(409, 'INVITACION_DUPLICADA', 'Ya hay una invitación pendiente para esa persona.');\nif (r.resultado !== 'ok') return error(500, 'ERROR_INTERNO', 'Error interno del servidor.');\nreturn [{ json: { ok: true, id: Number(r.id), expira_en: r.expira_en, instructor: r.instructor } }];"
+      },
+      "id": "b114fcde-4281-5003-883f-adf4990c426d",
+      "name": "Clasificar invitacion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fdafe7b2-3d83-5007-be32-a748902df2a9",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1da472a0-bf29-514e-a7a9-392e5b76c3da",
+      "name": "Invitacion creada",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const PLANTILLA = \"<!doctype html>\\n<html lang=\\\"es\\\">\\n  <body style=\\\"font-family: system-ui, sans-serif; color: #0f172a; max-width: 480px; margin: 0 auto; padding: 24px\\\">\\n    <h1 style=\\\"font-size: 20px\\\">Te invitaron al equipo de apoyo</h1>\\n    <p><strong>{{nombre_instructor}}</strong> te invitó a formar parte de su equipo de apoyo en Medical School.</p>\\n    <p>\\n      Como parte del equipo podrás ayudar a armar el temario de sus cursos y, más adelante, responder las preguntas de\\n      sus alumnos.\\n    </p>\\n    <p>\\n      Para aceptar o rechazar la invitación, inicia sesión en la plataforma con este correo y entra a tu\\n      <strong>Panel</strong>. La invitación vence el <strong>{{fecha_limite}}</strong>.\\n    </p>\\n    <p style=\\\"color: #64748b; font-size: 13px\\\">Si no esperabas este mensaje, puedes ignorarlo.</p>\\n  </body>\\n</html>\\n\";\nconst esc = (t) => String(t).replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);\nconst i = $input.first().json;\nconst limite = new Date(i.expira_en).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Mexico_City' });\nconst html = PLANTILLA.replaceAll('{{nombre_instructor}}', esc(i.instructor)).replaceAll('{{fecha_limite}}', esc(limite));\nreturn [{ json: { para: $('Revisar invitado').first().json.correo, asunto: `${i.instructor} te invitó a su equipo de apoyo`, html } }];"
+      },
+      "id": "c35ecf56-02ee-5bb9-abaf-7e8d8288b45e",
+      "name": "Armar correo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "fromEmail": "Medical School <no-responder@escuela.local>",
+        "toEmail": "={{ $json.para }}",
+        "subject": "={{ $json.asunto }}",
+        "emailFormat": "html",
+        "html": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "c19a5a6d-38be-50e7-8cb1-933b8df9f742",
+      "name": "Enviar correo",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        4200,
+        0
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "smtpMailpit01",
+          "name": "SMTP Mailpit"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $('Clasificar invitacion').first().json;\nconst enviado = !$input.first().json.error;\nreturn [{ json: { estado: 201, cuerpo: { id: c.id, expira_en: c.expira_en, correo_enviado: enviado } } }];"
+      },
+      "id": "464ad446-0f86-50d8-a569-78f0e716f53b",
+      "name": "Armar respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.cuerpo === null ? '' : JSON.stringify($json.cuerpo) }}",
+        "options": {
+          "responseCode": "={{ $json.estado }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "X-Flujo",
+                "value": "escuela"
+              }
+            ]
+          }
+        }
+      },
+      "id": "dfb59132-71ad-55a8-a68a-ed6608e03bef",
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        4800,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Recibir solicitud": {
+      "main": [
+        [
+          {
+            "node": "Definir reglas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Definir reglas": {
+      "main": [
+        [
+          {
+            "node": "Exigir rol",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exigir rol": {
+      "main": [
+        [
+          {
+            "node": "Permiso valido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Permiso valido": {
+      "main": [
+        [
+          {
+            "node": "Validar campos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar campos": {
+      "main": [
+        [
+          {
+            "node": "Entrada valida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrada valida": {
+      "main": [
+        [
+          {
+            "node": "Buscar cuenta por correo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar cuenta por correo": {
+      "main": [
+        [
+          {
+            "node": "Revisar invitado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revisar invitado": {
+      "main": [
+        [
+          {
+            "node": "Invitado valido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invitado valido": {
+      "main": [
+        [
+          {
+            "node": "Cerrar invitaciones caducadas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cerrar invitaciones caducadas": {
+      "main": [
+        [
+          {
+            "node": "Crear la invitacion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear la invitacion": {
+      "main": [
+        [
+          {
+            "node": "Clasificar invitacion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clasificar invitacion": {
+      "main": [
+        [
+          {
+            "node": "Invitacion creada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invitacion creada": {
+      "main": [
+        [
+          {
+            "node": "Armar correo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar correo": {
+      "main": [
+        [
+          {
+            "node": "Enviar correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar correo": {
+      "main": [
+        [
+          {
+            "node": "Armar respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar respuesta": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [
+    {
+      "id": "3d6eceb6-3019-50ec-bd7c-5781a9088728",
+      "name": "Comprobar permiso",
+      "nodeIds": [
+        "f0334f0f-2b23-5b14-9415-996b987d1cdb",
+        "74ce7a25-80e8-5a29-afd7-e87a8ca1f3e7",
+        "ea0551b4-30de-56a4-adca-bdb763c5f111"
+      ],
+      "description": "Exige el rol instructor con el subworkflow compartido."
+    },
+    {
+      "id": "acf86db6-34e4-5953-8989-61964da21359",
+      "name": "Validar entrada",
+      "nodeIds": [
+        "9e9842e7-02a3-5c29-af8f-6c4019c68c5f",
+        "32c63028-b759-56a9-abc7-82d6b5a6b2e8"
+      ],
+      "description": "Valida y normaliza los campos con el subworkflow compartido."
+    },
+    {
+      "id": "ee92be8b-5f1d-500c-b192-7eaf93b430a1",
+      "name": "Buscar al invitado",
+      "nodeIds": [
+        "59a6b464-8cca-5a60-aada-6ee542a9c34f",
+        "34c3249a-5c11-5aab-b22b-19556e1bbdd7",
+        "701e2af4-0a25-5886-afc2-ba4c7697cccf"
+      ],
+      "description": "Comprueba que el invitado tenga cuenta verificada."
+    },
+    {
+      "id": "00e73376-8b81-57d1-ab16-ba25108fec16",
+      "name": "Crear la invitacion",
+      "nodeIds": [
+        "7be23a04-dda4-54fc-a888-904aa80e0641",
+        "03e0b35f-e542-51df-aaaf-5d2476c1deff",
+        "b114fcde-4281-5003-883f-adf4990c426d",
+        "1da472a0-bf29-514e-a7a9-392e5b76c3da"
+      ],
+      "description": "Cierra las caducadas y crea la invitación vigente."
+    },
+    {
+      "id": "02531bbd-7563-5df6-a37c-da6e5b7ad70a",
+      "name": "Avisar por correo",
+      "nodeIds": [
+        "c35ecf56-02ee-5bb9-abaf-7e8d8288b45e",
+        "c19a5a6d-38be-50e7-8cb1-933b8df9f742",
+        "464ad446-0f86-50d8-a569-78f0e716f53b"
+      ],
+      "description": "Envía el aviso por SMTP (Mailpit en local) y arma el 201."
+    }
+  ],
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}
