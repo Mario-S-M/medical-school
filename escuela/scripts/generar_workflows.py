@@ -627,6 +627,131 @@ return [{{ json: {{ estado: 500, cuerpo: {ERROR_INTERNO_JS} }} }}];""", x + 240,
     f.guardar()
 
 
+ROLES_TEMARIO = ["instructor", "equipo_apoyo"]
+TEXTO_ID = {"tipo": "entero", "minimo": 1, "maximo": 9007199254740}
+
+
+def respuesta_temario(f, x, ok_js, titulo_nota):
+    """Nodo "Armar respuesta" común de los endpoints del temario: 404 si el SQL no encontró nada."""
+    f.codigo("Armar respuesta", f"""const r = $input.first().json;
+{ok_js}
+return [{{ json: {{ estado: 404, cuerpo: {{ error: {{ codigo: 'NO_ENCONTRADO', mensaje: '{titulo_nota} no existe en este curso.' }} }} }} }}];""", x, 0)
+
+
+def guardar_seccion():
+    f = Flujo("escGuardarSeccion01", "Guardar seccion", "POST /escuela/guardar-seccion. Crea una sección al final del temario o renombra una existente (instructor dueño o su equipo de apoyo; no en revisión). No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/guardar-seccion", ROLES_TEMARIO, "body", {
+        "curso_id": TEXTO_ID, "seccion_id": {**TEXTO_ID, "opcional": True}, "titulo": {"tipo": "texto", "minimo": 1, "maximo": 120}},
+        {"modo": "dueno_o_equipo", "editable": True, "tipo": "curso", "campo": "curso_id"})
+    f.sql("Guardar la seccion", """WITH nueva AS (
+  INSERT INTO escuela.secciones (curso_id, titulo, posicion)
+  SELECT $1::bigint, $3::text, coalesce((SELECT max(posicion) FROM escuela.secciones WHERE curso_id = $1::bigint), 0) + 1
+  WHERE $2::bigint IS NULL RETURNING id
+), editada AS (
+  UPDATE escuela.secciones SET titulo = $3::text WHERE id = $2::bigint AND curso_id = $1::bigint RETURNING id
+)
+SELECT coalesce((SELECT id FROM nueva), (SELECT id FROM editada)) AS id;""", "={{ [$json.datos.curso_id, $json.datos.seccion_id, $json.datos.titulo] }}", x, 0)
+    respuesta_temario(f, x + 240, "if (r.id) return [{ json: { estado: 200, cuerpo: { id: Number(r.id) } } }];", "La sección")
+    f.unir("Acceso valido", "Guardar la seccion"); f.unir("Guardar la seccion", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Guardar la seccion", "Armar respuesta"], "Guardar la seccion", "Sin `seccion_id` crea la sección al final (`posicion` = última + 1); con `seccion_id` la renombra. Una sección de otro curso da `404`.")
+    f.general("Guardar seccion", "`POST /escuela/guardar-seccion` · instructor dueño o equipo de apoyo.\n\nEntrada: `{ curso_id, seccion_id?, titulo }`. Responde `200 { id }`. Los cambios actualizan la fecha del curso con un disparador de `escuela`.")
+    f.guardar()
+
+
+def borrar_seccion():
+    f = Flujo("escBorrarSeccion01", "Borrar seccion", "POST /escuela/borrar-seccion. Borra una sección con sus clases y renumera las demás (instructor dueño o su equipo; no en revisión). No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/borrar-seccion", ROLES_TEMARIO, "body", {"seccion_id": TEXTO_ID},
+                  {"modo": "dueno_o_equipo", "editable": True, "tipo": "seccion", "campo": "seccion_id"})
+    f.sql("Borrar y renumerar", """WITH borrada AS (
+  DELETE FROM escuela.secciones WHERE id = $1::bigint RETURNING curso_id
+), renumeradas AS (
+  UPDATE escuela.secciones s SET posicion = n.nueva
+  FROM (SELECT id, row_number() OVER (ORDER BY posicion) AS nueva FROM escuela.secciones
+        WHERE curso_id = (SELECT curso_id FROM borrada) AND id <> $1::bigint) n
+  WHERE s.id = n.id RETURNING s.id
+)
+SELECT EXISTS (SELECT 1 FROM borrada) AS borrada;""", "={{ [$json.datos.seccion_id] }}", x, 0)
+    respuesta_temario(f, x + 240, "if (r.borrada) return [{ json: { estado: 204, cuerpo: null } }];", "La sección")
+    f.unir("Acceso valido", "Borrar y renumerar"); f.unir("Borrar y renumerar", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Borrar y renumerar", "Armar respuesta"], "Borrar la seccion", "Borra la sección (sus clases se van con ella) y deja las demás numeradas `1..n` sin huecos, todo en una sola consulta.")
+    f.general("Borrar seccion", "`POST /escuela/borrar-seccion` · instructor dueño o equipo de apoyo.\n\nEntrada: `{ seccion_id }`. Responde `204`.")
+    f.guardar()
+
+
+def guardar_clase():
+    f = Flujo("escGuardarClase01", "Guardar clase", "POST /escuela/guardar-clase. Crea una clase al final de la sección o edita una existente: título, descripción, duración estimada y si es clase muestra (sin video todavía). No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/guardar-clase", ROLES_TEMARIO, "body", {
+        "seccion_id": TEXTO_ID, "clase_id": {**TEXTO_ID, "opcional": True}, "titulo": {"tipo": "texto", "minimo": 1, "maximo": 120},
+        "descripcion": {"tipo": "texto", "opcional": True, "maximo": 2000, "multilinea": True},
+        "duracion_estimada_minutos": {"tipo": "entero", "opcional": True, "minimo": 1, "maximo": 180}, "es_muestra": {"tipo": "booleano"}},
+        {"modo": "dueno_o_equipo", "editable": True, "tipo": "seccion", "campo": "seccion_id"})
+    f.sql("Guardar la clase", """WITH nueva AS (
+  INSERT INTO escuela.clases (seccion_id, titulo, descripcion, duracion_estimada_minutos, es_muestra, posicion)
+  SELECT $1::bigint, $3::text, $4::text, $5::int, $6::boolean, coalesce((SELECT max(posicion) FROM escuela.clases WHERE seccion_id = $1::bigint), 0) + 1
+  WHERE $2::bigint IS NULL RETURNING id
+), editada AS (
+  UPDATE escuela.clases SET titulo = $3::text, descripcion = $4::text, duracion_estimada_minutos = $5::int, es_muestra = $6::boolean
+  WHERE id = $2::bigint AND seccion_id = $1::bigint RETURNING id
+)
+SELECT coalesce((SELECT id FROM nueva), (SELECT id FROM editada)) AS id;""",
+          "={{ [$json.datos.seccion_id, $json.datos.clase_id, $json.datos.titulo, $json.datos.descripcion, $json.datos.duracion_estimada_minutos, $json.datos.es_muestra] }}", x, 0)
+    respuesta_temario(f, x + 240, "if (r.id) return [{ json: { estado: 200, cuerpo: { id: Number(r.id) } } }];", "La clase")
+    f.unir("Acceso valido", "Guardar la clase"); f.unir("Guardar la clase", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Guardar la clase", "Armar respuesta"], "Guardar la clase", "Sin `clase_id` crea la clase al final de la sección; con `clase_id` reemplaza sus datos. `es_muestra` solo marca la clase: el video y su reproducción llegan en la SPEC 08.")
+    f.general("Guardar clase", "`POST /escuela/guardar-clase` · instructor dueño o equipo de apoyo.\n\nEntrada: `{ seccion_id, clase_id?, titulo, descripcion?, duracion_estimada_minutos?, es_muestra }`. Responde `200 { id }`. La duración es solo una estimación (1 a 180 min).")
+    f.guardar()
+
+
+def borrar_clase():
+    f = Flujo("escBorrarClase01", "Borrar clase", "POST /escuela/borrar-clase. Borra una clase y renumera las de su sección (instructor dueño o su equipo; no en revisión). No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/borrar-clase", ROLES_TEMARIO, "body", {"clase_id": TEXTO_ID},
+                  {"modo": "dueno_o_equipo", "editable": True, "tipo": "clase", "campo": "clase_id"})
+    f.sql("Borrar y renumerar", """WITH borrada AS (
+  DELETE FROM escuela.clases WHERE id = $1::bigint RETURNING seccion_id
+), renumeradas AS (
+  UPDATE escuela.clases k SET posicion = n.nueva
+  FROM (SELECT id, row_number() OVER (ORDER BY posicion) AS nueva FROM escuela.clases
+        WHERE seccion_id = (SELECT seccion_id FROM borrada) AND id <> $1::bigint) n
+  WHERE k.id = n.id RETURNING k.id
+)
+SELECT EXISTS (SELECT 1 FROM borrada) AS borrada;""", "={{ [$json.datos.clase_id] }}", x, 0)
+    respuesta_temario(f, x + 240, "if (r.borrada) return [{ json: { estado: 204, cuerpo: null } }];", "La clase")
+    f.unir("Acceso valido", "Borrar y renumerar"); f.unir("Borrar y renumerar", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Borrar y renumerar", "Armar respuesta"], "Borrar la clase", "Borra la clase y deja las demás de su sección numeradas `1..n` sin huecos.")
+    f.general("Borrar clase", "`POST /escuela/borrar-clase` · instructor dueño o equipo de apoyo.\n\nEntrada: `{ clase_id }`. Responde `204`.")
+    f.guardar()
+
+
+def mover():
+    f = Flujo("escMover01", "Mover", "POST /escuela/mover. Sube o baja una sección dentro del curso o una clase dentro de su sección, intercambiándola con su vecina (instructor dueño o su equipo; no en revisión). No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/mover", ROLES_TEMARIO, "body", {
+        "tipo": {"tipo": "opcion", "valores": ["seccion", "clase"]}, "id": TEXTO_ID, "direccion": {"tipo": "opcion", "valores": ["subir", "bajar"]}},
+        {"modo": "dueno_o_equipo", "editable": True, "tipo": "dato", "campo": "id"})
+    f.sql("Intercambiar posiciones", """WITH s_act AS (
+  SELECT id, curso_id, posicion FROM escuela.secciones WHERE $1::text = 'seccion' AND id = $2::bigint
+), s_vec AS (
+  SELECT x.id, x.posicion FROM escuela.secciones x JOIN s_act a ON x.curso_id = a.curso_id AND x.posicion = a.posicion + $3::int
+), s_mov AS (
+  UPDATE escuela.secciones x SET posicion = CASE WHEN x.id = (SELECT id FROM s_act) THEN (SELECT posicion FROM s_vec) ELSE (SELECT posicion FROM s_act) END
+  WHERE x.id IN ((SELECT id FROM s_act), (SELECT id FROM s_vec)) AND EXISTS (SELECT 1 FROM s_vec) RETURNING 1
+), c_act AS (
+  SELECT id, seccion_id, posicion FROM escuela.clases WHERE $1::text = 'clase' AND id = $2::bigint
+), c_vec AS (
+  SELECT x.id, x.posicion FROM escuela.clases x JOIN c_act a ON x.seccion_id = a.seccion_id AND x.posicion = a.posicion + $3::int
+), c_mov AS (
+  UPDATE escuela.clases x SET posicion = CASE WHEN x.id = (SELECT id FROM c_act) THEN (SELECT posicion FROM c_vec) ELSE (SELECT posicion FROM c_act) END
+  WHERE x.id IN ((SELECT id FROM c_act), (SELECT id FROM c_vec)) AND EXISTS (SELECT 1 FROM c_vec) RETURNING 1
+)
+SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM s_act UNION ALL SELECT 1 FROM c_act) THEN 'no_encontrado'
+            WHEN EXISTS (SELECT 1 FROM s_mov UNION ALL SELECT 1 FROM c_mov) THEN 'movido' ELSE 'sin_cambio' END AS resultado;""",
+          "={{ [$json.datos.tipo, $json.datos.id, $json.datos.direccion === 'subir' ? -1 : 1] }}", x, 0)
+    respuesta_temario(f, x + 240, "if (r.resultado === 'movido' || r.resultado === 'sin_cambio') return [{ json: { estado: 200, cuerpo: { movido: r.resultado === 'movido' } } }];", "El elemento")
+    f.unir("Acceso valido", "Intercambiar posiciones"); f.unir("Intercambiar posiciones", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Intercambiar posiciones", "Armar respuesta"], "Intercambiar posiciones", "Cambia de lugar al elemento con su vecino. Subir el primero o bajar el último no cambia nada y responde `200 { movido: false }`.")
+    f.general("Mover", "`POST /escuela/mover` · instructor dueño o equipo de apoyo.\n\nEntrada: `{ tipo: 'seccion' | 'clase', id, direccion: 'subir' | 'bajar' }`. Las posiciones son siempre `1..n`, así que mover es intercambiar con la vecina. Lo usan los botones *Subir* y *Bajar* del editor.")
+    f.guardar()
+
+
 if __name__ == "__main__":
     validar_sesion_y_roles()
     mis_roles()
@@ -642,3 +767,8 @@ if __name__ == "__main__":
     curso_edicion()
     crear_curso()
     editar_curso()
+    guardar_seccion()
+    borrar_seccion()
+    guardar_clase()
+    borrar_clase()
+    mover()

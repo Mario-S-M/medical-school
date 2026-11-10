@@ -298,6 +298,98 @@ cuerpo_tiene '"CURSO_EN_REVISION"' "curso en revisión -> CURSO_EN_REVISION"
 api GET "/escuela/curso-edicion?id=$CURSO_A" "$TOKEN_instructor_a"
 estado_es 200 "un curso en revisión se puede abrir (solo lectura)"
 
+echo "== Temario: secciones y clases"
+psql_n8n "update escuela.cursos set estado = 'borrador' where id = $CURSO_A" > /dev/null
+posiciones() { psql_n8n "select string_agg(posicion::text, ',' order by posicion) from escuela.$1 where $2"; }
+api POST /escuela/guardar-seccion "$TOKEN_estudiante" "{\"curso_id\":$CURSO_A,\"titulo\":\"Intro\"}"
+estado_es 403 "guardar-seccion sin rol -> 403"
+api POST /escuela/guardar-seccion "$TOKEN_instructor_b" "{\"curso_id\":$CURSO_A,\"titulo\":\"Intro\"}"
+estado_es 403 "guardar-seccion en un curso ajeno -> 403"
+api POST /escuela/guardar-seccion "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"titulo\":\"\"}"
+estado_es 422 "guardar-seccion con un título vacío -> 422"
+api POST /escuela/guardar-seccion "$TOKEN_instructor_a" "{\"curso_id\":99999999,\"titulo\":\"Intro\"}"
+estado_es 404 "guardar-seccion en un curso inexistente -> 404"
+ANTES="$(psql_n8n "select actualizado_en from escuela.cursos where id = $CURSO_A")"; sleep 1
+api POST /escuela/guardar-seccion "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"titulo\":\"Introducción\"}"
+estado_es 200 "guardar-seccion del dueño -> 200"
+SEC1="$(campo_json id)"
+[ "$(psql_n8n "select actualizado_en from escuela.cursos where id = $CURSO_A")" != "$ANTES" ]; verificar "editar el temario actualiza la fecha del curso" $?
+api POST /escuela/guardar-seccion "$TOKEN_miembro" "{\"curso_id\":$CURSO_A,\"titulo\":\"Huesos\"}"
+estado_es 200 "el equipo de apoyo puede crear secciones"
+SEC2="$(campo_json id)"
+api POST /escuela/guardar-seccion "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"titulo\":\"Músculos\"}"
+SEC3="$(campo_json id)"
+[ "$(posiciones secciones "curso_id = $CURSO_A")" = "1,2,3" ]; verificar "las secciones nuevas quedan al final con posiciones 1,2,3" $?
+api POST /escuela/guardar-seccion "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"seccion_id\":$SEC1,\"titulo\":\"Introducción general\"}"
+estado_es 200 "guardar-seccion con seccion_id renombra"
+[ "$(psql_n8n "select titulo from escuela.secciones where id = $SEC1")" = "Introducción general" ]; verificar "el nombre de la sección cambió" $?
+api POST /escuela/guardar-seccion "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"seccion_id\":99999999,\"titulo\":\"X\"}"
+estado_es 404 "renombrar una sección que no es del curso -> 404"
+api POST /escuela/guardar-clase "$TOKEN_instructor_a" "{\"seccion_id\":$SEC1,\"titulo\":\"Bienvenida\",\"es_muestra\":true,\"duracion_estimada_minutos\":4,\"descripcion\":\"Hola\"}"
+estado_es 200 "guardar-clase -> 200"
+CLA1="$(campo_json id)"
+api POST /escuela/guardar-clase "$TOKEN_miembro" "{\"seccion_id\":$SEC1,\"titulo\":\"Cómo estudiar\",\"es_muestra\":false}"
+estado_es 200 "el equipo de apoyo puede crear clases"
+CLA2="$(campo_json id)"
+api POST /escuela/guardar-clase "$TOKEN_instructor_a" "{\"seccion_id\":$SEC1,\"titulo\":\"Cierre\",\"es_muestra\":false}"
+CLA3="$(campo_json id)"
+[ "$(posiciones clases "seccion_id = $SEC1")" = "1,2,3" ]; verificar "las clases nuevas quedan al final con posiciones 1,2,3" $?
+api POST /escuela/guardar-clase "$TOKEN_instructor_a" "{\"seccion_id\":$SEC1,\"clase_id\":$CLA2,\"titulo\":\"Cómo estudiar mejor\",\"es_muestra\":true,\"duracion_estimada_minutos\":6}"
+estado_es 200 "guardar-clase con clase_id edita"
+[ "$(psql_n8n "select es_muestra and duracion_estimada_minutos = 6 and titulo = 'Cómo estudiar mejor' from escuela.clases where id = $CLA2")" = "t" ]; verificar "la clase se editó (muestra y duración)" $?
+api POST /escuela/guardar-clase "$TOKEN_instructor_a" "{\"seccion_id\":$SEC1,\"titulo\":\"X\",\"es_muestra\":false,\"duracion_estimada_minutos\":0}"
+estado_es 422 "duración estimada de 0 minutos -> 422"
+api POST /escuela/guardar-clase "$TOKEN_instructor_a" "{\"seccion_id\":$SEC1,\"titulo\":\"X\",\"es_muestra\":false,\"duracion_estimada_minutos\":181}"
+estado_es 422 "duración estimada de más de 180 minutos -> 422"
+api POST /escuela/guardar-clase "$TOKEN_instructor_a" "{\"seccion_id\":$SEC1,\"titulo\":\"X\"}"
+estado_es 422 "es_muestra es obligatorio -> 422"
+api POST /escuela/guardar-clase "$TOKEN_instructor_a" "{\"seccion_id\":$SEC2,\"clase_id\":$CLA1,\"titulo\":\"X\",\"es_muestra\":false}"
+estado_es 404 "editar una clase con la sección de otra -> 404"
+api POST /escuela/guardar-clase "$TOKEN_instructor_b" "{\"seccion_id\":$SEC1,\"titulo\":\"X\",\"es_muestra\":false}"
+estado_es 403 "guardar-clase en un curso ajeno -> 403"
+api POST /escuela/guardar-clase "$TOKEN_instructor_a" "{\"seccion_id\":99999999,\"titulo\":\"X\",\"es_muestra\":false}"
+estado_es 404 "guardar-clase en una sección inexistente -> 404"
+api GET "/escuela/curso-edicion?id=$CURSO_A" "$TOKEN_instructor_a"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; s=json.load(sys.stdin)['secciones']; print([x['posicion'] for x in s]==[1,2,3] and [c['posicion'] for c in s[0]['clases']]==[1,2,3] and s[0]['clases'][0]['es_muestra'] is True)")" = "True" ]; verificar "curso-edicion devuelve el temario completo y en orden" $?
+
+echo "== Temario: mover y borrar"
+api POST /escuela/mover "$TOKEN_instructor_a" "{\"tipo\":\"seccion\",\"id\":$SEC1,\"direccion\":\"subir\"}"
+estado_es 200 "subir la primera sección -> 200"
+cuerpo_tiene '"movido":false' "subir el primero no cambia nada"
+api POST /escuela/mover "$TOKEN_instructor_a" "{\"tipo\":\"seccion\",\"id\":$SEC1,\"direccion\":\"bajar\"}"
+cuerpo_tiene '"movido":true' "bajar la primera sección sí mueve"
+[ "$(psql_n8n "select string_agg(id::text, ',' order by posicion) from escuela.secciones where curso_id = $CURSO_A")" = "$SEC2,$SEC1,$SEC3" ]; verificar "el orden de las secciones quedó $SEC2,$SEC1,$SEC3" $?
+api POST /escuela/mover "$TOKEN_miembro" "{\"tipo\":\"clase\",\"id\":$CLA3,\"direccion\":\"subir\"}"
+estado_es 200 "el equipo de apoyo puede reordenar clases"
+[ "$(psql_n8n "select string_agg(id::text, ',' order by posicion) from escuela.clases where seccion_id = $SEC1")" = "$CLA1,$CLA3,$CLA2" ]; verificar "el orden de las clases quedó $CLA1,$CLA3,$CLA2" $?
+[ "$(posiciones clases "seccion_id = $SEC1")" = "1,2,3" ]; verificar "mover deja las posiciones 1,2,3 sin huecos" $?
+api POST /escuela/mover "$TOKEN_instructor_a" "{\"tipo\":\"otro\",\"id\":$SEC1,\"direccion\":\"subir\"}"
+estado_es 422 "mover con un tipo inválido -> 422"
+api POST /escuela/mover "$TOKEN_instructor_b" "{\"tipo\":\"seccion\",\"id\":$SEC1,\"direccion\":\"subir\"}"
+estado_es 403 "mover en un curso ajeno -> 403"
+api POST /escuela/mover "$TOKEN_instructor_a" "{\"tipo\":\"clase\",\"id\":99999999,\"direccion\":\"subir\"}"
+estado_es 404 "mover un elemento inexistente -> 404"
+api POST /escuela/borrar-clase "$TOKEN_instructor_b" "{\"clase_id\":$CLA1}"
+estado_es 403 "borrar-clase en un curso ajeno -> 403"
+api POST /escuela/borrar-clase "$TOKEN_instructor_a" "{\"clase_id\":$CLA1}"
+estado_es 204 "borrar-clase -> 204"
+[ "$(posiciones clases "seccion_id = $SEC1")" = "1,2" ]; verificar "borrar una clase renumera las demás (1,2)" $?
+api POST /escuela/borrar-clase "$TOKEN_instructor_a" "{\"clase_id\":$CLA1}"
+estado_es 404 "borrar una clase que ya no existe -> 404"
+api POST /escuela/borrar-seccion "$TOKEN_instructor_b" "{\"seccion_id\":$SEC2}"
+estado_es 403 "borrar-seccion en un curso ajeno -> 403"
+api POST /escuela/borrar-seccion "$TOKEN_instructor_a" "{\"seccion_id\":$SEC2}"
+estado_es 204 "borrar-seccion -> 204"
+[ "$(posiciones secciones "curso_id = $CURSO_A")" = "1,2" ]; verificar "borrar una sección renumera las demás (1,2)" $?
+api POST /escuela/borrar-seccion "$TOKEN_instructor_a" "{\"seccion_id\":$SEC1}"
+estado_es 204 "borrar una sección con clases -> 204"
+[ "$(psql_n8n "select count(*) from escuela.clases where seccion_id = $SEC1")" = "0" ]; verificar "las clases de la sección borrada se borraron" $?
+psql_n8n "update escuela.cursos set estado = 'en_revision' where id = $CURSO_A" > /dev/null
+for caso in "guardar-seccion|{\"curso_id\":$CURSO_A,\"titulo\":\"X\"}" "guardar-clase|{\"seccion_id\":$SEC3,\"titulo\":\"X\",\"es_muestra\":false}" "borrar-seccion|{\"seccion_id\":$SEC3}" "mover|{\"tipo\":\"seccion\",\"id\":$SEC3,\"direccion\":\"subir\"}"; do
+  api POST "/escuela/${caso%%|*}" "$TOKEN_instructor_a" "${caso#*|}"
+  estado_es 409 "${caso%%|*} en un curso en revisión -> 409"
+done
+
 echo
 echo "$((total - fallos)) de $total casos correctos"
 [ "$fallos" -eq 0 ]
