@@ -831,6 +831,191 @@
       ]
     },
     {
+      "id": "b2108414-4006-587f-a0ef-f15e46478ca7",
+      "name": "Videos",
+      "item": [
+        {
+          "id": "b1907b27-1e85-5550-8f17-a67707aba47d",
+          "name": "Solicitar subida de video",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_acceso}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{url_base}}/escuela/solicitar-subida-video",
+              "host": [
+                "{{url_base}}"
+              ],
+              "path": [
+                "escuela",
+                "solicitar-subida-video"
+              ]
+            },
+            "description": "POST /escuela/solicitar-subida-video. Dueño o equipo de apoyo; no en revisión. MP4, MOV o WebM de hasta 1 073 741 824 bytes. Responde { video_id, url_subida, ruta }: haz PUT del archivo a {{url_base_almacen}} + url_subida sin el prefijo /almacen, con el mismo Content-Type.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clase_id\": \"{{clase_id}}\",\n  \"nombre_archivo\": \"clase.mp4\",\n  \"tipo_contenido\": \"video/mp4\",\n  \"tamano_bytes\": 25000000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "04709cf8-e3ce-565c-b4a5-698d80308a2d",
+          "name": "Confirmar subida de video",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_acceso}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{url_base}}/escuela/confirmar-subida-video",
+              "host": [
+                "{{url_base}}"
+              ],
+              "path": [
+                "escuela",
+                "confirmar-subida-video"
+              ]
+            },
+            "description": "POST /escuela/confirmar-subida-video. Dueño o equipo de apoyo. Comprueba el archivo en Storage y encola el procesado: 202 { estado: 'en_cola' }.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"video_id\": \"{{video_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "2098bf96-e8cd-5001-a4b7-f96a0fde02e4",
+          "name": "Estado del video",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_acceso}}"
+              }
+            ],
+            "url": {
+              "raw": "{{url_base}}/escuela/estado-video?clase_id={{clase_id}}",
+              "host": [
+                "{{url_base}}"
+              ],
+              "path": [
+                "escuela",
+                "estado-video"
+              ],
+              "query": [
+                {
+                  "key": "clase_id",
+                  "value": "{{clase_id}}",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET /escuela/estado-video. Dueño o equipo de apoyo. { vigente, nuevo }: el video que se sirve y el que se sube o procesa (o falló). Consúltalo cada pocos segundos."
+          }
+        },
+        {
+          "id": "057cf141-af31-5147-b7f3-7479ae828aaf",
+          "name": "Reintentar video",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_acceso}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{url_base}}/escuela/reintentar-video",
+              "host": [
+                "{{url_base}}"
+              ],
+              "path": [
+                "escuela",
+                "reintentar-video"
+              ]
+            },
+            "description": "POST /escuela/reintentar-video. Dueño o equipo de apoyo. Solo un video en error cuyo original se conservó.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"video_id\": \"{{video_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "1876848f-7733-5513-9dfa-d58ccd23f046",
+          "name": "Borrar video",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_acceso}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{url_base}}/escuela/borrar-video",
+              "host": [
+                "{{url_base}}"
+              ],
+              "path": [
+                "escuela",
+                "borrar-video"
+              ]
+            },
+            "description": "POST /escuela/borrar-video. Dueño o equipo de apoyo. Borra el video vigente y los que estén en proceso o con error, con sus archivos. 204.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clase_id\": \"{{clase_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
       "id": "ff037d92-0af5-5b53-9a69-62883b46eb6a",
       "name": "Equipo de apoyo",
       "item": [

@@ -35,7 +35,7 @@ Con rol, protegidas en el cliente con `GuardiaRol` (la API vuelve a comprobar el
 | `/instructor/equipo` | `instructor` |
 | `/admin/roles`, `/admin/categorias`, `/admin/revision` | `administrador` |
 
-Los enlaces *Instructor* y *Admin* de la cabecera aparecen según los roles que devuelve `GET /escuela/mis-roles`.
+En el editor del curso, cada clase muestra el estado de su video y permite subirlo, reemplazarlo, reintentarlo y borrarlo (recomendación de 2 a 9 minutos, aviso de clase larga hasta 30 minutos y rechazo por encima). Los enlaces *Instructor* y *Admin* de la cabecera aparecen según los roles que devuelve `GET /escuela/mis-roles`.
 
 ## Estructura
 
@@ -48,7 +48,7 @@ src/
     ui/                 Boton, BotonEnvio, Campo*, Alerta*, ListaReglas
     auth/               formularios, GuardiaSesion, GuardiaRol, PanelUsuario, ListaInvitaciones
     catalogo/           ListaCursos, FiltrosCatalogo, FichaCurso, TemarioPublico, MenuCategorias…
-    instructor/         editor del curso, temario, portada, revisión y equipo de apoyo
+    instructor/         editor del curso, temario, portada, videos de clase (VideoClase, SubirVideo…), revisión y equipo de apoyo
     admin/              roles, categorías y revisión de cursos
   hooks/                useSesion, useRoles, useCampo, useEnvio, useCatalogo, useCursoEdicion…
   api/                  cliente, una función por endpoint (autenticacion, escuela, temario, revision, portadas, equipo, catalogo), errores y tipos
@@ -72,7 +72,7 @@ scripts/verificar_tamano.sh   # falla si alguno la incumple
 
 Corren contra el stack real y leen los códigos desde Mailpit (`127.0.0.1:8025`). Antes de empezar borran los usuarios `e2e-*@ejemplo.test`, lo que dejaron en la escuela (roles, cursos `e2e-*`, categorías `E2E *` y sus portadas de Storage) y vacían las tablas de límites (`docker compose exec db psql` con `supabase_admin`; la clave de servicio de Storage se lee de `../.env`, nunca se guarda). Los roles se dan por SQL con `darRol` (`pruebas/ayudas/base_datos.ts`).
 
-Hay un archivo por flujo: autenticación (`registro`, `sesion`, `recuperacion`), `administracion`, `instructor`, `temario`, `revision`, `portada`, `catalogo` y `equipo`.
+Hay un archivo por flujo: autenticación (`registro`, `sesion`, `recuperacion`), `administracion`, `instructor`, `temario`, `revision`, `portada`, `video`, `catalogo` y `equipo`. Los de video generan sus MP4 con el `ffmpeg` del contenedor `transcodificador` (hace falta con el stack levantado).
 
 ```bash
 npx playwright install chromium   # solo la primera vez

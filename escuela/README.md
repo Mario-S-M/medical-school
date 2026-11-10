@@ -1,11 +1,12 @@
 # API de la escuela
 
-Roles, cursos con secciones y clases, revisión por un administrador, portadas, catálogo público con buscador y equipos de apoyo. El **backend son workflows de n8n** sobre un esquema `escuela` de la base `n8n`; **Caddy** es la única entrada, **Supabase Auth** valida las sesiones y **Supabase Storage** guarda las portadas. Definida en `specs/07-roles-cursos-secciones-catalogo.md`. Los videos, el avance, las preguntas, las rutas de aprendizaje y las calificaciones llegan en las specs 08 a 12.
+Roles, cursos con secciones y clases, revisión por un administrador, portadas, catálogo público con buscador y equipos de apoyo. El **backend son workflows de n8n** sobre un esquema `escuela` de la base `n8n`; **Caddy** es la única entrada, **Supabase Auth** valida las sesiones y **Supabase Storage** guarda las portadas. Definida en `specs/07-roles-cursos-secciones-catalogo.md`. Los videos de clase (subida y procesado a HLS cifrado) están en `specs/08-subida-videos-hls-cifrado.md` y en `transcodificador/`; su reproducción protegida, el avance, las preguntas, las rutas de aprendizaje y las calificaciones llegan en las specs 09 a 13.
 
 ```
 front ──► Caddy 127.0.0.1:8080 ──► n8n (webhooks) ──► Postgres (esquema escuela, base n8n)
                                           ├─► Supabase Auth  (auth:9999: sesión y API admin)
-                                          ├─► Supabase Storage (storage:5000: URL firmada de portadas)
+                                          ├─► Supabase Storage (storage:5000: portadas y videos)
+                                          ├─► transcodificador (transcodificador:8090: ffmpeg, solo red interna)
                                           └─► SMTP (Mailpit en local): aviso de invitación
 ```
 
@@ -68,6 +69,11 @@ Un workflow por endpoint, con el nombre de la tabla. Sin permiso, los endpoints 
 | `GET /escuela/admin/cursos-en-revision` (*Cursos en revision*) | administrador | → `{ cursos }` con su temario, del más antiguo al más reciente |
 | `POST /escuela/admin/resolver-revision` (*Resolver revision*) | administrador | `{ curso_id, aprobar, comentario? }` → `200 { estado }`; el comentario es obligatorio al devolver |
 | `POST /escuela/admin/retirar-curso` (*Retirar curso*) | administrador | `{ curso_id, comentario }` → `200 { estado: 'borrador' }` |
+| `POST /escuela/solicitar-subida-video` (*Solicitar subida de video*) | dueño, equipo | `{ clase_id, nombre_archivo, tipo_contenido, tamano_bytes }` → `201 { video_id, url_subida, ruta }` |
+| `POST /escuela/confirmar-subida-video` (*Confirmar subida de video*) | dueño, equipo | `{ video_id }` → `202 { estado: 'en_cola' }` |
+| `GET /escuela/estado-video?clase_id=` (*Estado del video*) | dueño, equipo | → `{ vigente, nuevo }` |
+| `POST /escuela/reintentar-video` (*Reintentar video*) | dueño, equipo | `{ video_id }` → `202 { estado: 'en_cola' }` |
+| `POST /escuela/borrar-video` (*Borrar video*) | dueño, equipo | `{ clase_id }` → `204` |
 
 Notas del contrato:
 
@@ -78,6 +84,7 @@ Notas del contrato:
 - **Curso completo** para enviarlo a revisión: subtítulo, descripción, nivel, categoría, portada, al menos una sección y ninguna sección vacía. Si falta algo: `422 CURSO_INCOMPLETO` con `falta_subtitulo`, `falta_descripcion`, `falta_nivel`, `falta_categoria`, `falta_portada`, `falta_secciones` o `seccion_vacia` en `detalles`.
 - **Estados**: `borrador` → `en_revision` → `publicado`. Un curso `en_revision` no se edita (`409 CURSO_EN_REVISION`); uno `publicado` sí, y los cambios se ven al momento (no vuelve a revisión). El administrador lo puede retirar.
 - **Portada**: JPG, PNG o WebP de hasta 2 097 152 bytes. El navegador hace `PUT` del archivo a la `url_subida` (firmada, de un solo uso) y después llama a `confirmar-portada`; el archivo nunca pasa por n8n. Al confirmar se borra la portada anterior.
+- **Videos** (SPEC 08): MP4, MOV o WebM de hasta 1 GiB y 30 minutos. Como las portadas, el navegador hace `PUT` del archivo a la `url_subida` firmada (directo a Storage) y luego llama a `confirmar-subida-video`; el resultado llega por un **webhook interno** (`POST /webhook/escuela/interno/video-procesado`, solo para el transcodificador, no está en Caddy) y se consulta con `estado-video`. Estados: `esperando_archivo` → `en_cola` → `procesando` → `listo` o `error`. Un video en cola o procesando sin cambios en 45 minutos pasa a `error`. Subir otro video a una clase que ya tiene uno deja el anterior como vigente hasta que el nuevo está `listo`; solo puede haber un video en proceso por clase (`409 VIDEO_EN_PROCESO`). **La clave de cifrado nunca sale por la API**: `curso-edicion` solo trae `video` (vigente) y `video_nuevo` (con su `id`) por clase. Nadie puede ver todavía los videos: la reproducción protegida es la SPEC 09.
 - **Invitaciones**: solo a cuentas ya **registradas y verificadas**. El invitado recibe un aviso por correo **sin enlaces** y responde en su panel. Vencen a los 7 días y entonces se puede reinvitar.
 
 ## Errores
@@ -95,12 +102,17 @@ Además de los de `auth/README.md` (`TOKEN_INVALIDO`, `VALIDACION_FALLIDA`, `DEM
 | `USUARIO_NO_REGISTRADO` | 404 | invitar a un correo sin cuenta verificada |
 | `CATEGORIA_EN_USO` / `CATEGORIA_DUPLICADA` | 409 | borrar una categoría con cursos / repetir un nombre |
 | `PORTADA_INVALIDA` | 422 | tipo distinto de JPG, PNG o WebP, más de 2 MB o archivo no subido |
+| `VIDEO_INVALIDO` | 422 | tipo distinto de MP4, MOV o WebM, más de 1 GiB, archivo no subido o que no coincide con lo declarado |
+| `VIDEO_EN_PROCESO` | 409 | la clase ya tiene un video subiéndose o procesándose |
+| `SERVICIO_NO_DISPONIBLE` | 503 | el transcodificador no respondió (en 10 s) al confirmar; el video queda en `error` y se puede reintentar |
 
 ## Datos
 
 Esquema `escuela` en la base `n8n` (`sql/`, idempotente). Los usuarios se guardan por su uuid de Supabase Auth, **sin clave foránea** (`auth.users` vive en otra base); por eso el nombre del instructor se copia en `perfiles_instructor`.
 
-`roles_usuario`, `perfiles_instructor`, `categorias`, `cursos` (con `busqueda`, un `tsvector` español sin acentos), `secciones`, `clases`, `equipos_apoyo` e `invitaciones_equipo`. Una clase tiene título, descripción, duración estimada y `es_muestra`, **sin video** (SPEC 08). Disparadores (`sql/002_temario.sql`) actualizan `cursos.actualizado_en` al tocar el temario.
+`roles_usuario`, `perfiles_instructor`, `categorias`, `cursos` (con `busqueda`, un `tsvector` español sin acentos), `secciones`, `clases`, `equipos_apoyo`, `invitaciones_equipo`, `videos_clase` y `claves_video`. Una clase tiene título, descripción, duración estimada, `es_muestra` y, con la SPEC 08, hasta un video vigente (`videos_clase`, con índices únicos de un solo vigente y un solo video en proceso por clase). La clave AES-128 de cada video vive en `claves_video`, aparte, y la genera el workflow con `gen_random_bytes` (`pgcrypto`).
+
+**Bucket `videos`** (privado, Supabase Storage; todo en el volumen `storage-data`): `cursos/<curso>/secciones/<seccion>/clases/<clase>/<video>/original.<ext>` (solo mientras se procesa) y `…/<video>/hls/lista.m3u8` con `segmento_00001.ts`… cifrados con AES-128. Disparadores (`sql/002_temario.sql`) actualizan `cursos.actualizado_en` al tocar el temario.
 
 ## Archivos
 
@@ -109,6 +121,7 @@ Esquema `escuela` en la base `n8n` (`sql/`, idempotente). Los usuarios se guarda
 | `sql/000_extensiones.sql` | Extensión `unaccent` (se aplica como superusuario) |
 | `sql/001_esquema_escuela.sql` | Esquema `escuela`: tablas, índices y la función `sin_acentos` |
 | `sql/002_temario.sql` | Disparadores que actualizan la fecha del curso |
+| `sql/003_videos.sql` | Tablas `videos_clase` y `claves_video` |
 | `scripts/generar_workflows.py` | Genera todos los workflows de `workflows/` |
 | `scripts/importar_workflows.sh` | Importa y publica los workflows en n8n |
 | `scripts/revisar_notas.py` | Comprueba notas y grupos de nodos de los workflows |
@@ -116,11 +129,14 @@ Esquema `escuela` en la base `n8n` (`sql/`, idempotente). Los usuarios se guarda
 | `scripts/crear_bucket_portadas.sh` | Crea el bucket público `portadas` |
 | `scripts/crear_credencial_servicio.sh` | Crea la credencial `Supabase rol de servicio` |
 | `scripts/crear_credencial_smtp.sh` | Crea la credencial `SMTP Mailpit` |
+| `scripts/crear_bucket_videos.sh` | Crea el bucket privado `videos` (1 GiB) |
+| `scripts/crear_credencial_transcodificador.sh` | Crea la credencial `Secreto transcodificador` (lee `SECRETO_TRANSCODIFICADOR` del `.env`) |
 | `scripts/generar_postman.py` | Genera la colección de Postman |
 | `credenciales/smtp-mailpit.json` | Credencial SMTP de Mailpit (sin secretos) |
 | `plantillas/invitacion_equipo.html` | Correo de invitación (español, sin enlaces); lo incrusta el generador |
 | `workflows/usuarios/`, `workflows/escuela/` | Workflows de n8n, uno por endpoint, más los subworkflows |
-| `pruebas/pruebas.sh` | Pruebas de la API con `curl` |
+| `pruebas/pruebas.sh` | Pruebas de la API con `curl` (tarda unos 15 minutos: procesa videos reales) |
+| `pruebas/limpiar_bucket.py` | Ayudante de las pruebas: borra de un bucket todo lo que cuelga de unos prefijos |
 | `postman/` | Colección y entorno de Postman |
 
 ## Workflows
@@ -138,6 +154,8 @@ Los workflows **no se dibujan a mano**: `scripts/generar_workflows.py` los gener
 | `Validar campos` | tipos, largos, campos extra y normalización | todos los que reciben datos |
 | `Validar acceso a curso` | existe, es del dueño o su equipo, no está en revisión | los de cursos, temario, revisión y portada |
 | `Buscar cuenta por correo` | cuenta exacta en Supabase Auth (API admin) | `Buscar usuario`, `Invitar al equipo` |
+| `Encolar video` | comprueba el original en Storage, pasa el video a `en_cola` y pide el trabajo al transcodificador | `Confirmar subida de video`, `Reintentar video` |
+| `Borrar archivos de video` | lista y borra de Storage las carpetas de unos videos (siempre devuelve un elemento) | `Video procesado`, `Borrar video`, `Borrar clase`, `Borrar seccion` |
 
 Los subworkflows **también se publican** (n8n no ejecuta uno inactivo). Ningún workflow guarda ejecuciones y el servicio `n8n` borra su contenido en 1 o 2 minutos, como en `auth/`.
 
@@ -165,6 +183,13 @@ bash escuela/scripts/crear_credencial_servicio.sh    # Supabase rol de servicio 
 bash escuela/scripts/crear_credencial_smtp.sh        # SMTP Mailpit
 ```
 
+**Videos.** Necesitan, además, el servicio `transcodificador` (`docker compose up -d --build transcodificador`, ver `transcodificador/README.md`), `SECRETO_TRANSCODIFICADOR` en el `.env` (`openssl rand -hex 32`) y la extensión `pgcrypto` (ya en `sql/000_extensiones.sql`):
+
+```bash
+bash escuela/scripts/crear_bucket_videos.sh                  # bucket privado, 1 GiB
+bash escuela/scripts/crear_credencial_transcodificador.sh    # Secreto transcodificador
+```
+
 **Workflows.** Para cambiar uno se edita `scripts/generar_workflows.py`:
 
 ```bash
@@ -186,7 +211,8 @@ cd frontend && npx playwright test
 - **`SERVICE_ROLE_KEY` en n8n.** La credencial `Supabase rol de servicio` salta las políticas de Storage y de Auth. La usan solo la búsqueda de cuentas y los workflows de portada, y nunca sale de n8n.
 - **Sin claves foráneas entre bases:** si se borra una cuenta en Supabase Auth quedan filas huérfanas en `roles_usuario`, `equipos_apoyo` y `cursos` (aún no hay borrado de cuentas).
 - **`invitar-equipo` revela si un correo tiene cuenta verificada**, aunque solo a instructores (decisión del usuario).
-- **Portadas huérfanas:** si el navegador sube un archivo y nunca confirma, queda en el bucket.
+- **Portadas y videos huérfanos:** si el navegador sube un archivo y nunca confirma, queda en el bucket (el video, además, deja su fila en `esperando_archivo`: se borra con *Borrar video*). Si se borra un video mientras el transcodificador lo procesa, sus archivos HLS quedan sin fila que los reclame.
+- **El transcodificador procesa un video a la vez y su cola vive en memoria:** un reinicio la pierde y los videos se reintentan a mano. La clave AES-128 está en la base en claro (solo la lee el rol de n8n).
 - **Un curso publicado se edita sin nueva revisión;** el administrador puede retirarlo.
 - **Las fichas son estáticas y cargan en el cliente** (`/curso?c=`): Google las indexa peor que con SSR.
 - **Mailpit solo sirve para desarrollo,** igual que en `auth/`. El proxy `/almacen` del front solo existe en desarrollo.
