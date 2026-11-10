@@ -5,6 +5,7 @@ import AlertaError from '../ui/AlertaError';
 import BannerEstado from './BannerEstado';
 import BotonEnviarRevision from './BotonEnviarRevision';
 import EditorTemario from './EditorTemario';
+import SubirPortada from './SubirPortada';
 import FormularioDatosCurso from './FormularioDatosCurso';
 
 export default function EditorCurso({ id }: { id: number }) {
@@ -25,6 +26,7 @@ export default function EditorCurso({ id }: { id: number }) {
       <h1 className="text-2xl font-bold">{curso.titulo}</h1>
       <BannerEstado estado={curso.estado} comentario={curso.comentario_revision} />
       {!curso.es_dueno && <p className="text-sm text-slate-600">Eres parte del equipo de apoyo: los datos del curso solo los cambia su instructor.</p>}
+      {curso.es_dueno && curso.estado !== 'en_revision' && <SubirPortada cursoId={curso.id} ruta={curso.portada_ruta} alCambiar={() => void recargar()} />}
       <FormularioDatosCurso curso={curso} categorias={lista} alGuardar={() => void recargar()} />
       <EditorTemario curso={curso} alCambiar={() => void recargar()} />
       {curso.es_dueno && curso.estado === 'borrador' && <BotonEnviarRevision cursoId={curso.id} alEnviar={() => void recargar()} />}

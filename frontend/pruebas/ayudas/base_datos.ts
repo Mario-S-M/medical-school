@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const RAIZ = path.resolve(process.cwd(), '..');
@@ -19,6 +20,7 @@ export function limpiarEscuelaE2E() {
     "select string_agg(quote_literal(id::text), ',') from auth.users where email like 'e2e-%@ejemplo.test'"], { cwd: RAIZ }).toString().trim();
   const propios = ids ? `usuario_id::text in (${ids})` : 'false';
   const duenos = ids ? `instructor_id::text in (${ids})` : 'false';
+  borrarPortadasE2E(duenos);
   sql('n8n', `delete from escuela.cursos where ${duenos}; delete from escuela.roles_usuario where ${propios}; delete from escuela.perfiles_instructor where ${propios}; delete from escuela.categorias where nombre like 'E2E %'`);
 }
 
@@ -51,3 +53,15 @@ export const ponerEstadoCursoE2E = (titulo: string, estado: string) =>
 // Equivale a subir una portada (la subida real llega en el paso de portadas): deja una ruta en el curso.
 export const ponerPortadaCursoE2E = (titulo: string) =>
   sql('n8n', `update escuela.cursos set portada_ruta = 'cursos/e2e/portada.png' where titulo = '${titulo}'`);
+
+// Borra de Storage las portadas de los cursos E2E (la clave de servicio se lee de .env, nunca se guarda en el repo).
+function borrarPortadasE2E(duenos: string) {
+  const rutas = execFileSync('docker', ['compose', 'exec', '-T', 'db', 'psql', '-U', 'supabase_admin', '-d', 'n8n', '-tA', '-c',
+    `select portada_ruta from escuela.cursos where ${duenos} and portada_ruta like 'cursos/%'`], { cwd: RAIZ }).toString().split('\n').filter(Boolean);
+  const env = readFileSync(path.join(RAIZ, '.env'), 'utf8');
+  const leer = (k: string) => env.match(new RegExp(`^${k}=(.*)$`, 'm'))?.[1] ?? '';
+  for (const ruta of rutas) {
+    execFileSync('curl', ['-s', '-o', '/dev/null', '-X', 'DELETE', `http://127.0.0.1:${leer('KONG_HTTP_PORT')}/storage/v1/object/portadas/${ruta}`,
+      '-H', `Authorization: Bearer ${leer('SERVICE_ROLE_KEY')}`, '-H', `apikey: ${leer('SERVICE_ROLE_KEY')}`]);
+  }
+}

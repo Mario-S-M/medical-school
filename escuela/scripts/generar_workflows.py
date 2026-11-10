@@ -96,8 +96,8 @@ class Flujo:
                           "options": {"queryReplacement": parametros}}, x, y,
                          credentials=CRED_PG, onError="continueRegularOutput", alwaysOutputData=True)
 
-    def http(self, nombre, metodo, url, cabeceras, x, y, servicio=False):
-        p = {"method": metodo, "url": url, "options": {"response": {"response": {"fullResponse": True, "neverError": True, "responseFormat": "json"}}},
+    def http(self, nombre, metodo, url, cabeceras, x, y, servicio=False, formato="json"):
+        p = {"method": metodo, "url": url, "options": {"response": {"response": {"fullResponse": True, "neverError": True, "responseFormat": formato}}},
              "sendHeaders": True, "specifyHeaders": "keypair",
              "headerParameters": {"parameters": [{"name": k, "value": v} for k, v in cabeceras.items()]}}
         extra = {}
@@ -875,6 +875,79 @@ return error(500, 'ERROR_INTERNO', 'Error interno del servidor.');""", x + 240, 
     f.guardar()
 
 
+PORTADA_MIME = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+STORAGE = "http://storage:5000"
+
+
+def url_subida_portada():
+    f = Flujo("escUrlSubidaPortada01", "URL de subida de portada", "POST /escuela/url-subida-portada. Valida tipo y tamaño de la imagen y pide a Supabase Storage una URL firmada de un solo uso para que el navegador suba la portada directo (instructor dueño; no en revisión). No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/url-subida-portada", "instructor", "body", {
+        "curso_id": TEXTO_ID, "tipo_contenido": {"tipo": "texto", "minimo": 1, "maximo": 100}, "tamano_bytes": {"tipo": "entero", "minimo": 1, "maximo": 1000000000}},
+        {"modo": "dueno", "editable": True, "tipo": "curso", "campo": "curso_id"})
+    f.codigo("Revisar portada", f"""const e = $input.first().json;
+const d = e.datos;
+const EXT = {json.dumps(PORTADA_MIME)};
+const error = (mensaje) => [{{ json: {{ ok: false, estado: 422, cuerpo: {{ error: {{ codigo: 'PORTADA_INVALIDA', mensaje }} }} }} }}];
+if (!EXT[d.tipo_contenido]) return error('La portada debe ser una imagen JPG, PNG o WebP.');
+if (d.tamano_bytes > 2097152) return error('La portada no puede pesar más de 2 MB.');
+const azar = Array.from({{ length: 16 }}, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join('');
+return [{{ json: {{ ok: true, ruta: `cursos/${{e.curso.id}}/portada-${{azar}}.${{EXT[d.tipo_contenido]}}` }} }}];""", x, 0)
+    f.si("Portada valida", "={{ $json.ok }}", x + 240, 0)
+    f.http("Firmar subida en Storage", "POST", f"={STORAGE}/object/upload/sign/portadas/{{{{ $json.ruta }}}}", {}, x + 480, 0, servicio=True)
+    f.codigo("Armar respuesta", f"""const r = $input.first().json;
+const ruta = $('Revisar portada').first().json.ruta;
+if (r.statusCode === 200 && r.body && r.body.url) return [{{ json: {{ estado: 200, cuerpo: {{ url_subida: `/almacen${{r.body.url}}`, ruta }} }} }}];
+return [{{ json: {{ estado: 500, cuerpo: {ERROR_INTERNO_JS} }} }}];""", x + 720, 0)
+    f.unir("Acceso valido", "Revisar portada"); f.unir("Revisar portada", "Portada valida")
+    f.unir("Portada valida", "Firmar subida en Storage", 0); f.unir("Portada valida", "Responder", 1)
+    f.unir("Firmar subida en Storage", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    f.seccion("Revisar el archivo", "Solo `image/jpeg`, `image/png` o `image/webp` de hasta 2 MB (2 097 152 bytes); si no, `422 PORTADA_INVALIDA`. Genera la ruta `cursos/<id>/portada-<azar>.<ext>`.", NOTA_ENTRADA,
+              ["Revisar portada", "Portada valida"], True, "Valida tipo y tamaño y arma la ruta del archivo.")
+    cierre(f, x + 960, ["Firmar subida en Storage", "Armar respuesta"], "Firmar la subida", "Pide a `storage:5000` (credencial de rol de servicio) una URL firmada de un solo uso. El archivo lo sube el navegador, nunca pasa por n8n.", NOTA_PERMISOS, "Pide a Storage la URL firmada de subida.")
+    f.general("URL de subida de portada", "`POST /escuela/url-subida-portada` · solo el `instructor` dueño.\n\nEntrada: `{ curso_id, tipo_contenido, tamano_bytes }`. Responde `{ url_subida, ruta }`; el navegador hace `PUT` del archivo a `url_subida` y luego llama a *Confirmar portada*.")
+    f.guardar()
+
+
+def confirmar_portada():
+    f = Flujo("escConfirmarPortada01", "Confirmar portada", "POST /escuela/confirmar-portada. Comprueba en Storage que la portada se subió, la guarda en el curso y borra la anterior (instructor dueño; no en revisión). No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/confirmar-portada", "instructor", "body", {"curso_id": TEXTO_ID, "ruta": {"tipo": "texto", "minimo": 1, "maximo": 200}},
+                  {"modo": "dueno", "editable": True, "tipo": "curso", "campo": "curso_id"})
+    f.codigo("Revisar ruta", f"""const e = $input.first().json;
+const valida = new RegExp(`^cursos/${{e.curso.id}}/portada-[0-9a-f]{{32}}\\\\.(jpg|png|webp)$`).test(e.datos.ruta);
+if (!valida) return [{{ json: {{ ok: false, estado: 422, cuerpo: {{ error: {{ codigo: 'PORTADA_INVALIDA', mensaje: 'La ruta de la portada no corresponde a este curso.' }} }} }} }}];
+return [{{ json: {{ ok: true, ruta: e.datos.ruta }} }}];""", x, 0)
+    f.si("Ruta valida", "={{ $json.ok }}", x + 240, 0)
+    f.http("Consultar archivo en Storage", "GET", f"={STORAGE}/object/info/portadas/{{{{ $json.ruta }}}}", {}, x + 480, 0, servicio=True)
+    f.codigo("Clasificar archivo", f"""const r = $input.first().json;
+const b = r.body || {{}};
+const tipo = (b.content_type || (b.metadata || {{}}.mimetype) || '');
+const tamano = Number(b.size || (b.metadata || {{}}).size || 0);
+if (r.statusCode !== 200) return [{{ json: {{ ok: false, estado: 422, cuerpo: {{ error: {{ codigo: 'PORTADA_INVALIDA', mensaje: 'La portada todavía no se subió.' }} }} }} }}];
+if (!{json.dumps(list(PORTADA_MIME))}.includes(tipo) || tamano > 2097152) return [{{ json: {{ ok: false, estado: 422, cuerpo: {{ error: {{ codigo: 'PORTADA_INVALIDA', mensaje: 'La portada debe ser una imagen JPG, PNG o WebP de hasta 2 MB.' }} }} }} }}];
+return [{{ json: {{ ok: true }} }}];""", x + 720, 0)
+    f.si("Archivo valido", "={{ $json.ok }}", x + 960, 0)
+    f.sql("Guardar portada", """WITH anterior AS (SELECT portada_ruta FROM escuela.cursos WHERE id = $1::bigint),
+nueva AS (UPDATE escuela.cursos SET portada_ruta = $2::text, actualizado_en = now() WHERE id = $1::bigint RETURNING id)
+SELECT (SELECT portada_ruta FROM anterior) AS anterior, EXISTS (SELECT 1 FROM nueva) AS guardada;""",
+          "={{ [$('Acceso valido').first().json.curso.id, $('Revisar ruta').first().json.ruta] }}", x + 1200, 0)
+    f.http("Borrar portada anterior", "DELETE", f"={STORAGE}/object/portadas/{{{{ $json.anterior || 'sin-portada-anterior' }}}}", {}, x + 1440, 0, servicio=True)
+    f.codigo("Armar respuesta", f"""const ruta = $('Revisar ruta').first().json.ruta;
+if (!$('Guardar portada').first().json.guardada) return [{{ json: {{ estado: 404, cuerpo: {{ error: {{ codigo: 'NO_ENCONTRADO', mensaje: 'El curso no existe.' }} }} }} }}];
+return [{{ json: {{ estado: 200, cuerpo: {{ portada_url: `/almacen/object/public/portadas/${{ruta}}` }} }} }}];""", x + 1680, 0)
+    f.unir("Acceso valido", "Revisar ruta"); f.unir("Revisar ruta", "Ruta valida")
+    f.unir("Ruta valida", "Consultar archivo en Storage", 0); f.unir("Ruta valida", "Responder", 1)
+    f.unir("Consultar archivo en Storage", "Clasificar archivo"); f.unir("Clasificar archivo", "Archivo valido")
+    f.unir("Archivo valido", "Guardar portada", 0); f.unir("Archivo valido", "Responder", 1)
+    f.unir("Guardar portada", "Borrar portada anterior"); f.unir("Borrar portada anterior", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    f.seccion("Revisar la ruta", "La ruta debe ser `cursos/<id del curso>/portada-<32 hex>.<jpg|png|webp>`: nadie puede apuntar a un archivo de otro curso.", NOTA_ENTRADA,
+              ["Revisar ruta", "Ruta valida"], True, "Comprueba que la ruta pertenece a este curso.")
+    f.seccion("Comprobar en Storage", "Pregunta a Storage por el archivo (`/object/info`): si no existe, o no es JPG/PNG/WebP de hasta 2 MB, `422 PORTADA_INVALIDA`.", NOTA_PERMISOS,
+              ["Consultar archivo en Storage", "Clasificar archivo", "Archivo valido"], True, "Comprueba que el archivo se subió y cumple los límites.")
+    cierre(f, x + 1920, ["Guardar portada", "Borrar portada anterior", "Armar respuesta"], "Guardar y limpiar", "Guarda la ruta en el curso y borra la portada anterior del bucket (si no había, el borrado responde 404 y se ignora). Devuelve `{ portada_url }`.")
+    f.general("Confirmar portada", "`POST /escuela/confirmar-portada` · solo el `instructor` dueño.\n\nEntrada: `{ curso_id, ruta }`, la `ruta` que devolvió *URL de subida de portada*. Responde `200 { portada_url }`.")
+    f.guardar()
+
+
 if __name__ == "__main__":
     validar_sesion_y_roles()
     mis_roles()
@@ -899,3 +972,5 @@ if __name__ == "__main__":
     cursos_en_revision()
     resolver_revision()
     retirar_curso()
+    url_subida_portada()
+    confirmar_portada()

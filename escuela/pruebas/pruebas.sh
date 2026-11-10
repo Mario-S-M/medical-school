@@ -19,9 +19,19 @@ psql_n8n() {
   docker compose exec -T -e PGPASSWORD="$(leer_env CONTRASENA_BD_N8N)" db psql -h localhost -U "$(leer_env USUARIO_BD_N8N)" -d n8n -tAc "$1"
 }
 
+ALMACEN="http://127.0.0.1:$(leer_env KONG_HTTP_PORT)/storage/v1"
+RUTAS_PORTADA=()
+borrar_portadas() {
+  local clave; clave="$(leer_env SERVICE_ROLE_KEY)"
+  for ruta in "${RUTAS_PORTADA[@]:-}"; do
+    [ -n "$ruta" ] && curl -s -o /dev/null -X DELETE "$ALMACEN/object/portadas/$ruta" -H "Authorization: Bearer $clave" -H "apikey: $clave"
+  done
+}
+
 # Limpia solo lo creado por estas pruebas (usuarios prueba_esc_*) y deja intacto el resto de la escuela
 limpiar_datos() {
   local ids
+  borrar_portadas
   ids="$(psql_postgres "select string_agg(quote_literal(id::text), ',') from auth.users where email like 'prueba_esc_%@example.com'" 2> /dev/null)"
   if [ -n "$ids" ]; then
     psql_n8n "delete from escuela.cursos where instructor_id::text in ($ids)" > /dev/null 2>&1
@@ -452,6 +462,69 @@ api POST /escuela/admin/retirar-curso "$TOKEN_admin" "{\"curso_id\":$CURSO_A,\"c
 estado_es 409 "retirar un curso que no está publicado -> 409"
 api GET /escuela/admin/cursos-en-revision "$TOKEN_admin"
 [ "$(echo "$cuerpo" | python3 -c "import sys,json; print(all(x['id']!=$CURSO_A for x in json.load(sys.stdin)['cursos']))")" = "True" ]; verificar "un curso retirado ya no aparece entre los pendientes" $?
+
+echo "== Portadas"
+python3 -c "
+import base64
+open('$DIRECTORIO_TEMPORAL/portada.png','wb').write(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='))
+open('$DIRECTORIO_TEMPORAL/grande.png','wb').write(b'\x89PNG' + b'0' * 3000000)"
+subir_archivo() { # <url_subida> <tipo> <archivo>: sube a Storage por Kong con la URL firmada
+  curl -s -o /dev/null -w '%{http_code}' -X PUT "$ALMACEN${1#/almacen}" -H "Content-Type: $2" --data-binary "@$3"
+}
+psql_n8n "update escuela.cursos set estado = 'borrador' where id = $CURSO_A" > /dev/null
+api POST /escuela/url-subida-portada "$TOKEN_estudiante" "{\"curso_id\":$CURSO_A,\"tipo_contenido\":\"image/png\",\"tamano_bytes\":100}"
+estado_es 403 "url-subida-portada sin rol instructor -> 403"
+api POST /escuela/url-subida-portada "$TOKEN_instructor_b" "{\"curso_id\":$CURSO_A,\"tipo_contenido\":\"image/png\",\"tamano_bytes\":100}"
+estado_es 403 "url-subida-portada de un curso ajeno -> 403"
+api POST /escuela/url-subida-portada "$TOKEN_miembro" "{\"curso_id\":$CURSO_A,\"tipo_contenido\":\"image/png\",\"tamano_bytes\":100}"
+estado_es 403 "el equipo de apoyo no cambia la portada (403)"
+api POST /escuela/url-subida-portada "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"tipo_contenido\":\"image/gif\",\"tamano_bytes\":100}"
+estado_es 422 "url-subida-portada con image/gif -> 422"
+cuerpo_tiene '"PORTADA_INVALIDA"' "image/gif -> PORTADA_INVALIDA"
+api POST /escuela/url-subida-portada "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"tipo_contenido\":\"image/png\",\"tamano_bytes\":2097153}"
+estado_es 422 "url-subida-portada con más de 2 097 152 bytes -> 422"
+cuerpo_tiene '"PORTADA_INVALIDA"' "más de 2 MB -> PORTADA_INVALIDA"
+api POST /escuela/url-subida-portada "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"tipo_contenido\":\"image/png\"}"
+estado_es 422 "url-subida-portada sin tamano_bytes -> 422"
+api POST /escuela/url-subida-portada "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"tipo_contenido\":\"image/png\",\"tamano_bytes\":2097152}"
+estado_es 200 "url-subida-portada con exactamente 2 MB -> 200"
+api POST /escuela/url-subida-portada "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"tipo_contenido\":\"image/png\",\"tamano_bytes\":$(wc -c < "$DIRECTORIO_TEMPORAL/portada.png" | tr -d ' ')}"
+estado_es 200 "url-subida-portada de un PNG válido -> 200"
+URL_1="$(campo_json url_subida)"; RUTA_1="$(campo_json ruta)"; RUTAS_PORTADA+=("$RUTA_1")
+[[ "$URL_1" == /almacen/object/upload/sign/portadas/cursos/$CURSO_A/portada-* && "$RUTA_1" == cursos/$CURSO_A/portada-*.png ]]; verificar "la URL firmada y la ruta tienen el formato esperado" $?
+api POST /escuela/confirmar-portada "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"ruta\":\"$RUTA_1\"}"
+estado_es 422 "confirmar una portada que todavía no se subió -> 422"
+cuerpo_tiene '"PORTADA_INVALIDA"' "archivo no subido -> PORTADA_INVALIDA"
+[ "$(subir_archivo "$URL_1" image/png "$DIRECTORIO_TEMPORAL/portada.png")" = "200" ]; verificar "el navegador sube el archivo con la URL firmada (200)" $?
+api POST /escuela/confirmar-portada "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"ruta\":\"cursos/$CURSO_B/portada-0123456789abcdef0123456789abcdef.png\"}"
+estado_es 422 "confirmar una ruta de otro curso -> 422"
+api POST /escuela/confirmar-portada "$TOKEN_instructor_b" "{\"curso_id\":$CURSO_A,\"ruta\":\"$RUTA_1\"}"
+estado_es 403 "confirmar-portada de un curso ajeno -> 403"
+api POST /escuela/confirmar-portada "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"ruta\":\"$RUTA_1\"}"
+estado_es 200 "confirmar-portada -> 200"
+PORTADA_URL="$(campo_json portada_url)"
+[ "$PORTADA_URL" = "/almacen/object/public/portadas/$RUTA_1" ]; verificar "confirmar-portada devuelve la URL pública" $?
+[ "$(psql_n8n "select portada_ruta from escuela.cursos where id = $CURSO_A")" = "$RUTA_1" ]; verificar "la ruta quedó guardada en el curso" $?
+[ "$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "$ALMACEN${PORTADA_URL#/almacen}")" = "200 image/png" ]; verificar "la portada se lee sin sesión (200, image/png)" $?
+api POST /escuela/url-subida-portada "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"tipo_contenido\":\"image/png\",\"tamano_bytes\":100}"
+URL_2="$(campo_json url_subida)"; RUTA_2="$(campo_json ruta)"; RUTAS_PORTADA+=("$RUTA_2")
+[ "$(subir_archivo "$URL_2" image/png "$DIRECTORIO_TEMPORAL/portada.png")" = "200" ]; verificar "se sube una segunda portada" $?
+api POST /escuela/confirmar-portada "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"ruta\":\"$RUTA_2\"}"
+estado_es 200 "confirmar la segunda portada -> 200"
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$ALMACEN/object/public/portadas/$RUTA_1")" != "200" ]; verificar "la portada anterior se borró del bucket" $?
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$ALMACEN/object/public/portadas/$RUTA_2")" = "200" ]; verificar "la nueva portada se sirve" $?
+CLAVE_SERVICIO="$(leer_env SERVICE_ROLE_KEY)"
+for caso in "gif|image/gif|portada.png" "grande|image/png|grande.png"; do
+  IFS='|' read -r nombre tipo archivo <<< "$caso"
+  ruta="cursos/$CURSO_A/directa-$nombre.${tipo#image/}"; RUTAS_PORTADA+=("$ruta")
+  firmada="$(curl -s -X POST "$ALMACEN/object/upload/sign/portadas/$ruta" -H "Authorization: Bearer $CLAVE_SERVICIO" -H "apikey: $CLAVE_SERVICIO" | python3 -c "import sys,json; print(json.load(sys.stdin)['url'])")"
+  [ "$(subir_archivo "$firmada" "$tipo" "$DIRECTORIO_TEMPORAL/$archivo")" != "200" ]; verificar "Storage rechaza por sí solo un archivo $nombre (el bucket tiene sus propios límites)" $?
+done
+psql_n8n "update escuela.cursos set estado = 'en_revision' where id = $CURSO_A" > /dev/null
+api POST /escuela/url-subida-portada "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"tipo_contenido\":\"image/png\",\"tamano_bytes\":100}"
+estado_es 409 "url-subida-portada en un curso en revisión -> 409"
+api POST /escuela/confirmar-portada "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"ruta\":\"$RUTA_2\"}"
+estado_es 409 "confirmar-portada en un curso en revisión -> 409"
 
 echo
 echo "$((total - fallos)) de $total casos correctos"

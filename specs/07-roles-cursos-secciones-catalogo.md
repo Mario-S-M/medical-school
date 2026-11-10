@@ -317,6 +317,7 @@ CREATE UNIQUE INDEX invitaciones_pendiente_unica ON escuela.invitaciones_equipo 
 
 **Infraestructura:**
 - **Tomada: Supabase Storage con URL firmada de subida por Kong** y el proxy `/almacen` de Astro. Es el mismo camino que usarán los videos y los archivos nunca pasan por n8n ni por el límite de 10 KB de Caddy. **Descartados:** subir a través de n8n y un disco local con Caddy.
+- **Tomada (al implementar): el servicio `storage` guarda sus archivos en un volumen nombrado de Docker (`storage-data`)** y no en `supabase/volumes/storage`. El backend de archivos de Storage usa atributos extendidos (xattr) y las carpetas montadas desde macOS no los admiten: toda subida daba `500`. Es también el volumen donde guardará los videos la SPEC 08. **Descartado:** el almacenamiento S3 (MinIO), que añadía un servicio más.
 - **Tomada: nuevo `GET /escuela/mis-roles`.** **Descartado:** ampliar `/autenticacion/yo`, que cambiaba un workflow cerrado de SPEC 04.
 - **Tomada: carpeta `escuela/` y prefijo `/escuela/*`.** **Descartado:** mezclarlo en `auth/`.
 - **Tomada (petición del usuario al implementar): grupos de nodos, notas adhesivas y subworkflows.** Cada tramo de lógica es un grupo colapsable con su nota, y lo repetido va en un subworkflow. **Descartada:** workflows planos de 10 a 15 nodos con la lógica copiada en cada endpoint. Los workflows se generan con un script y no se dibujan a mano, para que las notas y los grupos sean coherentes.
@@ -334,6 +335,8 @@ CREATE UNIQUE INDEX invitaciones_pendiente_unica ON escuela.invitaciones_equipo 
 - **`invitar-equipo` revela si un correo tiene cuenta**, aunque solo a instructores (decisión del usuario).
 - **`unaccent` requiere crear la extensión como superusuario** en la base `n8n`. Si la imagen de Postgres no la trae, el paso 1 lo detecta y se ajusta la spec.
 - **Subida directa a Kong:** Kong publica `/storage/v1` en `127.0.0.1:8000`. El paso 7 confirma que la subida firmada funciona sin la clave `anon` y que el proxy de Astro la reenvía. Como en SPEC 06, el proxy solo existe en desarrollo.
+- **Los archivos de Storage viven en el volumen `storage-data`:** `docker compose down -v` los borra, y copiarlos exige `docker run --volumes-from` o un respaldo de ese volumen (la carpeta `supabase/volumes/storage` ya no se usa).
+- **Portadas huérfanas:** si el navegador sube un archivo y nunca confirma, queda en el bucket sin curso. Es un archivo de hasta 2 MB; una limpieza periódica queda fuera de esta spec.
 - **Bucket `portadas` público:** cualquiera con la URL ve la imagen, lo cual se busca. Nunca debe usarse para videos (SPEC 08 usará un bucket privado).
 - **Las ediciones de un curso publicado se ven al momento sin revisión:** un instructor podría cambiar el contenido aprobado. Se mitiga con `retirar-curso`.
 - **Credencial `Supabase rol de servicio` en n8n:** salta todas las políticas de Storage y de Auth. Solo la usan los workflows de portada, invitación y búsqueda de usuarios, y nunca sale de n8n.
