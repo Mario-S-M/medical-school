@@ -47,3 +47,7 @@ export const crearCategoriaE2E = (nombre: string) =>
 
 export const ponerEstadoCursoE2E = (titulo: string, estado: string) =>
   sql('n8n', `update escuela.cursos set estado = '${estado}' where titulo = '${titulo}'`);
+
+// Equivale a subir una portada (la subida real llega en el paso de portadas): deja una ruta en el curso.
+export const ponerPortadaCursoE2E = (titulo: string) =>
+  sql('n8n', `update escuela.cursos set portada_ruta = 'cursos/e2e/portada.png' where titulo = '${titulo}'`);

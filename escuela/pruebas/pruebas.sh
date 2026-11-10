@@ -390,6 +390,69 @@ for caso in "guardar-seccion|{\"curso_id\":$CURSO_A,\"titulo\":\"X\"}" "guardar-
   estado_es 409 "${caso%%|*} en un curso en revisión -> 409"
 done
 
+echo "== Revisión"
+api POST /escuela/enviar-revision "$TOKEN_estudiante" "{\"curso_id\":$CURSO_A}"
+estado_es 403 "enviar-revision sin rol instructor -> 403"
+api POST /escuela/enviar-revision "$TOKEN_instructor_b" "{\"curso_id\":$CURSO_A}"
+estado_es 403 "enviar-revision de un curso ajeno -> 403"
+api POST /escuela/enviar-revision "$TOKEN_miembro" "{\"curso_id\":$CURSO_A}"
+estado_es 403 "el equipo de apoyo no envía a revisión (403)"
+api POST /escuela/enviar-revision "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A}"
+estado_es 409 "enviar un curso que ya está en revisión -> 409"
+psql_n8n "update escuela.cursos set estado = 'borrador', portada_ruta = null where id = $CURSO_A; update escuela.cursos set subtitulo = 'Huesos', descripcion = 'Descripción', nivel = 'basico', categoria_id = $ID_CAT where id = $CURSO_A" > /dev/null
+api POST /escuela/borrar-seccion "$TOKEN_instructor_a" "{\"seccion_id\":$SEC3}"
+estado_es 204 "se borra la última sección del curso para probar falta_secciones"
+api POST /escuela/enviar-revision "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A}"
+estado_es 422 "enviar-revision con faltantes -> 422"
+cuerpo_tiene '"CURSO_INCOMPLETO"' "faltantes -> CURSO_INCOMPLETO"
+cuerpo_tiene '"falta_portada"' "detalles incluye falta_portada"
+cuerpo_tiene '"falta_secciones"' "detalles incluye falta_secciones (curso sin secciones)"
+api POST /escuela/guardar-seccion "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"titulo\":\"Sección vacía\"}"
+SEC_V="$(campo_json id)"
+api POST /escuela/enviar-revision "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A}"
+cuerpo_tiene '"seccion_vacia"' "una sección sin clases cuenta como falta (seccion_vacia)"
+api POST /escuela/guardar-clase "$TOKEN_instructor_a" "{\"seccion_id\":$SEC_V,\"titulo\":\"Clase única\",\"es_muestra\":true}"
+psql_n8n "update escuela.cursos set portada_ruta = 'cursos/$CURSO_A/portada-prueba.png' where id = $CURSO_A" > /dev/null
+api POST /escuela/enviar-revision "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A}"
+estado_es 200 "enviar-revision de un curso completo -> 200"
+[ "$(psql_n8n "select estado from escuela.cursos where id = $CURSO_A")" = "en_revision" ]; verificar "el curso quedó en_revision" $?
+api GET /escuela/admin/cursos-en-revision "$TOKEN_estudiante"
+estado_es 403 "cursos-en-revision sin rol administrador -> 403"
+api GET /escuela/admin/cursos-en-revision "$TOKEN_admin"
+estado_es 200 "cursos-en-revision -> 200"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; c=[x for x in json.load(sys.stdin)['cursos'] if x['id']==$CURSO_A]; print(len(c)==1 and c[0]['secciones'][0]['clases'][0]['titulo']=='Clase única' and c[0]['categoria'].startswith('Prueba esc'))")" = "True" ]; verificar "la lista trae el curso con su categoría y su temario" $?
+api POST /escuela/admin/resolver-revision "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"aprobar\":true}"
+estado_es 403 "un instructor no resuelve revisiones (403)"
+api POST /escuela/admin/resolver-revision "$TOKEN_admin" "{\"curso_id\":$CURSO_A,\"aprobar\":false}"
+estado_es 422 "devolver sin comentario -> 422"
+cuerpo_tiene '"obligatorio_si_se_devuelve"' "devolver sin comentario -> regla en detalles"
+api POST /escuela/admin/resolver-revision "$TOKEN_admin" "{\"curso_id\":$CURSO_A,\"aprobar\":false,\"comentario\":\"Falta la descripción de la clase única\"}"
+estado_es 200 "devolver con comentario -> 200"
+api GET "/escuela/curso-edicion?id=$CURSO_A" "$TOKEN_instructor_a"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['estado']=='borrador' and d['comentario_revision']=='Falta la descripción de la clase única')")" = "True" ]; verificar "el instructor ve el curso en borrador con el comentario" $?
+api POST /escuela/admin/resolver-revision "$TOKEN_admin" "{\"curso_id\":$CURSO_A,\"aprobar\":true}"
+estado_es 409 "resolver un curso que no está en revisión -> 409"
+api POST /escuela/enviar-revision "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A}"
+[ "$(psql_n8n "select comentario_revision is null from escuela.cursos where id = $CURSO_A")" = "t" ]; verificar "al reenviar se borra el comentario anterior" $?
+api POST /escuela/admin/resolver-revision "$TOKEN_admin" "{\"curso_id\":$CURSO_A,\"aprobar\":true}"
+estado_es 200 "aprobar -> 200"
+[ "$(psql_n8n "select estado = 'publicado' and publicado_en is not null and comentario_revision is null from escuela.cursos where id = $CURSO_A")" = "t" ]; verificar "aprobar publica el curso y fija publicado_en" $?
+api POST /escuela/enviar-revision "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A}"
+estado_es 409 "enviar a revisión un curso ya publicado -> 409"
+api POST /escuela/admin/resolver-revision "$TOKEN_admin" '{"curso_id":99999999,"aprobar":true}'
+estado_es 404 "resolver un curso inexistente -> 404"
+api POST /escuela/admin/retirar-curso "$TOKEN_admin" "{\"curso_id\":$CURSO_A}"
+estado_es 422 "retirar-curso sin comentario -> 422"
+api POST /escuela/admin/retirar-curso "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"comentario\":\"x\"}"
+estado_es 403 "un instructor no retira cursos (403)"
+api POST /escuela/admin/retirar-curso "$TOKEN_admin" "{\"curso_id\":$CURSO_A,\"comentario\":\"Contenido desactualizado\"}"
+estado_es 200 "retirar-curso -> 200"
+[ "$(psql_n8n "select estado = 'borrador' and comentario_revision = 'Contenido desactualizado' from escuela.cursos where id = $CURSO_A")" = "t" ]; verificar "retirar devuelve el curso a borrador con el comentario" $?
+api POST /escuela/admin/retirar-curso "$TOKEN_admin" "{\"curso_id\":$CURSO_A,\"comentario\":\"otra vez\"}"
+estado_es 409 "retirar un curso que no está publicado -> 409"
+api GET /escuela/admin/cursos-en-revision "$TOKEN_admin"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; print(all(x['id']!=$CURSO_A for x in json.load(sys.stdin)['cursos']))")" = "True" ]; verificar "un curso retirado ya no aparece entre los pendientes" $?
+
 echo
 echo "$((total - fallos)) de $total casos correctos"
 [ "$fallos" -eq 0 ]

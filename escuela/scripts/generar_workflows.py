@@ -752,6 +752,129 @@ SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM s_act UNION ALL SELECT 1 FROM c_act) 
     f.guardar()
 
 
+JS_MENSAJES_FALTA = """const MENSAJES = {
+  falta_subtitulo: 'Falta el subtítulo.', falta_descripcion: 'Falta la descripción.', falta_nivel: 'Falta elegir el nivel.',
+  falta_categoria: 'Falta elegir la categoría.', falta_portada: 'Falta la portada.', falta_secciones: 'El curso necesita al menos una sección.',
+  seccion_vacia: 'Hay secciones sin ninguna clase.' };"""
+JSON_CURSO_COMPLETO = """json_build_object(
+  'id', c.id, 'slug', c.slug, 'titulo', c.titulo, 'subtitulo', c.subtitulo, 'descripcion', c.descripcion,
+  'conocimientos_previos', c.conocimientos_previos, 'lo_que_aprenderas', c.lo_que_aprenderas, 'nivel', c.nivel,
+  'categoria', (SELECT nombre FROM escuela.categorias WHERE id = c.categoria_id), 'portada_ruta', c.portada_ruta,
+  'instructor', coalesce(p.nombre_publico, 'Instructor'), 'actualizado_en', c.actualizado_en,
+  'secciones', coalesce((
+    SELECT json_agg(json_build_object('id', s.id, 'titulo', s.titulo, 'posicion', s.posicion, 'clases', coalesce((
+      SELECT json_agg(json_build_object('id', k.id, 'titulo', k.titulo, 'descripcion', k.descripcion,
+             'duracion_estimada_minutos', k.duracion_estimada_minutos, 'es_muestra', k.es_muestra, 'posicion', k.posicion) ORDER BY k.posicion)
+      FROM escuela.clases k WHERE k.seccion_id = s.id), '[]'::json)) ORDER BY s.posicion)
+    FROM escuela.secciones s WHERE s.curso_id = c.id), '[]'::json))"""
+
+
+def enviar_revision():
+    f = Flujo("escEnviarRevision01", "Enviar a revision", "POST /escuela/enviar-revision. El instructor dueño envía su curso en borrador a revisión si está completo; si no, devuelve la lista de lo que falta. No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/enviar-revision", "instructor", "body", {"curso_id": TEXTO_ID},
+                  {"modo": "dueno", "editable": True, "tipo": "curso", "campo": "curso_id"})
+    f.sql("Comprobar y enviar", """WITH c AS (SELECT * FROM escuela.cursos WHERE id = $1::bigint),
+faltas AS (
+  SELECT array_remove(ARRAY[
+    CASE WHEN coalesce(trim(c.subtitulo), '') = '' THEN 'falta_subtitulo' END,
+    CASE WHEN coalesce(trim(c.descripcion), '') = '' THEN 'falta_descripcion' END,
+    CASE WHEN c.nivel IS NULL THEN 'falta_nivel' END,
+    CASE WHEN c.categoria_id IS NULL THEN 'falta_categoria' END,
+    CASE WHEN c.portada_ruta IS NULL THEN 'falta_portada' END,
+    CASE WHEN NOT EXISTS (SELECT 1 FROM escuela.secciones s WHERE s.curso_id = c.id) THEN 'falta_secciones' END,
+    CASE WHEN EXISTS (SELECT 1 FROM escuela.secciones s WHERE s.curso_id = c.id
+                      AND NOT EXISTS (SELECT 1 FROM escuela.clases k WHERE k.seccion_id = s.id)) THEN 'seccion_vacia' END
+  ], NULL) AS lista FROM c
+), enviado AS (
+  UPDATE escuela.cursos SET estado = 'en_revision', comentario_revision = NULL, actualizado_en = now()
+  WHERE id = $1::bigint AND estado = 'borrador' AND cardinality((SELECT lista FROM faltas)) = 0 RETURNING id
+)
+SELECT (SELECT lista FROM faltas) AS faltas, (SELECT estado FROM c) AS estado, EXISTS (SELECT 1 FROM enviado) AS enviado;""", "={{ [$json.datos.curso_id] }}", x, 0)
+    f.codigo("Armar respuesta", f"""{JS_MENSAJES_FALTA}
+const r = $input.first().json;
+if (r.enviado) return [{{ json: {{ estado: 200, cuerpo: {{ estado: 'en_revision' }} }} }}];
+if (r.estado !== 'borrador') return [{{ json: {{ estado: 409, cuerpo: {{ error: {{ codigo: 'ESTADO_INVALIDO', mensaje: 'Solo se pueden enviar a revisión los cursos en borrador.' }} }} }} }}];
+if (Array.isArray(r.faltas) && r.faltas.length) {{
+  const detalles = r.faltas.map((regla) => ({{ campo: 'curso', regla, mensaje: MENSAJES[regla] }}));
+  return [{{ json: {{ estado: 422, cuerpo: {{ error: {{ codigo: 'CURSO_INCOMPLETO', mensaje: 'Al curso le faltan datos para enviarlo a revisión.', detalles }} }} }} }}];
+}}
+return [{{ json: {{ estado: 500, cuerpo: {ERROR_INTERNO_JS} }} }}];""", x + 240, 0)
+    f.unir("Acceso valido", "Comprobar y enviar"); f.unir("Comprobar y enviar", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Comprobar y enviar", "Armar respuesta"], "Comprobar y enviar", "En una sola consulta revisa que el curso esté completo y, si lo está, lo pasa a `en_revision`. Si falta algo: `422 CURSO_INCOMPLETO` con cada falta en `detalles`.")
+    f.general("Enviar a revision", "`POST /escuela/enviar-revision` · solo el `instructor` dueño.\n\nEntrada: `{ curso_id }`. Exige título, subtítulo, descripción, nivel, categoría, portada, al menos una sección y ninguna sección vacía. Responde `200 { estado: 'en_revision' }`; un curso que no está en borrador da `409`.")
+    f.guardar()
+
+
+def cursos_en_revision():
+    f = Flujo("escCursosRevision01", "Cursos en revision", "GET /escuela/admin/cursos-en-revision. Cursos pendientes de aprobar con sus datos y temario, del más antiguo al más reciente (solo administrador). No guarda ejecuciones.", "escuela")
+    x = protegido(f, "GET", "escuela/admin/cursos-en-revision", "administrador", "query", {})
+    f.sql("Consultar pendientes", f"""SELECT coalesce(json_agg(t.curso ORDER BY t.antiguedad), '[]'::json) AS cursos FROM (
+  SELECT {JSON_CURSO_COMPLETO} AS curso, c.actualizado_en AS antiguedad
+  FROM escuela.cursos c LEFT JOIN escuela.perfiles_instructor p ON p.usuario_id = c.instructor_id
+  WHERE c.estado = 'en_revision'
+) t;""", "={{ [] }}", x, 0)
+    f.codigo("Armar respuesta", "return [{ json: { estado: 200, cuerpo: { cursos: $input.first().json.cursos } } }];", x + 240, 0)
+    f.unir("Entrada valida", "Consultar pendientes"); f.unir("Consultar pendientes", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Consultar pendientes", "Armar respuesta"], "Listar pendientes", "Trae cada curso en `en_revision` con instructor, categoría y temario completo para que el administrador lo revise sin abrir el editor.")
+    f.general("Cursos en revision", "`GET /escuela/admin/cursos-en-revision` · solo `administrador`.\n\nAlimenta la pantalla *Revisión*: del que lleva más tiempo esperando al más reciente.")
+    f.guardar()
+
+
+def resolver_revision():
+    f = Flujo("escResolverRevision01", "Resolver revision", "POST /escuela/admin/resolver-revision. El administrador aprueba un curso en revisión (lo publica) o lo devuelve a borrador con un comentario obligatorio. No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/admin/resolver-revision", "administrador", "body", {
+        "curso_id": TEXTO_ID, "aprobar": {"tipo": "booleano"}, "comentario": {"tipo": "texto", "opcional": True, "maximo": 1000, "multilinea": True}})
+    f.sql("Aplicar la decision", """WITH c AS (SELECT id, estado FROM escuela.cursos WHERE id = $1::bigint),
+permitido AS (SELECT (SELECT estado FROM c) = 'en_revision' AND ($2::boolean OR $3::text IS NOT NULL) AS v),
+resuelto AS (
+  UPDATE escuela.cursos SET
+    estado = CASE WHEN $2::boolean THEN 'publicado' ELSE 'borrador' END,
+    comentario_revision = CASE WHEN $2::boolean THEN NULL ELSE $3::text END,
+    publicado_en = CASE WHEN $2::boolean THEN now() ELSE publicado_en END,
+    actualizado_en = now()
+  WHERE id = $1::bigint AND (SELECT v FROM permitido) RETURNING id
+)
+SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM c) THEN 'no_encontrado'
+            WHEN (SELECT estado FROM c) <> 'en_revision' THEN 'estado_invalido'
+            WHEN NOT (SELECT v FROM permitido) THEN 'falta_comentario' ELSE 'ok' END AS resultado;""",
+          "={{ [$json.datos.curso_id, $json.datos.aprobar, $json.datos.comentario] }}", x, 0)
+    f.codigo("Armar respuesta", f"""const r = $input.first().json;
+const aprobar = $('Entrada valida').first().json.datos.aprobar;
+const error = (estado, codigo, mensaje, detalles) => [{{ json: {{ estado, cuerpo: {{ error: {{ codigo, mensaje, ...(detalles ? {{ detalles }} : {{}}) }} }} }} }}];
+if (r.resultado === 'ok') return [{{ json: {{ estado: 200, cuerpo: {{ estado: aprobar ? 'publicado' : 'borrador' }} }} }}];
+if (r.resultado === 'no_encontrado') return error(404, 'NO_ENCONTRADO', 'El curso no existe.');
+if (r.resultado === 'estado_invalido') return error(409, 'ESTADO_INVALIDO', 'Solo se pueden resolver cursos que están en revisión.');
+if (r.resultado === 'falta_comentario') return error(422, 'VALIDACION_FALLIDA', 'Revisa los datos enviados.', [{{ campo: 'comentario', regla: 'obligatorio_si_se_devuelve', mensaje: 'Explica al instructor qué debe cambiar.' }}]);
+return error(500, 'ERROR_INTERNO', 'Error interno del servidor.');""", x + 240, 0)
+    f.unir("Entrada valida", "Aplicar la decision"); f.unir("Aplicar la decision", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Aplicar la decision", "Armar respuesta"], "Aplicar la decision", "Aprobar publica el curso y fija `publicado_en`. Devolverlo lo regresa a `borrador` con el comentario; sin comentario, `422`. Un curso que no está en revisión da `409`.")
+    f.general("Resolver revision", "`POST /escuela/admin/resolver-revision` · solo `administrador`.\n\nEntrada: `{ curso_id, aprobar, comentario? }`. El comentario es obligatorio al devolver y el instructor lo ve en su editor.")
+    f.guardar()
+
+
+def retirar_curso():
+    f = Flujo("escRetirarCurso01", "Retirar curso", "POST /escuela/admin/retirar-curso. El administrador retira del catálogo un curso publicado y lo regresa a borrador con un comentario obligatorio. No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/admin/retirar-curso", "administrador", "body", {
+        "curso_id": TEXTO_ID, "comentario": {"tipo": "texto", "minimo": 1, "maximo": 1000, "multilinea": True}})
+    f.sql("Retirar del catalogo", """WITH c AS (SELECT id, estado FROM escuela.cursos WHERE id = $1::bigint),
+retirado AS (
+  UPDATE escuela.cursos SET estado = 'borrador', comentario_revision = $2::text, actualizado_en = now()
+  WHERE id = $1::bigint AND estado = 'publicado' RETURNING id
+)
+SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM c) THEN 'no_encontrado'
+            WHEN EXISTS (SELECT 1 FROM retirado) THEN 'ok' ELSE 'estado_invalido' END AS resultado;""", "={{ [$json.datos.curso_id, $json.datos.comentario] }}", x, 0)
+    f.codigo("Armar respuesta", f"""const r = $input.first().json;
+const error = (estado, codigo, mensaje) => [{{ json: {{ estado, cuerpo: {{ error: {{ codigo, mensaje }} }} }} }}];
+if (r.resultado === 'ok') return [{{ json: {{ estado: 200, cuerpo: {{ estado: 'borrador' }} }} }}];
+if (r.resultado === 'no_encontrado') return error(404, 'NO_ENCONTRADO', 'El curso no existe.');
+if (r.resultado === 'estado_invalido') return error(409, 'ESTADO_INVALIDO', 'Solo se pueden retirar los cursos publicados.');
+return error(500, 'ERROR_INTERNO', 'Error interno del servidor.');""", x + 240, 0)
+    f.unir("Entrada valida", "Retirar del catalogo"); f.unir("Retirar del catalogo", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Retirar del catalogo", "Armar respuesta"], "Retirar del catalogo", "Solo un curso `publicado` se puede retirar: vuelve a `borrador` con el comentario y desaparece del catálogo.")
+    f.general("Retirar curso", "`POST /escuela/admin/retirar-curso` · solo `administrador`.\n\nEntrada: `{ curso_id, comentario }`. Responde `200 { estado: 'borrador' }`.")
+    f.guardar()
+
+
 if __name__ == "__main__":
     validar_sesion_y_roles()
     mis_roles()
@@ -772,3 +895,7 @@ if __name__ == "__main__":
     guardar_clase()
     borrar_clase()
     mover()
+    enviar_revision()
+    cursos_en_revision()
+    resolver_revision()
+    retirar_curso()

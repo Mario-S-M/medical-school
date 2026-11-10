@@ -3,6 +3,7 @@ import useCategorias from '../../hooks/useCategorias';
 import useCursoEdicion from '../../hooks/useCursoEdicion';
 import AlertaError from '../ui/AlertaError';
 import BannerEstado from './BannerEstado';
+import BotonEnviarRevision from './BotonEnviarRevision';
 import EditorTemario from './EditorTemario';
 import FormularioDatosCurso from './FormularioDatosCurso';
 
@@ -26,6 +27,7 @@ export default function EditorCurso({ id }: { id: number }) {
       {!curso.es_dueno && <p className="text-sm text-slate-600">Eres parte del equipo de apoyo: los datos del curso solo los cambia su instructor.</p>}
       <FormularioDatosCurso curso={curso} categorias={lista} alGuardar={() => void recargar()} />
       <EditorTemario curso={curso} alCambiar={() => void recargar()} />
+      {curso.es_dueno && curso.estado === 'borrador' && <BotonEnviarRevision cursoId={curso.id} alEnviar={() => void recargar()} />}
     </section>
   );
 }

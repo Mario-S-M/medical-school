@@ -1,6 +1,7 @@
 const ENLACES = [
   { ruta: '/admin/roles', texto: 'Roles' },
   { ruta: '/admin/categorias', texto: 'Categorías' },
+  { ruta: '/admin/revision', texto: 'Revisión' },
 ];
 
 export default function NavegacionAdmin({ actual }: { actual: string }) {
