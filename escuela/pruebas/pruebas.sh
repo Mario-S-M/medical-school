@@ -694,6 +694,22 @@ estado_es 403 "quitado del equipo, ya no edita el temario (403)"
 api POST /escuela/quitar-miembro "$TOKEN_instructor_a" "{\"miembro_id\":\"$ID_INV\"}"
 estado_es 404 "quitar dos veces -> 404"
 
+echo "== Videos: datos"
+psql_n8n "insert into escuela.cursos (id, slug, instructor_id, titulo) values (990001, 'prueba-esc-videos-$SUFIJO', '$ID_A', 'Prueba esc videos'); insert into escuela.secciones (id, curso_id, titulo, posicion) values (990001, 990001, 'S', 1); insert into escuela.clases (id, seccion_id, titulo, posicion) values (990001, 990001, 'C', 1)" > /dev/null
+insertar_video() { psql_n8n "insert into escuela.videos_clase (clase_id, estado, vigente, nombre_original, tipo_contenido, tamano_bytes, ruta_base) values (990001, '$1', $2, 'a.mp4', '${3:-video/mp4}', ${4:-10}, 'x')" 2>&1; }
+[[ "$(insertar_video listo true)" == "INSERT 0 1" ]]; verificar "un primer video vigente se inserta" $?
+[[ "$(insertar_video listo true)" == *videos_vigente_unico* ]]; verificar "un segundo video vigente en la misma clase lo rechaza la base" $?
+[[ "$(insertar_video en_cola false)" == "INSERT 0 1" ]]; verificar "un video en proceso se inserta junto al vigente" $?
+[[ "$(insertar_video procesando false)" == *videos_en_proceso_unico* ]]; verificar "un segundo video en proceso en la misma clase lo rechaza la base" $?
+[[ "$(insertar_video error false)" == "INSERT 0 1" && "$(insertar_video error false)" == "INSERT 0 1" ]]; verificar "varios videos en error conviven" $?
+[[ "$(insertar_video error false video/avi)" == *tipo_contenido_check* ]]; verificar "un tipo distinto de MP4, MOV y WebM lo rechaza la base" $?
+[[ "$(insertar_video error false video/mp4 1073741825)" == *tamano_bytes_check* ]]; verificar "más de 1 073 741 824 bytes lo rechaza la base" $?
+ID_VID="$(psql_n8n "select id from escuela.videos_clase where estado = 'en_cola'")"
+[[ "$(psql_n8n "insert into escuela.claves_video values ($ID_VID, decode('00112233445566778899aabbccddeeff','hex'))" 2>&1)" == "INSERT 0 1" ]]; verificar "una clave de 16 bytes se inserta" $?
+[[ "$(psql_n8n "insert into escuela.claves_video values ($((ID_VID + 1)), decode('00112233445566778899aabbccddeeff00','hex'))" 2>&1)" == *claves_video_clave_check* ]]; verificar "una clave de 17 bytes la rechaza la base" $?
+psql_n8n "delete from escuela.cursos where id = 990001" > /dev/null
+[ "$(psql_n8n "select count(*) from escuela.claves_video where video_id = $ID_VID")" = "0" ]; verificar "borrar el curso borra en cascada sus videos y sus claves" $?
+
 echo
 echo "$((total - fallos)) de $total casos correctos"
 [ "$fallos" -eq 0 ]
