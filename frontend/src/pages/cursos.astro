@@ -1,0 +1,8 @@
+---
+import LayoutBase from '../layouts/LayoutBase.astro';
+import ListaCursos from '../componentes/catalogo/ListaCursos';
+---
+
+<LayoutBase arriba titulo="Cursos">
+  <ListaCursos client:only="react" />
+</LayoutBase>

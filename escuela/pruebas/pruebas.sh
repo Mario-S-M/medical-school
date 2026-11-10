@@ -526,6 +526,53 @@ estado_es 409 "url-subida-portada en un curso en revisión -> 409"
 api POST /escuela/confirmar-portada "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A,\"ruta\":\"$RUTA_2\"}"
 estado_es 409 "confirmar-portada en un curso en revisión -> 409"
 
+echo "== Catálogo público"
+psql_n8n "update escuela.cursos set estado = 'publicado', publicado_en = now(), nivel = 'basico', categoria_id = $ID_CAT where id = $CURSO_A" > /dev/null
+psql_n8n "insert into escuela.secciones (curso_id, titulo, posicion) select $CURSO_A, 'Sección extra', 9 where not exists (select 1 from escuela.secciones where curso_id = $CURSO_A and posicion = 9)" > /dev/null
+solicitar GET "/escuela/cursos?categoria=$(psql_n8n "select slug from escuela.categorias where id = $ID_CAT")"
+estado_es 200 "cursos es público (sin token) -> 200"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['total']==1 and d['pagina']==1 and d['paginas']==1 and d['cursos'][0]['slug']=='$SLUG_A')")" = "True" ]; verificar "el filtro por categoría devuelve solo el curso publicado de esa categoría" $?
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; c=json.load(sys.stdin)['cursos'][0]; print(sorted(c)==sorted(['slug','titulo','subtitulo','nivel','categoria','categoria_slug','instructor','portada_ruta','secciones','clases']))")" = "True" ]; verificar "la tarjeta no trae campos internos" $?
+for q in "anatomia" "ANATOM%C3%8DA" "Anatom%C3%ADa" "cuerpo" "Usuario%20instructor_a"; do
+  solicitar GET "/escuela/cursos?q=$q"
+  [ "$(echo "$cuerpo" | python3 -c "import sys,json; print(any(c['slug']=='$SLUG_A' for c in json.load(sys.stdin)['cursos']))")" = "True" ]; verificar "buscar '$q' encuentra el curso" $?
+done
+solicitar GET "/escuela/cursos?q=zzzinexistente"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['total']==0 and d['cursos']==[] and d['paginas']==0)")" = "True" ]; verificar "una búsqueda sin resultados devuelve la lista vacía" $?
+solicitar GET "/escuela/cursos?nivel=avanzado&categoria=$(psql_n8n "select slug from escuela.categorias where id = $ID_CAT")"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; print(json.load(sys.stdin)['total'])")" = "0" ]; verificar "el filtro de nivel reduce el resultado" $?
+for i in $(seq 1 12); do
+  psql_n8n "insert into escuela.cursos (slug, instructor_id, titulo, estado, publicado_en, nivel, categoria_id) values ('prueba-esc-$SUFIJO-extra-$i', '$ID_A', 'Prueba esc $SUFIJO curso extra $i', 'publicado', now() - interval '$i minutes', 'basico', $ID_CAT)" > /dev/null
+done
+SLUG_CAT="$(psql_n8n "select slug from escuela.categorias where id = $ID_CAT")"
+solicitar GET "/escuela/cursos?categoria=$SLUG_CAT"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['total']==13 and d['paginas']==2 and len(d['cursos'])==12 and d['cursos'][0]['slug']=='$SLUG_A')")" = "True" ]; verificar "con 13 cursos publicados hay 2 páginas de 12 y el más reciente va primero" $?
+solicitar GET "/escuela/cursos?categoria=$SLUG_CAT&pagina=2"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['pagina']==2 and len(d['cursos'])==1)")" = "True" ]; verificar "la página 2 trae el curso restante" $?
+solicitar GET "/escuela/cursos?categoria=$SLUG_CAT&pagina=3"
+cuerpo_tiene '"cursos":[]' "una página fuera de rango devuelve la lista vacía"
+for malo in "nivel=experto" "pagina=0" "pagina=abc" "extra=1" "q=$(head -c 120 /dev/zero | tr '\0' a)"; do
+  solicitar GET "/escuela/cursos?$malo"
+  estado_es 422 "cursos con '${malo:0:20}' -> 422"
+done
+psql_n8n "update escuela.cursos set estado = 'borrador' where id = $CURSO_B" > /dev/null
+solicitar GET "/escuela/cursos?q=Fisiolog%C3%ADa"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; print(all('Fisiolog' not in c['titulo'] for c in json.load(sys.stdin)['cursos']))")" = "True" ]; verificar "un curso en borrador no aparece en el catálogo" $?
+solicitar GET "/escuela/curso?slug=$SLUG_A"
+estado_es 200 "la ficha de un curso publicado -> 200"
+echo "$cuerpo" | python3 escuela/pruebas/sin_campos_internos.py "$SLUG_CAT" basico "Sección extra"; verificar "la ficha trae categoría, nivel y temario, y ningún campo interno" $?
+solicitar GET "/escuela/curso?slug=prueba-esc-$SUFIJO-fisiologia"
+estado_es 404 "la ficha de un curso en borrador -> 404"
+solicitar GET "/escuela/curso?slug=no-existe-$SUFIJO"
+estado_es 404 "la ficha de un curso inexistente -> 404"
+solicitar GET "/escuela/curso"
+estado_es 422 "la ficha sin slug -> 422"
+api POST /escuela/admin/retirar-curso "$TOKEN_admin" "{\"curso_id\":$CURSO_A,\"comentario\":\"Prueba de retiro\"}"
+solicitar GET "/escuela/curso?slug=$SLUG_A"
+estado_es 404 "un curso retirado desaparece de la ficha pública"
+solicitar GET "/escuela/cursos?categoria=$SLUG_CAT"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; print(json.load(sys.stdin)['total'])")" = "12" ]; verificar "un curso retirado desaparece del catálogo" $?
+
 echo
 echo "$((total - fallos)) de $total casos correctos"
 [ "$fallos" -eq 0 ]

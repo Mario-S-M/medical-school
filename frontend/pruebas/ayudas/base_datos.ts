@@ -21,7 +21,7 @@ export function limpiarEscuelaE2E() {
   const propios = ids ? `usuario_id::text in (${ids})` : 'false';
   const duenos = ids ? `instructor_id::text in (${ids})` : 'false';
   borrarPortadasE2E(duenos);
-  sql('n8n', `delete from escuela.cursos where ${duenos}; delete from escuela.roles_usuario where ${propios}; delete from escuela.perfiles_instructor where ${propios}; delete from escuela.categorias where nombre like 'E2E %'`);
+  sql('n8n', `delete from escuela.cursos where ${duenos} or slug like 'e2e-%'; delete from escuela.roles_usuario where ${propios}; delete from escuela.perfiles_instructor where ${propios}; delete from escuela.categorias where nombre like 'E2E %'`);
 }
 
 export const borrarUsuariosE2E = () =>
@@ -64,4 +64,13 @@ function borrarPortadasE2E(duenos: string) {
     execFileSync('curl', ['-s', '-o', '/dev/null', '-X', 'DELETE', `http://127.0.0.1:${leer('KONG_HTTP_PORT')}/storage/v1/object/portadas/${ruta}`,
       '-H', `Authorization: Bearer ${leer('SERVICE_ROLE_KEY')}`, '-H', `apikey: ${leer('SERVICE_ROLE_KEY')}`]);
   }
+}
+
+// Curso ya publicado (con una sección y una clase muestra) para probar el catálogo sin pasar por la revisión.
+export function crearCursoPublicadoE2E(titulo: string, slug: string, nivel = 'basico', minutos = 0) {
+  sql('n8n', `with c as (insert into escuela.cursos (slug, instructor_id, titulo, subtitulo, descripcion, nivel, categoria_id, estado, publicado_en)
+    values ('${slug}', gen_random_uuid(), '${titulo}', 'Subtítulo de ${titulo}', 'Descripción', '${nivel}',
+    (select id from escuela.categorias where nombre = 'E2E Ciencias'), 'publicado', now() - interval '${minutos} minutes') on conflict (slug) do nothing returning id),
+    s as (insert into escuela.secciones (curso_id, titulo, posicion) select id, 'Sección uno', 1 from c returning id)
+    insert into escuela.clases (seccion_id, titulo, es_muestra, duracion_estimada_minutos, posicion) select id, 'Clase de muestra', true, 5, 1 from s`);
 }

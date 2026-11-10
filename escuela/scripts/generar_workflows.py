@@ -313,7 +313,7 @@ def protegido(f, metodo, ruta, rol, origen, reglas, acceso=None):
     """Entrada común de un endpoint: webhook, permiso por rol (si rol) y validación de campos (si reglas).
     Los errores de los dos pasos van directo a "Responder". Devuelve la columna libre siguiente."""
     f.webhook(metodo, ruta, 0, 0)
-    anterior, x = "Recibir solicitud", 240
+    anterior, x, previos = "Recibir solicitud", 240, []
     f.seccion("Entrada", "Webhook protegido por el secreto del proxy (Caddy es la única entrada).", NOTA_ENTRADA, ["Recibir solicitud"])
     if rol:
         f.codigo("Definir reglas", f"""const e = $input.first().json;
@@ -329,11 +329,12 @@ return [{{ json: {{ headers: e.headers, rol_requerido: {json.dumps(rol)}, datos:
         f.codigo("Definir reglas", f"""const e = $input.first().json;
 return [{{ json: {{ datos: e.{origen}, reglas: {json.dumps(reglas, ensure_ascii=False)} }} }}];""", x, 0)
         f.unir(anterior, "Definir reglas"); anterior, x = "Definir reglas", x + 240
+        previos = ["Definir reglas"]  # sin permiso que comprobar, "Definir reglas" entra en el grupo de validación
     f.subflujo("Validar campos", "escValidarCampos01", x, 0)
     f.si("Entrada valida", "={{ $json.ok }}", x + 240, 0)
     f.unir(anterior, "Validar campos"); f.unir("Validar campos", "Entrada valida"); f.unir("Entrada valida", "Responder", 1)
     f.seccion("Validar entrada", "Subworkflow `Validar campos`: tipos, largos y campos extra. Si falla, `422 VALIDACION_FALLIDA` con la lista de reglas.", NOTA_ENTRADA,
-              ["Validar campos", "Entrada valida"], True, "Valida y normaliza los campos con el subworkflow compartido.")
+              previos + ["Validar campos", "Entrada valida"], True, "Valida y normaliza los campos con el subworkflow compartido.")
     x += 480
     if acceso:
         f.subflujo("Validar acceso a curso", "escValidarAcceso01", x, 0)
@@ -948,6 +949,72 @@ return [{{ json: {{ estado: 200, cuerpo: {{ portada_url: `/almacen/object/public
     f.guardar()
 
 
+def cursos_catalogo():
+    f = Flujo("escCursos01", "Cursos", "GET /escuela/cursos?q=&categoria=&nivel=&pagina=. Catálogo público de cursos publicados con búsqueda de texto completo en español (sin acentos), filtros y 12 cursos por página. No guarda ejecuciones.", "escuela")
+    x = protegido(f, "GET", "escuela/cursos", None, "query", {
+        "q": {"tipo": "texto", "opcional": True, "maximo": 100}, "categoria": {"tipo": "texto", "opcional": True, "maximo": 80},
+        "nivel": {"tipo": "opcion", "opcional": True, "valores": ["basico", "intermedio", "avanzado"]},
+        "pagina": {"tipo": "entero", "opcional": True, "minimo": 1, "maximo": 10000}})
+    f.sql("Buscar cursos", """WITH p AS (
+  SELECT NULLIF($1::text, '') AS q, NULLIF($2::text, '') AS categoria, NULLIF($3::text, '') AS nivel, coalesce($4::int, 1) AS pagina,
+         CASE WHEN NULLIF($1::text, '') IS NULL THEN NULL ELSE websearch_to_tsquery('spanish', escuela.sin_acentos($1::text)) END AS consulta
+), filtrados AS (
+  SELECT c.id, c.slug, c.titulo, c.subtitulo, c.nivel, c.portada_ruta, c.publicado_en,
+         cat.nombre AS categoria, cat.slug AS categoria_slug, coalesce(i.nombre_publico, 'Instructor') AS instructor,
+         (SELECT count(*) FROM escuela.secciones s WHERE s.curso_id = c.id) AS secciones,
+         (SELECT count(*) FROM escuela.clases k JOIN escuela.secciones s ON s.id = k.seccion_id WHERE s.curso_id = c.id) AS clases,
+         CASE WHEN p.consulta IS NULL THEN 0 ELSE ts_rank(c.busqueda, p.consulta) END AS relevancia
+  FROM escuela.cursos c
+  LEFT JOIN escuela.categorias cat ON cat.id = c.categoria_id
+  LEFT JOIN escuela.perfiles_instructor i ON i.usuario_id = c.instructor_id
+  CROSS JOIN p
+  WHERE c.estado = 'publicado'
+    AND (p.categoria IS NULL OR cat.slug = p.categoria)
+    AND (p.nivel IS NULL OR c.nivel = p.nivel)
+    AND (p.consulta IS NULL OR c.busqueda @@ p.consulta
+         OR to_tsvector('spanish', escuela.sin_acentos(coalesce(i.nombre_publico, ''))) @@ p.consulta)
+)
+SELECT (SELECT count(*) FROM filtrados)::int AS total, (SELECT pagina FROM p) AS pagina,
+  coalesce((SELECT json_agg(json_build_object('slug', t.slug, 'titulo', t.titulo, 'subtitulo', t.subtitulo, 'nivel', t.nivel,
+              'categoria', t.categoria, 'categoria_slug', t.categoria_slug, 'instructor', t.instructor, 'portada_ruta', t.portada_ruta,
+              'secciones', t.secciones, 'clases', t.clases) ORDER BY t.relevancia DESC, t.publicado_en DESC, t.id DESC)
+            FROM (SELECT * FROM filtrados ORDER BY relevancia DESC, publicado_en DESC, id DESC
+                  OFFSET ((SELECT pagina FROM p) - 1) * 12 LIMIT 12) t), '[]'::json) AS cursos;""",
+          "={{ [$json.datos.q, $json.datos.categoria, $json.datos.nivel, $json.datos.pagina] }}", x, 0)
+    f.codigo("Armar respuesta", "const r = $input.first().json;\nreturn [{ json: { estado: 200, cuerpo: { cursos: r.cursos, total: r.total, pagina: r.pagina, paginas: Math.ceil(r.total / 12) } } }];", x + 240, 0)
+    f.unir("Entrada valida", "Buscar cursos"); f.unir("Buscar cursos", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Buscar cursos", "Armar respuesta"], "Buscar y paginar", "Solo cursos `publicado`. La búsqueda ignora acentos y mayúsculas, usa raíces del español y mira título, subtítulo, descripción y nombre del instructor; ordena por relevancia y luego por fecha. 12 por página.")
+    f.general("Cursos", "`GET /escuela/cursos?q=&categoria=&nivel=&pagina=` · público, sin sesión.\n\nResponde `{ cursos, total, pagina, paginas }`. Cada tarjeta trae título, subtítulo, nivel, categoría, instructor, portada y cuántas secciones y clases tiene; nunca datos internos.")
+    f.guardar()
+
+
+def curso_publico():
+    f = Flujo("escCursoPublico01", "Curso publico", "GET /escuela/curso?slug=. Ficha pública de un curso publicado con su temario completo (sin video y sin campos internos). No guarda ejecuciones.", "escuela")
+    x = protegido(f, "GET", "escuela/curso", None, "query", {"slug": {"tipo": "texto", "minimo": 1, "maximo": 120}})
+    f.sql("Consultar la ficha", """SELECT json_build_object(
+  'id', c.id, 'slug', c.slug, 'titulo', c.titulo, 'subtitulo', c.subtitulo, 'descripcion', c.descripcion,
+  'conocimientos_previos', c.conocimientos_previos, 'lo_que_aprenderas', c.lo_que_aprenderas, 'nivel', c.nivel,
+  'categoria', CASE WHEN cat.id IS NULL THEN NULL ELSE json_build_object('nombre', cat.nombre, 'slug', cat.slug) END,
+  'portada_ruta', c.portada_ruta, 'instructor', coalesce(i.nombre_publico, 'Instructor'), 'publicado_en', c.publicado_en,
+  'secciones', coalesce((
+    SELECT json_agg(json_build_object('id', s.id, 'titulo', s.titulo, 'posicion', s.posicion, 'clases', coalesce((
+      SELECT json_agg(json_build_object('id', k.id, 'titulo', k.titulo, 'descripcion', k.descripcion,
+             'duracion_estimada_minutos', k.duracion_estimada_minutos, 'es_muestra', k.es_muestra, 'posicion', k.posicion) ORDER BY k.posicion)
+      FROM escuela.clases k WHERE k.seccion_id = s.id), '[]'::json)) ORDER BY s.posicion)
+    FROM escuela.secciones s WHERE s.curso_id = c.id), '[]'::json)) AS curso
+FROM escuela.cursos c
+LEFT JOIN escuela.categorias cat ON cat.id = c.categoria_id
+LEFT JOIN escuela.perfiles_instructor i ON i.usuario_id = c.instructor_id
+WHERE c.slug = $1::text AND c.estado = 'publicado';""", "={{ [$json.datos.slug] }}", x, 0)
+    f.codigo("Armar respuesta", f"""const r = $input.first().json;
+if (r.curso) return [{{ json: {{ estado: 200, cuerpo: r.curso }} }}];
+return [{{ json: {{ estado: 404, cuerpo: {{ error: {{ codigo: 'NO_ENCONTRADO', mensaje: 'El curso no existe.' }} }} }} }}];""", x + 240, 0)
+    f.unir("Entrada valida", "Consultar la ficha"); f.unir("Consultar la ficha", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Consultar la ficha", "Armar respuesta"], "Leer la ficha", "Un curso que no está `publicado` responde `404`, igual que uno que no existe. Lleva `es_muestra` y la duración de cada clase, pero ningún video ni dato interno.")
+    f.general("Curso publico", "`GET /escuela/curso?slug=` · público, sin sesión.\n\nAlimenta la ficha `/curso?c=<slug>`. No devuelve `instructor_id`, `estado`, `comentario_revision` ni correos.")
+    f.guardar()
+
+
 if __name__ == "__main__":
     validar_sesion_y_roles()
     mis_roles()
@@ -974,3 +1041,5 @@ if __name__ == "__main__":
     retirar_curso()
     url_subida_portada()
     confirmar_portada()
+    cursos_catalogo()
+    curso_publico()

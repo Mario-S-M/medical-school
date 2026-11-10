@@ -1,0 +1,8 @@
+---
+import LayoutBase from '../layouts/LayoutBase.astro';
+import FichaCurso from '../componentes/catalogo/FichaCurso';
+---
+
+<LayoutBase arriba titulo="Curso">
+  <FichaCurso client:only="react" />
+</LayoutBase>
