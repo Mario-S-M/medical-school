@@ -1,7 +1,7 @@
 {
   "id": "escValidarAcceso01",
   "name": "Validar acceso a curso",
-  "description": "Subworkflow. Recibe el item con usuario, datos y acceso { modo: dueno | dueno_o_equipo, editable, tipo: curso | seccion | clase | dato, campo }, busca el curso afectado y comprueba que exista, que el usuario sea su dueño o de su equipo de apoyo y, si editable, que no esté en revisión.",
+  "description": "Subworkflow. Recibe el item con usuario, datos y acceso { modo: dueno | dueno_o_equipo, editable, tipo: curso | seccion | clase | video | dato, campo }, busca el curso afectado y comprueba que exista, que el usuario sea su dueño o de su equipo de apoyo y, si editable, que no esté en revisión.",
   "active": false,
   "isArchived": false,
   "settings": {
@@ -31,7 +31,7 @@
     },
     {
       "parameters": {
-        "content": "### Comprobar acceso\nResuelve el curso (directo, o a partir de una sección o una clase), lo consulta y decide: `404` si no existe, `403` si no es del usuario ni de su equipo, `409` si está en revisión y se va a editar.",
+        "content": "### Comprobar acceso\nResuelve el curso (directo, o a partir de una sección, una clase o un video), lo consulta y decide: `404` si no existe, `403` si no es del usuario ni de su equipo, `409` si está en revisión y se va a editar.",
         "height": 430,
         "width": 780,
         "color": 1
@@ -90,7 +90,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH objetivo AS (\n  SELECT CASE $1::text\n    WHEN 'curso' THEN $2::bigint\n    WHEN 'seccion' THEN (SELECT curso_id FROM escuela.secciones WHERE id = $2::bigint)\n    WHEN 'clase' THEN (SELECT s.curso_id FROM escuela.clases k JOIN escuela.secciones s ON s.id = k.seccion_id WHERE k.id = $2::bigint)\n  END AS curso_id\n)\nSELECT c.id, c.instructor_id, c.estado,\n       (c.instructor_id = $3::uuid) AS es_dueno,\n       EXISTS (SELECT 1 FROM escuela.equipos_apoyo e WHERE e.instructor_id = c.instructor_id AND e.miembro_id = $3::uuid) AS es_equipo\nFROM objetivo o JOIN escuela.cursos c ON c.id = o.curso_id;",
+        "query": "WITH objetivo AS (\n  SELECT CASE $1::text\n    WHEN 'curso' THEN $2::bigint\n    WHEN 'seccion' THEN (SELECT curso_id FROM escuela.secciones WHERE id = $2::bigint)\n    WHEN 'clase' THEN (SELECT s.curso_id FROM escuela.clases k JOIN escuela.secciones s ON s.id = k.seccion_id WHERE k.id = $2::bigint)\n    WHEN 'video' THEN (SELECT s.curso_id FROM escuela.videos_clase v JOIN escuela.clases k ON k.id = v.clase_id JOIN escuela.secciones s ON s.id = k.seccion_id WHERE v.id = $2::bigint)\n  END AS curso_id\n)\nSELECT c.id, c.instructor_id, c.estado,\n       (c.instructor_id = $3::uuid) AS es_dueno,\n       EXISTS (SELECT 1 FROM escuela.equipos_apoyo e WHERE e.instructor_id = c.instructor_id AND e.miembro_id = $3::uuid) AS es_equipo\nFROM objetivo o JOIN escuela.cursos c ON c.id = o.curso_id;",
         "options": {
           "queryReplacement": "={{ [$json.tipo, $json.id, $json.usuario_id] }}"
         }

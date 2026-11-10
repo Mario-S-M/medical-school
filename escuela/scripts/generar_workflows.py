@@ -96,11 +96,17 @@ class Flujo:
                           "options": {"queryReplacement": parametros}}, x, y,
                          credentials=CRED_PG, onError="continueRegularOutput", alwaysOutputData=True)
 
-    def http(self, nombre, metodo, url, cabeceras, x, y, servicio=False, formato="json"):
+    def http(self, nombre, metodo, url, cabeceras, x, y, servicio=False, formato="json", transcodificador=False, cuerpo=None):
         p = {"method": metodo, "url": url, "options": {"response": {"response": {"fullResponse": True, "neverError": True, "responseFormat": formato}}},
              "sendHeaders": True, "specifyHeaders": "keypair",
              "headerParameters": {"parameters": [{"name": k, "value": v} for k, v in cabeceras.items()]}}
         extra = {}
+        if cuerpo:
+            p.update({"sendBody": True, "specifyBody": "json", "jsonBody": cuerpo})
+        if transcodificador:  # credencial compartida con el transcodificador (cabecera X-Secreto-Transcodificador)
+            p.update({"authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth"})
+            p.pop("sendHeaders"); p.pop("specifyHeaders"); p.pop("headerParameters")
+            extra["credentials"] = {"httpHeaderAuth": {"id": "secretoTranscodificador01", "name": "Secreto transcodificador"}}
         if servicio:  # credencial con la clave del rol de servicio de Supabase (Authorization: Bearer ...)
             p.update({"authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth"})
             p.pop("sendHeaders"); p.pop("specifyHeaders"); p.pop("headerParameters")
@@ -507,7 +513,7 @@ SELECT 'ok' AS resultado;""", "={{ [$json.datos.usuario_id, $json.datos.rol, $js
 
 def validar_acceso():
     f = Flujo("escValidarAcceso01", "Validar acceso a curso",
-              "Subworkflow. Recibe el item con usuario, datos y acceso { modo: dueno | dueno_o_equipo, editable, tipo: curso | seccion | clase | dato, campo }, "
+              "Subworkflow. Recibe el item con usuario, datos y acceso { modo: dueno | dueno_o_equipo, editable, tipo: curso | seccion | clase | video | dato, campo }, "
               "busca el curso afectado y comprueba que exista, que el usuario sea su dueño o de su equipo de apoyo y, si editable, que no esté en revisión.", "escuela")
     f.nodo("Disparador", "n8n-nodes-base.executeWorkflowTrigger", 1.1, {"inputSource": "passthrough"}, 0, 0)
     f.codigo("Resolver objetivo", """const e = $input.first().json;
@@ -519,6 +525,7 @@ return [{ json: { tipo, id: e.datos[a.campo], usuario_id: e.usuario.id } }];""",
     WHEN 'curso' THEN $2::bigint
     WHEN 'seccion' THEN (SELECT curso_id FROM escuela.secciones WHERE id = $2::bigint)
     WHEN 'clase' THEN (SELECT s.curso_id FROM escuela.clases k JOIN escuela.secciones s ON s.id = k.seccion_id WHERE k.id = $2::bigint)
+    WHEN 'video' THEN (SELECT s.curso_id FROM escuela.videos_clase v JOIN escuela.clases k ON k.id = v.clase_id JOIN escuela.secciones s ON s.id = k.seccion_id WHERE v.id = $2::bigint)
   END AS curso_id
 )
 SELECT c.id, c.instructor_id, c.estado,
@@ -535,7 +542,7 @@ if (a.editable && c.estado === 'en_revision') return error(409, 'CURSO_EN_REVISI
 return [{{ json: {{ ...original, ok: true, curso: {{ id: Number(c.id), instructor_id: c.instructor_id, estado: c.estado }}, es_dueno: c.es_dueno }} }}];""", 720, 0)
     f.unir("Disparador", "Resolver objetivo"); f.unir("Resolver objetivo", "Consultar curso"); f.unir("Consultar curso", "Decidir acceso")
     f.seccion("Entrada", "Recibe el item del endpoint con `usuario`, `datos` y `acceso`.", NOTA_ENTRADA, ["Disparador"])
-    f.seccion("Comprobar acceso", "Resuelve el curso (directo, o a partir de una sección o una clase), lo consulta y decide: `404` si no existe, `403` si no es del usuario ni de su equipo, `409` si está en revisión y se va a editar.", NOTA_PERMISOS,
+    f.seccion("Comprobar acceso", "Resuelve el curso (directo, o a partir de una sección, una clase o un video), lo consulta y decide: `404` si no existe, `403` si no es del usuario ni de su equipo, `409` si está en revisión y se va a editar.", NOTA_PERMISOS,
               ["Resolver objetivo", "Consultar curso", "Decidir acceso"], True, "Resuelve el curso y decide si el usuario puede tocarlo.")
     f.general("Validar acceso a curso", "Subworkflow compartido: **ningún endpoint de cursos repite la comprobación de propiedad**.\n\n`acceso.modo`: `dueno` o `dueno_o_equipo` (instructor dueño o miembro de su equipo de apoyo). `acceso.editable`: si es `true`, un curso `en_revision` se rechaza. Devuelve el item con `curso` y `es_dueno`.")
     f.guardar()
@@ -1170,6 +1177,119 @@ SELECT EXISTS (SELECT 1 FROM resp) AS respondida;""", "={{ [$json.datos.invitaci
     f.guardar()
 
 
+VIDEO_MIME = {"video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm"}
+VIDEO_MAX_BYTES = 1073741824
+
+
+def solicitar_subida_video():
+    f = Flujo("escSolicitarSubidaVideo01", "Solicitar subida de video", "POST /escuela/solicitar-subida-video. Valida tipo y tamaño, reserva la ruta ordenada del video, genera su clave AES-128 y firma una subida directa a Supabase Storage (instructor dueño o su equipo; no en revisión). No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/solicitar-subida-video", ROLES_TEMARIO, "body", {
+        "clase_id": TEXTO_ID, "nombre_archivo": {"tipo": "texto", "minimo": 1, "maximo": 255},
+        "tipo_contenido": {"tipo": "texto", "minimo": 1, "maximo": 100}, "tamano_bytes": {"tipo": "entero", "minimo": 1, "maximo": 1000000000000}},
+        {"modo": "dueno_o_equipo", "editable": True, "tipo": "clase", "campo": "clase_id"})
+    f.codigo("Revisar video", f"""const d = $input.first().json.datos;
+const EXT = {json.dumps(VIDEO_MIME)};
+const error = (mensaje) => [{{ json: {{ ok: false, estado: 422, cuerpo: {{ error: {{ codigo: 'VIDEO_INVALIDO', mensaje }} }} }} }}];
+if (!EXT[d.tipo_contenido]) return error('El video debe ser MP4, MOV o WebM.');
+if (d.tamano_bytes > {VIDEO_MAX_BYTES}) return error('El video no puede pesar más de 1 GiB.');
+return [{{ json: {{ ok: true, extension: EXT[d.tipo_contenido] }} }}];""", x, 0)
+    f.si("Video valido", "={{ $json.ok }}", x + 240, 0)
+    f.sql("Reservar ruta", """SELECT nextval(pg_get_serial_sequence('escuela.videos_clase', 'id')) AS id,
+       'cursos/' || s.curso_id || '/secciones/' || s.id || '/clases/' || k.id AS carpeta_clase
+FROM escuela.clases k JOIN escuela.secciones s ON s.id = k.seccion_id WHERE k.id = $1::bigint;""", "={{ [$('Acceso valido').first().json.datos.clase_id] }}", x + 480, 0)
+    f.codigo("Armar rutas", f"""const r = $input.first().json;
+if (!r.id) return [{{ json: {{ ok: false, estado: 404, cuerpo: {{ error: {{ codigo: 'NO_ENCONTRADO', mensaje: 'La clase no existe.' }} }} }} }}];
+const base = `${{r.carpeta_clase}}/${{r.id}}`;
+return [{{ json: {{ ok: true, video_id: Number(r.id), ruta_base: base, ruta_original: `${{base}}/original.${{$('Revisar video').first().json.extension}}` }} }}];""", x + 720, 0)
+    f.http("Firmar subida en Storage", "POST", f"={STORAGE}/object/upload/sign/videos/{{{{ $json.ruta_original }}}}", {}, x + 960, 0, servicio=True)
+    f.codigo("Clasificar firma", f"""const r = $input.first().json;
+if (r.statusCode === 200 && r.body && r.body.url) return [{{ json: {{ ok: true, url_subida: `/almacen${{r.body.url}}` }} }}];
+return [{{ json: {{ ok: false, estado: 500, cuerpo: {ERROR_INTERNO_JS} }} }}];""", x + 1200, 0)
+    f.si("Firma valida", "={{ $json.ok }}", x + 1440, 0)
+    f.sql("Registrar video", """WITH nuevo AS (
+  INSERT INTO escuela.videos_clase (id, clase_id, estado, nombre_original, tipo_contenido, tamano_bytes, ruta_base)
+  VALUES ($5::bigint, $1::bigint, 'esperando_archivo', $2::text, $3::text, $4::bigint, $6::text)
+  ON CONFLICT DO NOTHING RETURNING id
+), clave AS (
+  INSERT INTO escuela.claves_video (video_id, clave) SELECT id, gen_random_bytes(16) FROM nuevo RETURNING video_id
+)
+SELECT EXISTS (SELECT 1 FROM nuevo) AS registrado;""",
+          "={{ [$('Acceso valido').first().json.datos.clase_id, $('Acceso valido').first().json.datos.nombre_archivo, $('Acceso valido').first().json.datos.tipo_contenido, $('Acceso valido').first().json.datos.tamano_bytes, $('Armar rutas').first().json.video_id, $('Armar rutas').first().json.ruta_base] }}", x + 1680, 0)
+    f.codigo("Armar respuesta", f"""const p = $('Armar rutas').first().json;
+if ($input.first().json.registrado) return [{{ json: {{ estado: 201, cuerpo: {{ video_id: p.video_id, url_subida: $('Clasificar firma').first().json.url_subida, ruta: p.ruta_original }} }} }}];
+return [{{ json: {{ estado: 409, cuerpo: {{ error: {{ codigo: 'VIDEO_EN_PROCESO', mensaje: 'Esta clase ya tiene un video subiéndose o procesándose.' }} }} }} }}];""", x + 1920, 0)
+    f.unir("Acceso valido", "Revisar video"); f.unir("Revisar video", "Video valido")
+    f.unir("Video valido", "Reservar ruta", 0); f.unir("Video valido", "Responder", 1)
+    f.unir("Reservar ruta", "Armar rutas"); f.unir("Armar rutas", "Firmar subida en Storage")
+    f.unir("Firmar subida en Storage", "Clasificar firma"); f.unir("Clasificar firma", "Firma valida")
+    f.unir("Firma valida", "Registrar video", 0); f.unir("Firma valida", "Responder", 1)
+    f.unir("Registrar video", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    f.seccion("Revisar el archivo", "Solo `video/mp4`, `video/quicktime` o `video/webm` de hasta 1 GiB (1 073 741 824 bytes); si no, `422 VIDEO_INVALIDO`.", NOTA_ENTRADA,
+              ["Revisar video", "Video valido"], True, "Valida el tipo y el tamaño declarados del video.")
+    f.seccion("Preparar y firmar", "Reserva el id del video y arma la ruta ordenada `cursos/<c>/secciones/<s>/clases/<k>/<video>/` y pide a Storage una URL firmada de un solo uso.", NOTA_PERMISOS,
+              ["Reservar ruta", "Armar rutas", "Firmar subida en Storage", "Clasificar firma", "Firma valida"], True, "Reserva la ruta, genera la clave y firma la subida.")
+    f.responder(x + 2160, 0)
+    f.seccion("Registrar el video", "Guarda el video en `esperando_archivo` junto con su clave AES-128 (16 bytes de `gen_random_bytes`, en una tabla aparte). Si la clase ya tiene un video subiéndose o procesándose, la base lo impide: `409 VIDEO_EN_PROCESO`. La clave **nunca** sale en la respuesta.", NOTA_DATOS,
+              ["Registrar video", "Armar respuesta"], True, "Registra el video y su clave; un segundo video en proceso da 409.")
+    f.seccion("Respuesta", "Devuelve `201 { video_id, url_subida, ruta }` o el error de cualquier paso anterior.", NOTA_RESPUESTA, ["Responder"])
+    f.general("Solicitar subida de video", "`POST /escuela/solicitar-subida-video` · instructor dueño o equipo de apoyo.\n\nEntrada: `{ clase_id, nombre_archivo, tipo_contenido, tamano_bytes }`. El navegador hace `PUT` del archivo a `url_subida` (directo a Storage, nunca pasa por n8n) y después llama a *Confirmar subida de video*.")
+    f.guardar()
+
+
+def confirmar_subida_video():
+    f = Flujo("escConfirmarSubidaVideo01", "Confirmar subida de video", "POST /escuela/confirmar-subida-video. Comprueba en Storage que el video se subió y coincide con lo declarado y le pide el trabajo al transcodificador (instructor dueño o su equipo; no en revisión). No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/confirmar-subida-video", ROLES_TEMARIO, "body", {"video_id": TEXTO_ID},
+                  {"modo": "dueno_o_equipo", "editable": True, "tipo": "video", "campo": "video_id"})
+    f.sql("Consultar video", """SELECT v.id, v.estado, v.tipo_contenido, v.tamano_bytes, v.ruta_base, encode(k.clave, 'hex') AS clave_hex
+FROM escuela.videos_clase v JOIN escuela.claves_video k ON k.video_id = v.id WHERE v.id = $1::bigint;""", "={{ [$json.datos.video_id] }}", x, 0)
+    f.codigo("Revisar estado", f"""const v = $input.first().json;
+const EXT = {json.dumps(VIDEO_MIME)};
+const error = (estado, codigo, mensaje) => [{{ json: {{ ok: false, estado, cuerpo: {{ error: {{ codigo, mensaje }} }} }} }}];
+if (!v.id) return error(404, 'NO_ENCONTRADO', 'El video no existe.');
+if (v.estado !== 'esperando_archivo') return error(409, 'ESTADO_INVALIDO', 'Este video ya se confirmó.');
+return [{{ json: {{ ok: true, video_id: Number(v.id), tipo_contenido: v.tipo_contenido, tamano_bytes: Number(v.tamano_bytes), ruta_base: v.ruta_base, ruta_original: `${{v.ruta_base}}/original.${{EXT[v.tipo_contenido]}}`, clave_hex: v.clave_hex }} }}];""", x + 240, 0)
+    f.si("Video por confirmar", "={{ $json.ok }}", x + 480, 0)
+    f.http("Consultar archivo en Storage", "GET", f"={STORAGE}/object/info/videos/{{{{ $json.ruta_original }}}}", {}, x + 720, 0, servicio=True)
+    f.codigo("Clasificar archivo", f"""const r = $input.first().json;
+const v = $('Revisar estado').first().json;
+const b = r.body || {{}};
+const tamano = Number(b.size || (b.metadata || {{}}).size || 0);
+const tipo = b.content_type || (b.metadata || {{}}).mimetype || '';
+const error = (mensaje) => [{{ json: {{ ok: false, estado: 422, cuerpo: {{ error: {{ codigo: 'VIDEO_INVALIDO', mensaje }} }} }} }}];
+if (r.statusCode !== 200) return error('El video todavía no se subió.');
+if (tamano !== v.tamano_bytes || tipo !== v.tipo_contenido) return error('El archivo subido no coincide con lo declarado.');
+return [{{ json: {{ ok: true }} }}];""", x + 960, 0)
+    f.si("Archivo valido", "={{ $json.ok }}", x + 1200, 0)
+    f.sql("Pasar a en cola", "UPDATE escuela.videos_clase SET estado = 'en_cola', actualizado_en = now() WHERE id = $1::bigint AND estado = 'esperando_archivo' RETURNING id;",
+          "={{ [$('Revisar estado').first().json.video_id] }}", x + 1440, 0)
+    f.http("Pedir trabajo al transcodificador", "POST", "http://transcodificador:8090/trabajos", {}, x + 1680, 0, transcodificador=True,
+           cuerpo="={{ JSON.stringify({ video_id: $('Revisar estado').first().json.video_id, ruta_original: $('Revisar estado').first().json.ruta_original, ruta_base: $('Revisar estado').first().json.ruta_base, clave_hex: $('Revisar estado').first().json.clave_hex }) }}")
+    f.si("Trabajo aceptado", "={{ $json.statusCode === 202 }}", x + 1920, 0)
+    f.codigo("Armar respuesta", "return [{ json: { estado: 202, cuerpo: { estado: 'en_cola' } } }];", x + 2160, 0)
+    f.sql("Marcar error de servicio", "UPDATE escuela.videos_clase SET estado = 'error', error = 'El servicio de video no responde. Inténtalo de nuevo.', actualizado_en = now() WHERE id = $1::bigint RETURNING id;",
+          "={{ [$('Revisar estado').first().json.video_id] }}", x + 2160, 500)
+    f.codigo("Armar error de servicio", f"return [{{ json: {{ estado: 503, cuerpo: {{ error: {{ codigo: 'SERVICIO_NO_DISPONIBLE', mensaje: 'El servicio de video no responde. Inténtalo de nuevo en unos minutos.' }} }} }} }}];", x + 2400, 500)
+    f.unir("Acceso valido", "Consultar video"); f.unir("Consultar video", "Revisar estado"); f.unir("Revisar estado", "Video por confirmar")
+    f.unir("Video por confirmar", "Consultar archivo en Storage", 0); f.unir("Video por confirmar", "Responder", 1)
+    f.unir("Consultar archivo en Storage", "Clasificar archivo"); f.unir("Clasificar archivo", "Archivo valido")
+    f.unir("Archivo valido", "Pasar a en cola", 0); f.unir("Archivo valido", "Responder", 1)
+    f.unir("Pasar a en cola", "Pedir trabajo al transcodificador"); f.unir("Pedir trabajo al transcodificador", "Trabajo aceptado")
+    f.unir("Trabajo aceptado", "Armar respuesta", 0); f.unir("Trabajo aceptado", "Marcar error de servicio", 1)
+    f.unir("Armar respuesta", "Responder"); f.unir("Marcar error de servicio", "Armar error de servicio"); f.unir("Armar error de servicio", "Responder")
+    f.seccion("Leer el video", "Solo se confirma un video en `esperando_archivo` (si no, `409`). Lee su clave en n8n; la clave no sale de ahí.", NOTA_DATOS,
+              ["Consultar video", "Revisar estado", "Video por confirmar"], True, "Lee el video y comprueba que esté esperando su archivo.")
+    f.seccion("Comprobar en Storage", "Pregunta a Storage por el archivo (`/object/info`): debe existir y coincidir con el tipo y el tamaño declarados; si no, `422 VIDEO_INVALIDO`.", NOTA_PERMISOS,
+              ["Consultar archivo en Storage", "Clasificar archivo", "Archivo valido"], True, "Comprueba que el archivo se subió y coincide con lo declarado.")
+    f.seccion("Encolar el trabajo", "Pasa el video a `en_cola` y le pide el trabajo al transcodificador (credencial `Secreto transcodificador`). Acepta con `202`.", NOTA_ENTRADA,
+              ["Pasar a en cola", "Pedir trabajo al transcodificador", "Trabajo aceptado"], True, "Pasa el video a en cola y pide el trabajo.")
+    f.responder(x + 2640, 0)
+    f.seccion("Respuesta", "`202 { estado: 'en_cola' }`, o el error de cualquier paso.", NOTA_RESPUESTA, ["Armar respuesta", "Responder"])
+    f.seccion("Servicio no disponible", "Si el transcodificador no responde, el video pasa a `error` (se puede reintentar) y se responde `503 SERVICIO_NO_DISPONIBLE`.", NOTA_ERROR,
+              ["Marcar error de servicio", "Armar error de servicio"], True, "Marca el video en error cuando el transcodificador no responde.")
+    f.general("Confirmar subida de video", "`POST /escuela/confirmar-subida-video` · instructor dueño o equipo de apoyo.\n\nEntrada: `{ video_id }`. Responde `202 { estado: 'en_cola' }`. El resultado llega después, por el webhook interno *Video procesado*, y se consulta con *Estado del video*.")
+    f.guardar()
+
+
 if __name__ == "__main__":
     validar_sesion_y_roles()
     mis_roles()
@@ -1205,3 +1325,5 @@ if __name__ == "__main__":
     quitar_miembro()
     mis_invitaciones()
     responder_invitacion()
+    solicitar_subida_video()
+    confirmar_subida_video()

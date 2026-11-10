@@ -42,7 +42,7 @@ Por qué las dos mitades no van juntas: esta spec añade un servicio nuevo (el t
 
   Todo vive en el volumen nombrado `storage-data` (SPEC 07); el transcodificador usa su propio volumen `transcodificador-trabajo` solo para archivos temporales.
 - **Límite de Storage** (`FILE_SIZE_LIMIT` en `supabase/docker-compose.yml`) de 50 MB a **1 GiB**. El bucket `portadas` conserva su propio tope de 2 MB.
-- **Datos:** tablas `escuela.videos_clase` y `escuela.claves_video` (`escuela/sql/003_videos.sql`). La clave AES-128 de cada video se genera en n8n, vive en `claves_video` y **ningún endpoint de esta spec la devuelve**.
+- **Datos:** tablas `escuela.videos_clase` y `escuela.claves_video` (`escuela/sql/003_videos.sql`). La clave AES-128 de cada video la genera el workflow de solicitud con `gen_random_bytes` de `pgcrypto` (el Code node de n8n no tiene `crypto`), vive en `claves_video` y **ningún endpoint de esta spec la devuelve**.
 - **Seis workflows** en la carpeta `Escuela` de n8n, con grupos de nodos, notas y los subworkflows de la SPEC 07 (`Exigir rol`, `Validar campos`, `Validar acceso a curso`):
   - `POST /escuela/solicitar-subida-video` `{ clase_id, nombre_archivo, tipo_contenido, tamano_bytes }` → `201 { video_id, url_subida, ruta }`. Acepta `video/mp4`, `video/quicktime` y `video/webm`, de 1 byte a 1 073 741 824; si no, `422 VIDEO_INVALIDO`. Crea el registro en `esperando_archivo` y firma la subida directa a Storage (como las portadas: el archivo nunca pasa por n8n).
   - `POST /escuela/confirmar-subida-video` `{ video_id }` → `202 { estado: 'en_cola' }`. Comprueba en Storage que el archivo exista y cumpla los límites (`422 VIDEO_INVALIDO` si no) y le pide el trabajo al transcodificador.
@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS escuela.claves_video (
 - **Estados:** `esperando_archivo` → `en_cola` (al confirmar) → `procesando` (cuando el transcodificador empieza) → `listo` o `error`. Un video `error` con original conservado se puede reintentar (vuelve a `en_cola`).
 - **Al quedar `listo`**, en una sola sentencia: el anterior vigente de esa clase deja de serlo y se borra su fila (los archivos, en un paso aparte, con el mismo borrado), y el nuevo pasa a `vigente = true`.
 - **Tiempo máximo:** un video `en_cola` o `procesando` con `actualizado_en` de más de 45 minutos se trata como `error` ("El procesamiento tardó demasiado.") la próxima vez que se consulta su estado.
-- `claves_video.clave` son 16 bytes aleatorios generados en n8n al solicitar la subida; no se incluye en ninguna respuesta de la API ni en ninguna columna de `videos_clase`.
+- `claves_video.clave` son 16 bytes aleatorios generados con `gen_random_bytes(16)` (extensión `pgcrypto`, en `escuela/sql/000_extensiones.sql`) al registrar el video; no se incluye en ninguna respuesta de la API ni en ninguna columna de `videos_clase`.
 
 **Contrato del transcodificador** (red interna `http://transcodificador:8090`, cabecera `X-Secreto-Transcodificador`; sin ella `403`):
 
@@ -225,7 +225,7 @@ CREATE TABLE IF NOT EXISTS escuela.claves_video (
 
 - **Tomada: Supabase Storage (ya decidido en la SPEC 07), en un bucket privado `videos` con rutas curso/sección/clase/video.** Las URLs firmadas de la SPEC 09 salen de ahí. **Descartados:** un servidor de archivos propio y varios volúmenes Docker por rango de cursos, que Storage no soporta de forma nativa.
 - **Tomada: "en volúmenes" significa carpetas ordenadas dentro del volumen nombrado `storage-data`**, más un volumen aparte (`transcodificador-trabajo`) para lo temporal. **Descartada:** repartir por varios volúmenes.
-- **Tomada: la clave AES-128 en una tabla aparte (`claves_video`) y generada en n8n.** Queda fuera de cualquier `SELECT` de la ficha o del editor y la SPEC 09 la entregará con permisos. **Descartada:** una columna en `videos_clase`, que se filtraría con cualquier consulta descuidada.
+- **Tomada: la clave AES-128 en una tabla aparte (`claves_video`) y generada con `pgcrypto` desde el workflow** (el Code node de n8n no expone `crypto` y `require('crypto')` está prohibido; se comprobó al implementar). **Descartado:** `gen_random_uuid()`, que fija 6 de los 128 bits. Queda fuera de cualquier `SELECT` de la ficha o del editor y la SPEC 09 la entregará con permisos. **Descartada:** una columna en `videos_clase`, que se filtraría con cualquier consulta descuidada.
 - **Tomada: un único video vigente por clase y uno solo en proceso, ambos garantizados con índices únicos parciales.** **Descartado:** controlarlo solo en los workflows.
 - **Tomada: Storage sube su límite global a 1 GiB; los límites reales por bucket los pone cada bucket** (`portadas` sigue en 2 MB). **Descartado:** subir los videos por n8n, que ya choca con el límite de 10 KB de Caddy.
 

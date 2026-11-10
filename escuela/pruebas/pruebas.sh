@@ -28,10 +28,17 @@ borrar_portadas() {
   done
 }
 
+PREFIJOS_VIDEO=()
+borrar_videos() {
+  [ "${#PREFIJOS_VIDEO[@]}" -gt 0 ] && ALMACEN="$ALMACEN" CLAVE_SERVICIO="$(leer_env SERVICE_ROLE_KEY)" python3 escuela/pruebas/limpiar_bucket.py videos "${PREFIJOS_VIDEO[@]}" > /dev/null 2>&1
+  docker compose start transcodificador > /dev/null 2>&1
+}
+
 # Limpia solo lo creado por estas pruebas (usuarios prueba_esc_*) y deja intacto el resto de la escuela
 limpiar_datos() {
   local ids
   borrar_portadas
+  borrar_videos
   ids="$(psql_postgres "select string_agg(quote_literal(id::text), ',') from auth.users where email like 'prueba_esc_%@example.com'" 2> /dev/null)"
   if [ -n "$ids" ]; then
     psql_n8n "delete from escuela.cursos where instructor_id::text in ($ids)" > /dev/null 2>&1
@@ -709,6 +716,91 @@ ID_VID="$(psql_n8n "select id from escuela.videos_clase where estado = 'en_cola'
 [[ "$(psql_n8n "insert into escuela.claves_video values ($((ID_VID + 1)), decode('00112233445566778899aabbccddeeff00','hex'))" 2>&1)" == *claves_video_clave_check* ]]; verificar "una clave de 17 bytes la rechaza la base" $?
 psql_n8n "delete from escuela.cursos where id = 990001" > /dev/null
 [ "$(psql_n8n "select count(*) from escuela.claves_video where video_id = $ID_VID")" = "0" ]; verificar "borrar el curso borra en cascada sus videos y sus claves" $?
+
+echo "== Videos: solicitar y confirmar la subida"
+docker compose exec -T transcodificador ffmpeg -hide_banner -v error -y -f lavfi -i testsrc2=size=640x360:rate=25 -f lavfi -i sine=frequency=440 -t 4 -c:v libx264 -pix_fmt yuv420p -c:a aac /trabajo/prueba_esc.mp4
+docker compose cp transcodificador:/trabajo/prueba_esc.mp4 "$DIRECTORIO_TEMPORAL/clase.mp4" > /dev/null 2>&1
+TAM="$(wc -c < "$DIRECTORIO_TEMPORAL/clase.mp4" | tr -d ' ')"
+api POST /escuela/crear-curso "$TOKEN_instructor_a" "{\"titulo\":\"Prueba esc $SUFIJO Videos\"}"; CURSO_V="$(campo_json id)"; PREFIJOS_VIDEO+=("cursos/$CURSO_V")
+api POST /escuela/guardar-seccion "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_V,\"titulo\":\"Sección de videos\"}"; SEC_V2="$(campo_json id)"
+api POST /escuela/guardar-clase "$TOKEN_instructor_a" "{\"seccion_id\":$SEC_V2,\"titulo\":\"Clase con video\",\"es_muestra\":true}"; CLASE_V="$(campo_json id)"
+psql_n8n "insert into escuela.roles_usuario (usuario_id, rol) values ('$ID_INV', 'equipo_apoyo') on conflict do nothing; insert into escuela.equipos_apoyo (instructor_id, miembro_id) values ('$ID_A', '$ID_INV') on conflict do nothing" > /dev/null
+SOLICITAR="/escuela/solicitar-subida-video"
+datos_video() { echo "{\"clase_id\":$CLASE_V,\"nombre_archivo\":\"clase.mp4\",\"tipo_contenido\":\"${1:-video/mp4}\",\"tamano_bytes\":${2:-$TAM}}"; }
+solicitar POST $SOLICITAR -H 'Content-Type: application/json' -d "$(datos_video)"
+estado_es 401 "solicitar-subida-video sin token -> 401"
+api POST $SOLICITAR "$TOKEN_estudiante" "$(datos_video)"
+estado_es 403 "solicitar-subida-video sin rol instructor ni equipo -> 403"
+api POST $SOLICITAR "$TOKEN_instructor_b" "$(datos_video)"
+estado_es 403 "solicitar-subida-video en una clase de un curso ajeno -> 403"
+api POST $SOLICITAR "$TOKEN_instructor_a" "{\"clase_id\":99999999,\"nombre_archivo\":\"a.mp4\",\"tipo_contenido\":\"video/mp4\",\"tamano_bytes\":10}"
+estado_es 404 "solicitar-subida-video en una clase inexistente -> 404"
+api POST $SOLICITAR "$TOKEN_instructor_a" "$(datos_video video/avi)"
+estado_es 422 "solicitar-subida-video con video/avi -> 422"
+cuerpo_tiene '"VIDEO_INVALIDO"' "video/avi -> VIDEO_INVALIDO"
+api POST $SOLICITAR "$TOKEN_instructor_a" "$(datos_video video/mp4 1073741825)"
+estado_es 422 "solicitar-subida-video con 1 073 741 825 bytes -> 422"
+cuerpo_tiene '"VIDEO_INVALIDO"' "más de 1 GiB -> VIDEO_INVALIDO"
+api POST $SOLICITAR "$TOKEN_instructor_a" "$(datos_video video/mp4 0)"
+estado_es 422 "solicitar-subida-video con 0 bytes -> 422"
+api POST $SOLICITAR "$TOKEN_instructor_a" "{\"clase_id\":$CLASE_V,\"tipo_contenido\":\"video/mp4\",\"tamano_bytes\":10}"
+estado_es 422 "solicitar-subida-video sin nombre_archivo -> 422"
+api POST $SOLICITAR "$TOKEN_instructor_a" "${DATOS_X:-$(datos_video | sed 's/}$/,"extra":1}/')}"
+estado_es 422 "solicitar-subida-video con un campo extra -> 422"
+psql_n8n "update escuela.cursos set estado = 'en_revision' where id = $CURSO_V" > /dev/null
+api POST $SOLICITAR "$TOKEN_instructor_a" "$(datos_video)"
+estado_es 409 "solicitar-subida-video en un curso en revisión -> 409"
+cuerpo_tiene '"CURSO_EN_REVISION"' "curso en revisión -> CURSO_EN_REVISION"
+psql_n8n "update escuela.cursos set estado = 'borrador' where id = $CURSO_V" > /dev/null
+api POST $SOLICITAR "$TOKEN_instructor_a" "$(datos_video video/mp4 1073741824)"
+estado_es 201 "solicitar-subida-video con exactamente 1 073 741 824 bytes -> 201"
+VIDEO_EXACTO="$(campo_json video_id)"
+psql_n8n "delete from escuela.videos_clase where id = $VIDEO_EXACTO" > /dev/null
+api POST $SOLICITAR "$TOKEN_invitado" "$(datos_video)"
+estado_es 201 "un miembro del equipo de apoyo puede solicitar la subida -> 201"
+VIDEO_1="$(campo_json video_id)"; URL_V1="$(campo_json url_subida)"; RUTA_V1="$(campo_json ruta)"
+[[ "$URL_V1" == /almacen/object/upload/sign/videos/cursos/$CURSO_V/secciones/$SEC_V2/clases/$CLASE_V/$VIDEO_1/original.mp4?token=* && "$RUTA_V1" == cursos/$CURSO_V/secciones/$SEC_V2/clases/$CLASE_V/$VIDEO_1/original.mp4 ]]; verificar "la URL firmada y la ruta siguen el orden curso/sección/clase/video" $?
+[ "$(psql_n8n "select estado from escuela.videos_clase where id = $VIDEO_1")" = "esperando_archivo" ]; verificar "el video queda en esperando_archivo" $?
+[ "$(psql_n8n "select octet_length(clave) from escuela.claves_video where video_id = $VIDEO_1")" = "16" ]; verificar "se guardó su clave AES-128 de 16 bytes" $?
+CLAVE_HEX_V1="$(psql_n8n "select encode(clave,'hex') from escuela.claves_video where video_id = $VIDEO_1")"
+cuerpo_no_tiene "$CLAVE_HEX_V1" "la respuesta no contiene la clave"
+api POST $SOLICITAR "$TOKEN_instructor_a" "$(datos_video)"
+estado_es 409 "una segunda solicitud con la primera sin terminar -> 409"
+cuerpo_tiene '"VIDEO_EN_PROCESO"' "segunda solicitud -> VIDEO_EN_PROCESO"
+CONFIRMAR="/escuela/confirmar-subida-video"
+api POST $CONFIRMAR "$TOKEN_instructor_a" "{\"video_id\":$VIDEO_1}"
+estado_es 422 "confirmar sin haber subido el archivo -> 422"
+cuerpo_tiene '"VIDEO_INVALIDO"' "archivo no subido -> VIDEO_INVALIDO"
+api POST $CONFIRMAR "$TOKEN_instructor_b" "{\"video_id\":$VIDEO_1}"
+estado_es 403 "confirmar el video de un curso ajeno -> 403"
+api POST $CONFIRMAR "$TOKEN_estudiante" "{\"video_id\":$VIDEO_1}"
+estado_es 403 "confirmar sin rol -> 403"
+api POST $CONFIRMAR "$TOKEN_instructor_a" '{"video_id":99999999}'
+estado_es 404 "confirmar un video inexistente -> 404"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$ALMACEN${URL_V1#/almacen}" -H 'Content-Type: video/mp4' --data-binary "@$DIRECTORIO_TEMPORAL/clase.mp4")" = "200" ]; verificar "el navegador sube el archivo con la URL firmada (200)" $?
+psql_n8n "update escuela.cursos set estado = 'en_revision' where id = $CURSO_V" > /dev/null
+api POST $CONFIRMAR "$TOKEN_instructor_a" "{\"video_id\":$VIDEO_1}"
+estado_es 409 "confirmar en un curso en revisión -> 409"
+psql_n8n "update escuela.cursos set estado = 'borrador' where id = $CURSO_V" > /dev/null
+psql_n8n "update escuela.videos_clase set tamano_bytes = $TAM + 1 where id = $VIDEO_1" > /dev/null
+api POST $CONFIRMAR "$TOKEN_instructor_a" "{\"video_id\":$VIDEO_1}"
+estado_es 422 "confirmar un archivo que no coincide con el tamaño declarado -> 422"
+psql_n8n "update escuela.videos_clase set tamano_bytes = $TAM where id = $VIDEO_1" > /dev/null
+docker compose stop transcodificador > /dev/null 2>&1
+api POST $CONFIRMAR "$TOKEN_instructor_a" "{\"video_id\":$VIDEO_1}"
+estado_es 503 "con el transcodificador caído, confirmar -> 503"
+cuerpo_tiene '"SERVICIO_NO_DISPONIBLE"' "transcodificador caído -> SERVICIO_NO_DISPONIBLE"
+[ "$(psql_n8n "select estado from escuela.videos_clase where id = $VIDEO_1")" = "error" ]; verificar "el video queda en error cuando el servicio no responde" $?
+docker compose start transcodificador > /dev/null 2>&1; sleep 4
+psql_n8n "update escuela.videos_clase set estado = 'esperando_archivo', error = null where id = $VIDEO_1" > /dev/null
+api POST $CONFIRMAR "$TOKEN_invitado" "{\"video_id\":$VIDEO_1}"
+estado_es 202 "un miembro del equipo confirma la subida -> 202"
+cuerpo_tiene '"en_cola"' "la respuesta indica en_cola"
+api POST $CONFIRMAR "$TOKEN_instructor_a" "{\"video_id\":$VIDEO_1}"
+estado_es 409 "confirmar dos veces -> 409"
+[[ "$(psql_n8n "select estado from escuela.videos_clase where id = $VIDEO_1")" =~ ^(en_cola|procesando)$ ]]; verificar "el video quedó en cola en la base" $?
+ESTADO_TRABAJO="$(docker compose exec -T -e SEC="$(leer_env SECRETO_TRANSCODIFICADOR)" n8n node -e "fetch('http://transcodificador:8090/trabajos/$VIDEO_1',{headers:{'X-Secreto-Transcodificador':process.env.SEC}}).then(async r=>console.log(r.status))")"
+[ "$ESTADO_TRABAJO" = "200" ]; verificar "el transcodificador recibió el trabajo (GET /trabajos/<id> -> 200)" $?
 
 echo
 echo "$((total - fallos)) de $total casos correctos"
