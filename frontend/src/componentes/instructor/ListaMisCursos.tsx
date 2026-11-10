@@ -11,6 +11,7 @@ export default function ListaMisCursos() {
   return (
     <section className="flex flex-col gap-5">
       <h1 className="text-2xl font-bold">Mis cursos</h1>
+      {roles.includes('instructor') && <a className="text-sm text-sky-700 underline" href="/instructor/equipo">Mi equipo de apoyo</a>}
       {roles.includes('instructor') && <FormularioNuevoCurso />}
       <AlertaError mensaje={error ? mensajeDeError(error) : null} />
       {cursos?.length === 0 && <p className="text-slate-500">Todavía no tienes cursos.</p>}

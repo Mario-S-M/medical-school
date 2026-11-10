@@ -305,6 +305,8 @@ CREATE UNIQUE INDEX invitaciones_pendiente_unica ON escuela.invitaciones_equipo 
 - **Tomada: un instructor dueño por curso.** **Descartados:** los coinstructores.
 - **Tomada: equipo de apoyo por instructor, modelado ya en esta spec.** SPEC 10 solo añade la moderación. **Descartados:** equipo por curso y dejarlo todo para la 10.
 - **Tomada: invitar solo a usuarios registrados**, por decisión del usuario, aunque eso le revela al instructor qué correos tienen cuenta. **Descartado:** aceptar cualquier correo con una respuesta idéntica.
+- **Tomada (al implementar): una invitación vencida se cierra como `cancelada` al reinvitar** (el enum no tiene `caducada`), porque el índice único de invitaciones pendientes no deja insertar otra mientras la vencida siga `pendiente`. Mientras tanto, deja de aparecer en `mis-invitaciones`.
+- **Tomada (al implementar): el correo de invitación sale sin la atribución que n8n añade por defecto** (`appendAttribution: false`), porque esa atribución lleva un enlace y la spec pide correos sin enlaces.
 - **Tomada: el correo solo avisa; se acepta en `/panel`, con caducidad de 7 días.** No hay enlaces ni códigos, igual que SPEC 05. **Descartados:** el código de 6 dígitos y que no caduque.
 
 **Publicación y catálogo:**

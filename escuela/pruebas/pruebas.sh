@@ -573,6 +573,127 @@ estado_es 404 "un curso retirado desaparece de la ficha pública"
 solicitar GET "/escuela/cursos?categoria=$SLUG_CAT"
 [ "$(echo "$cuerpo" | python3 -c "import sys,json; print(json.load(sys.stdin)['total'])")" = "12" ]; verificar "un curso retirado desaparece del catálogo" $?
 
+echo "== Equipo de apoyo: invitaciones"
+ultimo_correo() { # <destinatario> <asunto|texto|html>
+  curl -s -G "$MAILPIT/api/v1/search" --data-urlencode "query=to:$1" | python3 -c "
+import sys, json, urllib.request
+d = json.load(sys.stdin)
+if not d['messages']: sys.exit(0)
+m = d['messages'][0]
+c = json.load(urllib.request.urlopen('$MAILPIT/api/v1/message/' + m['ID']))
+print({'asunto': m['Subject'], 'texto': c['Text'], 'html': c['HTML']}['$2'])"
+}
+crear_usuario invitado
+ID_INV="$(id_de "$CORREO_invitado")"
+CORREO_SINVER="prueba_esc_${SUFIJO}_sinverificar@example.com"
+publicar_json /autenticacion/registro "{\"correo\":\"$CORREO_SINVER\",\"nombre\":\"Sin Verificar\",\"contrasena\":\"$CONTRASENA_VALIDA\"}"
+INVITAR="/escuela/invitar-equipo"
+api POST $INVITAR "$TOKEN_invitado" "{\"correo\":\"$CORREO_estudiante\"}"
+estado_es 403 "invitar-equipo sin rol instructor -> 403"
+solicitar POST $INVITAR -H 'Content-Type: application/json' -d '{"correo":"a@b.co"}'
+estado_es 401 "invitar-equipo sin token -> 401"
+api POST $INVITAR "$TOKEN_instructor_a" '{"correo":"no-es-correo"}'
+estado_es 422 "invitar-equipo con un correo mal formado -> 422"
+api POST $INVITAR "$TOKEN_instructor_a" "{\"correo\":\"nadie_$SUFIJO@example.com\"}"
+estado_es 404 "invitar a un correo sin cuenta -> 404"
+cuerpo_tiene '"USUARIO_NO_REGISTRADO"' "correo sin cuenta -> USUARIO_NO_REGISTRADO"
+api POST $INVITAR "$TOKEN_instructor_a" "{\"correo\":\"$CORREO_SINVER\"}"
+cuerpo_tiene '"USUARIO_NO_REGISTRADO"' "una cuenta sin verificar tampoco se puede invitar"
+api POST $INVITAR "$TOKEN_instructor_a" "{\"correo\":\"$CORREO_instructor_a\"}"
+estado_es 409 "invitarse a uno mismo -> 409"
+api POST $INVITAR "$TOKEN_instructor_a" "{\"correo\":\"$CORREO_miembro\"}"
+estado_es 409 "invitar a quien ya está en el equipo -> 409"
+cuerpo_tiene '"YA_ES_MIEMBRO"' "ya es miembro -> YA_ES_MIEMBRO"
+curl -s -X DELETE "$MAILPIT/api/v1/messages" > /dev/null
+api POST $INVITAR "$TOKEN_instructor_a" "{\"correo\":\"$CORREO_invitado\"}"
+estado_es 201 "invitar-equipo a una cuenta verificada -> 201"
+cuerpo_tiene '"correo_enviado":true' "la respuesta confirma el envío del correo"
+INV_1="$(campo_json id)"
+esperar_correo "$CORREO_invitado"
+[[ "$(ultimo_correo "$CORREO_invitado" asunto)" == *"te invitó a su equipo de apoyo"* ]]; verificar "el correo llega con el asunto en español" $?
+CORREO_HTML="$(ultimo_correo "$CORREO_invitado" html)"
+[[ "$CORREO_HTML" == *"Usuario instructor_a"* && "$CORREO_HTML" != *"http"* && "$CORREO_HTML" != *"href"* ]]; verificar "el correo nombra al instructor y no lleva enlaces" $?
+api POST $INVITAR "$TOKEN_instructor_a" "{\"correo\":\"$CORREO_invitado\"}"
+estado_es 409 "una segunda invitación vigente -> 409"
+cuerpo_tiene '"INVITACION_DUPLICADA"' "invitación repetida -> INVITACION_DUPLICADA"
+api GET /escuela/mi-equipo "$TOKEN_estudiante"
+estado_es 403 "mi-equipo sin rol instructor -> 403"
+api GET /escuela/mi-equipo "$TOKEN_instructor_a"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d['miembros'])==1 and d['miembros'][0]['miembro_id']=='$ID_MIEMBRO' and [i['correo'] for i in d['invitaciones']]==['$CORREO_invitado'])")" = "True" ]; verificar "mi-equipo lista al miembro y la invitación pendiente" $?
+api GET /escuela/mis-invitaciones "$TOKEN_invitado"
+estado_es 200 "mis-invitaciones -> 200"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; i=json.load(sys.stdin)['invitaciones']; print(len(i)==1 and i[0]['id']==$INV_1 and i[0]['instructor']=='Usuario instructor_a')")" = "True" ]; verificar "el invitado ve la invitación con el nombre del instructor" $?
+api GET /escuela/mis-invitaciones "$TOKEN_estudiante"
+cuerpo_tiene '"invitaciones":[]' "otra cuenta no ve invitaciones ajenas"
+solicitar GET /escuela/mis-invitaciones
+estado_es 401 "mis-invitaciones sin token -> 401"
+api POST /escuela/responder-invitacion "$TOKEN_estudiante" "{\"invitacion_id\":$INV_1,\"aceptar\":true}"
+estado_es 404 "responder una invitación ajena -> 404"
+api POST /escuela/cancelar-invitacion "$TOKEN_instructor_b" "{\"invitacion_id\":$INV_1}"
+estado_es 404 "cancelar la invitación de otro instructor -> 404"
+api POST /escuela/cancelar-invitacion "$TOKEN_estudiante" "{\"invitacion_id\":$INV_1}"
+estado_es 403 "cancelar-invitacion sin rol instructor -> 403"
+api POST /escuela/cancelar-invitacion "$TOKEN_instructor_a" "{\"invitacion_id\":$INV_1}"
+estado_es 204 "cancelar-invitacion -> 204"
+api POST /escuela/responder-invitacion "$TOKEN_invitado" "{\"invitacion_id\":$INV_1,\"aceptar\":true}"
+estado_es 404 "responder una invitación cancelada -> 404"
+api POST /escuela/cancelar-invitacion "$TOKEN_instructor_a" "{\"invitacion_id\":$INV_1}"
+estado_es 404 "cancelar dos veces -> 404"
+api POST $INVITAR "$TOKEN_instructor_a" "{\"correo\":\"$CORREO_invitado\"}"
+estado_es 201 "se puede invitar de nuevo tras cancelar"
+INV_2="$(campo_json id)"
+api POST /escuela/responder-invitacion "$TOKEN_invitado" "{\"invitacion_id\":$INV_2,\"aceptar\":false}"
+estado_es 200 "rechazar una invitación -> 200"
+api GET /escuela/mis-roles "$TOKEN_invitado"
+cuerpo_tiene '"roles":[]' "rechazar no da ningún rol"
+api POST $INVITAR "$TOKEN_instructor_a" "{\"correo\":\"$CORREO_invitado\"}"
+INV_3="$(campo_json id)"
+psql_n8n "update escuela.invitaciones_equipo set expira_en = now() - interval '1 minute' where id = $INV_3" > /dev/null
+api GET /escuela/mis-invitaciones "$TOKEN_invitado"
+cuerpo_tiene '"invitaciones":[]' "una invitación vencida deja de aparecer"
+api POST /escuela/responder-invitacion "$TOKEN_invitado" "{\"invitacion_id\":$INV_3,\"aceptar\":true}"
+estado_es 404 "responder una invitación vencida -> 404"
+api POST $INVITAR "$TOKEN_instructor_a" "{\"correo\":\"$CORREO_invitado\"}"
+estado_es 201 "tras vencer, el instructor puede invitar de nuevo"
+INV_4="$(campo_json id)"
+[ "$(psql_n8n "select estado from escuela.invitaciones_equipo where id = $INV_3")" = "cancelada" ]; verificar "la invitación vencida quedó cerrada" $?
+
+echo "== Equipo de apoyo: aceptar, permisos y quitar"
+api POST /escuela/guardar-seccion "$TOKEN_invitado" "{\"curso_id\":$CURSO_A,\"titulo\":\"Antes de aceptar\"}"
+estado_es 403 "sin aceptar, la persona invitada no edita el temario (403)"
+api POST /escuela/responder-invitacion "$TOKEN_invitado" "{\"invitacion_id\":$INV_4,\"aceptar\":true}"
+estado_es 200 "aceptar una invitación -> 200"
+cuerpo_tiene '"aceptada":true' "la respuesta confirma que se aceptó"
+api POST /escuela/responder-invitacion "$TOKEN_invitado" "{\"invitacion_id\":$INV_4,\"aceptar\":true}"
+estado_es 404 "responder dos veces -> 404"
+api GET /escuela/mis-roles "$TOKEN_invitado"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['roles']==['equipo_apoyo'] and d['equipos'][0]['instructor_id']=='$ID_A')")" = "True" ]; verificar "aceptar da el rol equipo_apoyo y lista el equipo" $?
+api POST /escuela/guardar-seccion "$TOKEN_invitado" "{\"curso_id\":$CURSO_A,\"titulo\":\"Sección del equipo\"}"
+estado_es 200 "el nuevo miembro edita el temario"
+SEC_EQ="$(campo_json id)"
+api POST /escuela/editar-curso "$TOKEN_invitado" "{\"curso_id\":$CURSO_A,\"nivel\":\"basico\"}"
+estado_es 403 "el miembro no edita los datos del curso"
+api POST /escuela/invitar-equipo "$TOKEN_invitado" "{\"correo\":\"$CORREO_estudiante\"}"
+estado_es 403 "el miembro no invita a otras personas"
+api POST /escuela/quitar-miembro "$TOKEN_instructor_b" "{\"miembro_id\":\"$ID_INV\"}"
+estado_es 404 "quitar a alguien que no es de tu equipo -> 404"
+api POST /escuela/quitar-miembro "$TOKEN_estudiante" "{\"miembro_id\":\"$ID_INV\"}"
+estado_es 403 "quitar-miembro sin rol instructor -> 403"
+psql_n8n "insert into escuela.equipos_apoyo (instructor_id, miembro_id) values ('$ID_B', '$ID_MIEMBRO')" > /dev/null
+api POST /escuela/quitar-miembro "$TOKEN_instructor_a" "{\"miembro_id\":\"$ID_MIEMBRO\"}"
+estado_es 204 "quitar-miembro -> 204"
+api GET /escuela/mis-roles "$TOKEN_miembro"
+cuerpo_tiene '"equipo_apoyo"' "quien sigue en el equipo de otro instructor conserva el rol equipo_apoyo"
+api POST /escuela/quitar-miembro "$TOKEN_instructor_b" "{\"miembro_id\":\"$ID_MIEMBRO\"}"
+api GET /escuela/mis-roles "$TOKEN_miembro"
+cuerpo_tiene '"roles":[]' "al salir del último equipo se pierde el rol equipo_apoyo"
+api POST /escuela/quitar-miembro "$TOKEN_instructor_a" "{\"miembro_id\":\"$ID_INV\"}"
+estado_es 204 "el instructor quita al miembro invitado"
+api POST /escuela/guardar-seccion "$TOKEN_invitado" "{\"curso_id\":$CURSO_A,\"titulo\":\"Después de salir\"}"
+estado_es 403 "quitado del equipo, ya no edita el temario (403)"
+api POST /escuela/quitar-miembro "$TOKEN_instructor_a" "{\"miembro_id\":\"$ID_INV\"}"
+estado_es 404 "quitar dos veces -> 404"
+
 echo
 echo "$((total - fallos)) de $total casos correctos"
 [ "$fallos" -eq 0 ]

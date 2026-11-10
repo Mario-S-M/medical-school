@@ -6,6 +6,7 @@ import useSesion from '../../hooks/useSesion';
 import { guardarSesion } from '../../sesion/almacen_sesion';
 import AlertaError from '../ui/AlertaError';
 import BotonCerrarSesion from './BotonCerrarSesion';
+import ListaInvitaciones from './ListaInvitaciones';
 
 export default function PanelUsuario() {
   const { sesion } = useSesion();
@@ -24,6 +25,7 @@ export default function PanelUsuario() {
     <section className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold">Hola, {usuario.nombre}</h1>
       <p className="text-slate-600">Sesión iniciada como <strong>{usuario.correo}</strong>.</p>
+      <ListaInvitaciones />
       <div><BotonCerrarSesion /></div>
     </section>
   );

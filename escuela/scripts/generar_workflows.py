@@ -210,14 +210,15 @@ ERROR_PERMISO_JS = "{ error: { codigo: 'SIN_PERMISO', mensaje: 'No tienes permis
 
 def exigir_rol():
     f = Flujo("escExigirRol01", "Exigir rol",
-              "Subworkflow. Recibe la solicitud del webhook más rol_requerido (un rol o una lista: basta con uno), valida la sesión con Validar sesion y roles y comprueba que el usuario lo tenga. "
+              "Subworkflow. Recibe la solicitud del webhook más rol_requerido (un rol, una lista de roles —basta con uno— o `cualquiera`: solo exige sesión), valida la sesión con Validar sesion y roles y comprueba que el usuario lo tenga. "
               "Devuelve el mismo item con { ok, usuario, roles, equipos } o { ok: false, estado: 401 o 403, cuerpo }.", "usuarios")
     f.nodo("Disparador", "n8n-nodes-base.executeWorkflowTrigger", 1.1, {"inputSource": "passthrough"}, 0, 0)
     f.subflujo("Validar sesion y roles", "escValidar01", 240, 0)
     f.si("Sesion valida", "={{ $json.ok }}", 480, 0)
     f.codigo("Comprobar rol", f"""const contexto = $input.first().json;
 const original = $('Disparador').first().json;
-if (![].concat(original.rol_requerido).some((r) => contexto.roles.includes(r))) {{
+const requeridos = [].concat(original.rol_requerido);
+if (!requeridos.includes('cualquiera') && !requeridos.some((r) => contexto.roles.includes(r))) {{
   return [{{ json: {{ ok: false, estado: 403, cuerpo: {ERROR_PERMISO_JS} }} }}];
 }}
 return [{{ json: {{ ...original, ...contexto }} }}];""", 720, -100)
@@ -423,27 +424,41 @@ return [{{ json: {{ estado: 500, cuerpo: {ERROR_INTERNO_JS} }} }}];""", x + 240,
     f.guardar()
 
 
-def buscar_usuario():
-    f = Flujo("escBuscarUsuario01", "Buscar usuario", "GET /escuela/admin/buscar-usuario?correo=. Busca una cuenta por su correo exacto en Supabase Auth (API admin) y devuelve sus roles de la escuela (solo administrador). No guarda ejecuciones.", "usuarios")
-    x = protegido(f, "GET", "escuela/admin/buscar-usuario", "administrador", "query", {"correo": {"tipo": "correo"}})
-    f.http("Consultar Supabase Auth", "GET", "=http://auth:9999/admin/users?filter={{ encodeURIComponent($json.datos.correo) }}", {}, x, 0, servicio=True)
+def buscar_cuenta():
+    f = Flujo("escBuscarCuenta01", "Buscar cuenta por correo",
+              "Subworkflow. Recibe { datos: { correo } }, busca esa cuenta en Supabase Auth con la API admin (auth:9999/admin/users?filter=) y la credencial de rol de servicio, "
+              "y devuelve { ok: true, id, correo, nombre, verificado } o { ok: false, estado, cuerpo }. Lo usan Buscar usuario e Invitar equipo.", "usuarios")
+    f.nodo("Disparador", "n8n-nodes-base.executeWorkflowTrigger", 1.1, {"inputSource": "passthrough"}, 0, 0)
+    f.http("Consultar Supabase Auth", "GET", "=http://auth:9999/admin/users?filter={{ encodeURIComponent($json.datos.correo) }}", {}, 240, 0, servicio=True)
     f.codigo("Elegir coincidencia", f"""const r = $input.first().json;
-const correo = $('Entrada valida').first().json.datos.correo;
+const correo = $('Disparador').first().json.datos.correo;
 if (r.statusCode !== 200 || !r.body || !Array.isArray(r.body.users)) return [{{ json: {{ ok: false, estado: 500, cuerpo: {ERROR_INTERNO_JS} }} }}];
 const u = r.body.users.find((x) => String(x.email || '').toLowerCase() === correo);
 if (!u) return [{{ json: {{ ok: false, estado: 404, cuerpo: {{ error: {{ codigo: 'NO_ENCONTRADO', mensaje: 'No hay ninguna cuenta con ese correo.' }} }} }} }}];
-return [{{ json: {{ ok: true, id: u.id, correo: u.email, nombre: (u.user_metadata || {{}}).nombre ?? null, verificado: !!u.email_confirmed_at }} }}];""", x + 240, 0)
-    f.si("Cuenta encontrada", "={{ $json.ok }}", x + 480, 0)
-    f.sql("Consultar roles", "SELECT coalesce(array_agg(rol ORDER BY rol), '{}') AS roles FROM escuela.roles_usuario WHERE usuario_id = $1::uuid;", "={{ [$json.id] }}", x + 720, 0)
-    f.codigo("Armar respuesta", """const u = $('Elegir coincidencia').first().json;
-return [{ json: { estado: 200, cuerpo: { id: u.id, correo: u.correo, nombre: u.nombre, verificado: u.verificado, roles: $input.first().json.roles } } }];""", x + 960, 0)
-    f.unir("Entrada valida", "Consultar Supabase Auth"); f.unir("Consultar Supabase Auth", "Elegir coincidencia"); f.unir("Elegir coincidencia", "Cuenta encontrada")
+return [{{ json: {{ ok: true, id: u.id, correo: u.email, nombre: (u.user_metadata || {{}}).nombre ?? null, verificado: !!u.email_confirmed_at }} }}];""", 480, 0)
+    f.unir("Disparador", "Consultar Supabase Auth"); f.unir("Consultar Supabase Auth", "Elegir coincidencia")
+    f.seccion("Entrada", "Recibe `datos.correo`, ya validado y en minúsculas.", NOTA_ENTRADA, ["Disparador"])
+    f.seccion("Buscar en Supabase Auth", "El filtro de la API admin busca por trozo de correo; aquí se elige solo la cuenta con el correo **exacto**. Sin coincidencia: `404 NO_ENCONTRADO`.", NOTA_PERMISOS,
+              ["Consultar Supabase Auth", "Elegir coincidencia"], True, "Busca la cuenta por correo exacto con la credencial de servicio.")
+    f.general("Buscar cuenta por correo", "Subworkflow compartido: **ningún workflow repite la búsqueda de cuentas por correo**.\n\nUsa la credencial **Supabase rol de servicio**, que nunca sale de n8n. Salida: `{ ok, id, correo, nombre, verificado }` o `{ ok: false, estado, cuerpo }`.")
+    f.guardar()
+
+
+def buscar_usuario():
+    f = Flujo("escBuscarUsuario01", "Buscar usuario", "GET /escuela/admin/buscar-usuario?correo=. Busca una cuenta por su correo exacto en Supabase Auth (API admin) y devuelve sus roles de la escuela (solo administrador). No guarda ejecuciones.", "usuarios")
+    x = protegido(f, "GET", "escuela/admin/buscar-usuario", "administrador", "query", {"correo": {"tipo": "correo"}})
+    f.subflujo("Buscar cuenta por correo", "escBuscarCuenta01", x, 0)
+    f.si("Cuenta encontrada", "={{ $json.ok }}", x + 240, 0)
+    f.sql("Consultar roles", "SELECT coalesce(array_agg(rol ORDER BY rol), '{}') AS roles FROM escuela.roles_usuario WHERE usuario_id = $1::uuid;", "={{ [$json.id] }}", x + 480, 0)
+    f.codigo("Armar respuesta", """const u = $('Buscar cuenta por correo').first().json;
+return [{ json: { estado: 200, cuerpo: { id: u.id, correo: u.correo, nombre: u.nombre, verificado: u.verificado, roles: $input.first().json.roles } } }];""", x + 720, 0)
+    f.unir("Entrada valida", "Buscar cuenta por correo"); f.unir("Buscar cuenta por correo", "Cuenta encontrada")
     f.unir("Cuenta encontrada", "Consultar roles", 0); f.unir("Cuenta encontrada", "Responder", 1)
     f.unir("Consultar roles", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
-    f.seccion("Buscar en Supabase Auth", "Llama a `auth:9999/admin/users?filter=` con la credencial de rol de servicio y se queda con la cuenta cuyo correo coincide exacto. Si no hay, `404`.", NOTA_PERMISOS,
-              ["Consultar Supabase Auth", "Elegir coincidencia", "Cuenta encontrada"], True, "Busca la cuenta por correo en la API admin de Supabase Auth.")
-    cierre(f, x + 1200, ["Consultar roles", "Armar respuesta"], "Cargar roles", "Lee los roles de la escuela de esa cuenta y arma `{ id, correo, nombre, verificado, roles }`.")
-    f.general("Buscar usuario", "`GET /escuela/admin/buscar-usuario?correo=` · solo `administrador`.\n\nLo usa la pantalla *Roles* para encontrar a quién dar o quitar el rol. Usa la credencial **Supabase rol de servicio**, que nunca sale de n8n.")
+    f.seccion("Buscar la cuenta", "Subworkflow `Buscar cuenta por correo`. Sin cuenta con ese correo: `404`.", NOTA_PERMISOS,
+              ["Buscar cuenta por correo", "Cuenta encontrada"], True, "Busca la cuenta con el subworkflow compartido.")
+    cierre(f, x + 960, ["Consultar roles", "Armar respuesta"], "Cargar roles", "Lee los roles de la escuela de esa cuenta y arma `{ id, correo, nombre, verificado, roles }`.")
+    f.general("Buscar usuario", "`GET /escuela/admin/buscar-usuario?correo=` · solo `administrador`.\n\nLo usa la pantalla *Roles* para encontrar a quién dar o quitar el rol.")
     f.guardar()
 
 
@@ -1015,10 +1030,151 @@ return [{{ json: {{ estado: 404, cuerpo: {{ error: {{ codigo: 'NO_ENCONTRADO', m
     f.guardar()
 
 
+PLANTILLA_INVITACION = (Path(__file__).resolve().parent.parent / "plantillas" / "invitacion_equipo.html").read_text(encoding="utf-8")
+
+
+def invitar_equipo():
+    f = Flujo("escInvitarEquipo01", "Invitar al equipo", "POST /escuela/invitar-equipo. El instructor invita por correo a una cuenta ya registrada y verificada a su equipo de apoyo; el invitado recibe un aviso sin enlaces y responde en su panel. La invitación vence a los 7 días. No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/invitar-equipo", "instructor", "body", {"correo": {"tipo": "correo"}})
+    f.subflujo("Buscar cuenta por correo", "escBuscarCuenta01", x, 0)
+    f.codigo("Revisar invitado", f"""const c = $input.first().json;
+const yo = $('Entrada valida').first().json.usuario.id;
+const error = (estado, codigo, mensaje) => [{{ json: {{ ok: false, estado, cuerpo: {{ error: {{ codigo, mensaje }} }} }} }}];
+if (!c.ok && c.estado === 404) return error(404, 'USUARIO_NO_REGISTRADO', 'Ese correo no tiene una cuenta registrada.');
+if (!c.ok) return [{{ json: c }}];
+if (!c.verificado) return error(404, 'USUARIO_NO_REGISTRADO', 'Esa cuenta todavía no verificó su correo.');
+if (c.id === yo) return error(409, 'ESTADO_INVALIDO', 'No puedes invitarte a ti mismo.');
+return [{{ json: {{ ok: true, miembro_id: c.id, correo: c.correo }} }}];""", x + 240, 0)
+    f.si("Invitado valido", "={{ $json.ok }}", x + 480, 0)
+    f.sql("Cerrar invitaciones caducadas", "UPDATE escuela.invitaciones_equipo SET estado = 'cancelada', respondida_en = now() WHERE instructor_id = $1::uuid AND miembro_id = $2::uuid AND estado = 'pendiente' AND expira_en < now() RETURNING id;",
+          "={{ [$('Entrada valida').first().json.usuario.id, $json.miembro_id] }}", x + 720, 0)
+    f.sql("Crear la invitacion", """WITH miembro AS (SELECT 1 FROM escuela.equipos_apoyo WHERE instructor_id = $1::uuid AND miembro_id = $2::uuid),
+vigente AS (SELECT 1 FROM escuela.invitaciones_equipo WHERE instructor_id = $1::uuid AND miembro_id = $2::uuid AND estado = 'pendiente' AND expira_en >= now()),
+nueva AS (
+  INSERT INTO escuela.invitaciones_equipo (instructor_id, miembro_id, correo)
+  SELECT $1::uuid, $2::uuid, $3::text WHERE NOT EXISTS (SELECT 1 FROM miembro) AND NOT EXISTS (SELECT 1 FROM vigente) RETURNING id, expira_en
+)
+SELECT CASE WHEN EXISTS (SELECT 1 FROM miembro) THEN 'ya_es_miembro' WHEN EXISTS (SELECT 1 FROM vigente) THEN 'duplicada' ELSE 'ok' END AS resultado,
+       (SELECT id FROM nueva) AS id, (SELECT expira_en FROM nueva) AS expira_en,
+       coalesce((SELECT nombre_publico FROM escuela.perfiles_instructor WHERE usuario_id = $1::uuid), 'Un instructor') AS instructor;""",
+          "={{ [$('Entrada valida').first().json.usuario.id, $('Revisar invitado').first().json.miembro_id, $('Revisar invitado').first().json.correo] }}", x + 960, 0)
+    f.codigo("Clasificar invitacion", f"""const r = $input.first().json;
+const error = (estado, codigo, mensaje) => [{{ json: {{ ok: false, estado, cuerpo: {{ error: {{ codigo, mensaje }} }} }} }}];
+if (r.resultado === 'ya_es_miembro') return error(409, 'YA_ES_MIEMBRO', 'Esa persona ya está en tu equipo.');
+if (r.resultado === 'duplicada') return error(409, 'INVITACION_DUPLICADA', 'Ya hay una invitación pendiente para esa persona.');
+if (r.resultado !== 'ok') return error(500, 'ERROR_INTERNO', 'Error interno del servidor.');
+return [{{ json: {{ ok: true, id: Number(r.id), expira_en: r.expira_en, instructor: r.instructor }} }}];""", x + 1200, 0)
+    f.si("Invitacion creada", "={{ $json.ok }}", x + 1440, 0)
+    f.codigo("Armar correo", f"""const PLANTILLA = {json.dumps(PLANTILLA_INVITACION, ensure_ascii=False)};
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({{ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }})[c]);
+const i = $input.first().json;
+const limite = new Date(i.expira_en).toLocaleDateString('es-MX', {{ day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Mexico_City' }});
+const html = PLANTILLA.replaceAll('{{{{nombre_instructor}}}}', esc(i.instructor)).replaceAll('{{{{fecha_limite}}}}', esc(limite));
+return [{{ json: {{ para: $('Revisar invitado').first().json.correo, asunto: `${{i.instructor}} te invitó a su equipo de apoyo`, html }} }}];""", x + 1680, 0)
+    f.nodo("Enviar correo", "n8n-nodes-base.emailSend", 2.1,
+           {"resource": "email", "operation": "send", "fromEmail": "Medical School <no-responder@escuela.local>", "toEmail": "={{ $json.para }}",
+            "subject": "={{ $json.asunto }}", "emailFormat": "html", "html": "={{ $json.html }}", "options": {"appendAttribution": False}}, x + 1920, 0,
+           credentials={"smtp": {"id": "smtpMailpit01", "name": "SMTP Mailpit"}}, onError="continueRegularOutput")
+    f.codigo("Armar respuesta", "const c = $('Clasificar invitacion').first().json;\nconst enviado = !$input.first().json.error;\nreturn [{ json: { estado: 201, cuerpo: { id: c.id, expira_en: c.expira_en, correo_enviado: enviado } } }];", x + 2160, 0)
+    f.unir("Entrada valida", "Buscar cuenta por correo"); f.unir("Buscar cuenta por correo", "Revisar invitado"); f.unir("Revisar invitado", "Invitado valido")
+    f.unir("Invitado valido", "Cerrar invitaciones caducadas", 0); f.unir("Invitado valido", "Responder", 1)
+    f.unir("Cerrar invitaciones caducadas", "Crear la invitacion"); f.unir("Crear la invitacion", "Clasificar invitacion"); f.unir("Clasificar invitacion", "Invitacion creada")
+    f.unir("Invitacion creada", "Armar correo", 0); f.unir("Invitacion creada", "Responder", 1)
+    f.unir("Armar correo", "Enviar correo"); f.unir("Enviar correo", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    f.seccion("Buscar al invitado", "Subworkflow `Buscar cuenta por correo`. Solo se invita a cuentas **registradas y verificadas** (`404 USUARIO_NO_REGISTRADO`); nadie se invita a sí mismo (`409`).", NOTA_PERMISOS,
+              ["Buscar cuenta por correo", "Revisar invitado", "Invitado valido"], True, "Comprueba que el invitado tenga cuenta verificada.")
+    f.seccion("Crear la invitacion", "Primero cierra las invitaciones vencidas de esa persona (así se puede reinvitar) y luego inserta la nueva con vigencia de 7 días. Ya miembro: `409 YA_ES_MIEMBRO`; ya invitado: `409 INVITACION_DUPLICADA`.", NOTA_DATOS,
+              ["Cerrar invitaciones caducadas", "Crear la invitacion", "Clasificar invitacion", "Invitacion creada"], True, "Cierra las caducadas y crea la invitación vigente.")
+    f.seccion("Avisar por correo", "La plantilla `escuela/plantillas/invitacion_equipo.html` va en español y **sin enlaces**: solo avisa. El nombre se escapa para HTML. Si el SMTP falla la invitación igual queda creada (`correo_enviado: false`).", NOTA_RESPUESTA,
+              ["Armar correo", "Enviar correo", "Armar respuesta"], True, "Envía el aviso por SMTP (Mailpit en local) y arma el 201.")
+    f.responder(x + 2400, 0)
+    f.seccion("Respuesta", "Devuelve el `201` o el error de cualquier paso anterior.", NOTA_RESPUESTA, ["Responder"])
+    f.general("Invitar al equipo", "`POST /escuela/invitar-equipo` · solo `instructor`.\n\nEntrada: `{ correo }`. Responde `201 { id, expira_en, correo_enviado }`. El invitado acepta o rechaza en su panel (*Responder invitacion*); no hay enlaces ni códigos en el correo.")
+    f.guardar()
+
+
+def mi_equipo():
+    f = Flujo("escMiEquipo01", "Mi equipo", "GET /escuela/mi-equipo. Miembros del equipo de apoyo del instructor e invitaciones pendientes vigentes. No guarda ejecuciones.", "escuela")
+    x = protegido(f, "GET", "escuela/mi-equipo", "instructor", "query", {})
+    f.sql("Consultar equipo", """SELECT
+  coalesce((SELECT json_agg(json_build_object('miembro_id', e.miembro_id, 'desde', e.creado_en,
+      'correo', (SELECT i.correo FROM escuela.invitaciones_equipo i WHERE i.instructor_id = e.instructor_id AND i.miembro_id = e.miembro_id AND i.estado = 'aceptada' ORDER BY i.respondida_en DESC LIMIT 1)) ORDER BY e.creado_en)
+    FROM escuela.equipos_apoyo e WHERE e.instructor_id = $1::uuid), '[]'::json) AS miembros,
+  coalesce((SELECT json_agg(json_build_object('id', i.id, 'correo', i.correo, 'expira_en', i.expira_en) ORDER BY i.creado_en DESC)
+    FROM escuela.invitaciones_equipo i WHERE i.instructor_id = $1::uuid AND i.estado = 'pendiente' AND i.expira_en >= now()), '[]'::json) AS invitaciones;""", "={{ [$json.usuario.id] }}", x, 0)
+    f.codigo("Armar respuesta", "const r = $input.first().json;\nreturn [{ json: { estado: 200, cuerpo: { miembros: r.miembros, invitaciones: r.invitaciones } } }];", x + 240, 0)
+    f.unir("Entrada valida", "Consultar equipo"); f.unir("Consultar equipo", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Consultar equipo", "Armar respuesta"], "Leer el equipo", "Miembros (con el correo con el que aceptaron) e invitaciones `pendiente` que todavía no vencen.")
+    f.general("Mi equipo", "`GET /escuela/mi-equipo` · solo `instructor`.\n\nAlimenta la pantalla *Mi equipo de apoyo*.")
+    f.guardar()
+
+
+def cancelar_invitacion():
+    f = Flujo("escCancelarInvitacion01", "Cancelar invitacion", "POST /escuela/cancelar-invitacion. El instructor cancela una invitación pendiente suya. No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/cancelar-invitacion", "instructor", "body", {"invitacion_id": TEXTO_ID})
+    f.sql("Cancelar", "UPDATE escuela.invitaciones_equipo SET estado = 'cancelada', respondida_en = now() WHERE id = $1::bigint AND instructor_id = $2::uuid AND estado = 'pendiente' RETURNING id;",
+          "={{ [$json.datos.invitacion_id, $json.usuario.id] }}", x, 0)
+    respuesta_temario(f, x + 240, "if (r.id) return [{ json: { estado: 204, cuerpo: null } }];", "La invitación pendiente")
+    f.unir("Entrada valida", "Cancelar"); f.unir("Cancelar", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Cancelar", "Armar respuesta"], "Cancelar la invitacion", "Solo cancela invitaciones `pendiente` del propio instructor; si no existe o ya se respondió, `404`.")
+    f.general("Cancelar invitacion", "`POST /escuela/cancelar-invitacion` · solo `instructor`.\n\nEntrada: `{ invitacion_id }`. Responde `204`.")
+    f.guardar()
+
+
+def quitar_miembro():
+    f = Flujo("escQuitarMiembro01", "Quitar miembro", "POST /escuela/quitar-miembro. El instructor quita a alguien de su equipo de apoyo; si no pertenece a otro equipo pierde el rol equipo_apoyo. No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/quitar-miembro", "instructor", "body", {"miembro_id": {"tipo": "uuid"}})
+    f.sql("Quitar del equipo", """WITH quitado AS (DELETE FROM escuela.equipos_apoyo WHERE instructor_id = $1::uuid AND miembro_id = $2::uuid RETURNING miembro_id),
+rol AS (
+  DELETE FROM escuela.roles_usuario WHERE usuario_id = $2::uuid AND rol = 'equipo_apoyo' AND EXISTS (SELECT 1 FROM quitado)
+    AND NOT EXISTS (SELECT 1 FROM escuela.equipos_apoyo WHERE miembro_id = $2::uuid AND instructor_id <> $1::uuid) RETURNING 1
+)
+SELECT EXISTS (SELECT 1 FROM quitado) AS quitado;""", "={{ [$json.usuario.id, $json.datos.miembro_id] }}", x, 0)
+    respuesta_temario(f, x + 240, "if (r.quitado) return [{ json: { estado: 204, cuerpo: null } }];", "El miembro")
+    f.unir("Entrada valida", "Quitar del equipo"); f.unir("Quitar del equipo", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Quitar del equipo", "Armar respuesta"], "Quitar del equipo", "Borra la pertenencia y, si la persona no está en el equipo de otro instructor, le quita el rol `equipo_apoyo`. Pierde el acceso al temario de inmediato.")
+    f.general("Quitar miembro", "`POST /escuela/quitar-miembro` · solo `instructor`.\n\nEntrada: `{ miembro_id }`. Responde `204`.")
+    f.guardar()
+
+
+def mis_invitaciones():
+    f = Flujo("escMisInvitaciones01", "Mis invitaciones", "GET /escuela/mis-invitaciones. Invitaciones a equipos de apoyo pendientes y vigentes de la cuenta con sesión. No guarda ejecuciones.", "escuela")
+    x = protegido(f, "GET", "escuela/mis-invitaciones", "cualquiera", "query", {})
+    f.sql("Consultar invitaciones", """SELECT coalesce(json_agg(json_build_object('id', i.id, 'instructor', coalesce(p.nombre_publico, 'Un instructor'), 'creado_en', i.creado_en, 'expira_en', i.expira_en) ORDER BY i.creado_en DESC), '[]'::json) AS invitaciones
+FROM escuela.invitaciones_equipo i LEFT JOIN escuela.perfiles_instructor p ON p.usuario_id = i.instructor_id
+WHERE i.miembro_id = $1::uuid AND i.estado = 'pendiente' AND i.expira_en >= now();""", "={{ [$json.usuario.id] }}", x, 0)
+    f.codigo("Armar respuesta", "return [{ json: { estado: 200, cuerpo: { invitaciones: $input.first().json.invitaciones } } }];", x + 240, 0)
+    f.unir("Entrada valida", "Consultar invitaciones"); f.unir("Consultar invitaciones", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Consultar invitaciones", "Armar respuesta"], "Leer invitaciones", "Solo las `pendiente` cuyo `expira_en` no ha pasado: una invitación vencida deja de aparecer.")
+    f.general("Mis invitaciones", "`GET /escuela/mis-invitaciones` · cualquier cuenta con sesión.\n\nAlimenta la sección *Invitaciones* del panel.")
+    f.guardar()
+
+
+def responder_invitacion():
+    f = Flujo("escResponderInvitacion01", "Responder invitacion", "POST /escuela/responder-invitacion. La persona invitada acepta (entra al equipo y recibe el rol equipo_apoyo) o rechaza una invitación pendiente y vigente. No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/responder-invitacion", "cualquiera", "body", {"invitacion_id": TEXTO_ID, "aceptar": {"tipo": "booleano"}})
+    f.sql("Aplicar la respuesta", """WITH inv AS (SELECT * FROM escuela.invitaciones_equipo WHERE id = $1::bigint AND miembro_id = $2::uuid AND estado = 'pendiente' AND expira_en >= now()),
+resp AS (
+  UPDATE escuela.invitaciones_equipo SET estado = CASE WHEN $3::boolean THEN 'aceptada' ELSE 'rechazada' END, respondida_en = now()
+  WHERE id IN (SELECT id FROM inv) RETURNING id
+), equipo AS (
+  INSERT INTO escuela.equipos_apoyo (instructor_id, miembro_id) SELECT instructor_id, miembro_id FROM inv WHERE $3::boolean ON CONFLICT DO NOTHING RETURNING 1
+), rol AS (
+  INSERT INTO escuela.roles_usuario (usuario_id, rol) SELECT miembro_id, 'equipo_apoyo' FROM inv WHERE $3::boolean ON CONFLICT DO NOTHING RETURNING 1
+)
+SELECT EXISTS (SELECT 1 FROM resp) AS respondida;""", "={{ [$json.datos.invitacion_id, $json.usuario.id, $json.datos.aceptar] }}", x, 0)
+    respuesta_temario(f, x + 240, "if (r.respondida) return [{ json: { estado: 200, cuerpo: { aceptada: $('Entrada valida').first().json.datos.aceptar } } }];", "La invitación")
+    f.unir("Entrada valida", "Aplicar la respuesta"); f.unir("Aplicar la respuesta", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 480, ["Aplicar la respuesta", "Armar respuesta"], "Aplicar la respuesta", "Solo responde quien fue invitado, y solo si la invitación sigue `pendiente` y vigente. Aceptar crea la pertenencia y el rol `equipo_apoyo` en la misma consulta.")
+    f.general("Responder invitacion", "`POST /escuela/responder-invitacion` · cualquier cuenta con sesión (la invitación debe ser suya).\n\nEntrada: `{ invitacion_id, aceptar }`. Responde `200 { aceptada }`; una invitación ajena, vencida o ya respondida da `404`.")
+    f.guardar()
+
+
 if __name__ == "__main__":
     validar_sesion_y_roles()
     mis_roles()
     exigir_rol()
+    buscar_cuenta()
     validar_campos()
     categorias()
     guardar_categoria()
@@ -1043,3 +1199,9 @@ if __name__ == "__main__":
     confirmar_portada()
     cursos_catalogo()
     curso_publico()
+    invitar_equipo()
+    mi_equipo()
+    cancelar_invitacion()
+    quitar_miembro()
+    mis_invitaciones()
+    responder_invitacion()

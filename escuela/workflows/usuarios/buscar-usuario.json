@@ -63,13 +63,13 @@
     },
     {
       "parameters": {
-        "content": "### Buscar en Supabase Auth\nLlama a `auth:9999/admin/users?filter=` con la credencial de rol de servicio y se queda con la cuenta cuyo correo coincide exacto. Si no hay, `404`.",
+        "content": "### Buscar la cuenta\nSubworkflow `Buscar cuenta por correo`. Sin cuenta con ese correo: `404`.",
         "height": 430,
-        "width": 780,
+        "width": 480,
         "color": 1
       },
-      "id": "f65b4d66-5a84-5507-bf27-6ea2de00cc79",
-      "name": "Nota Buscar en Supabase Auth",
+      "id": "55836359-a8f0-5fe8-bd64-d22da5a68a33",
+      "name": "Nota Buscar la cuenta",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
@@ -89,7 +89,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2660,
+        2360,
         -260
       ]
     },
@@ -105,13 +105,13 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        3230,
+        2930,
         -260
       ]
     },
     {
       "parameters": {
-        "content": "### Buscar usuario\n`GET /escuela/admin/buscar-usuario?correo=` · solo `administrador`.\n\nLo usa la pantalla *Roles* para encontrar a quién dar o quitar el rol. Usa la credencial **Supabase rol de servicio**, que nunca sale de n8n.",
+        "content": "### Buscar usuario\n`GET /escuela/admin/buscar-usuario?correo=` · solo `administrador`.\n\nLo usa la pantalla *Roles* para encontrar a quién dar o quitar el rol.",
         "height": 150,
         "width": 1000,
         "color": 7
@@ -272,46 +272,21 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "=http://auth:9999/admin/users?filter={{ encodeURIComponent($json.datos.correo) }}",
-        "options": {
-          "response": {
-            "response": {
-              "fullResponse": true,
-              "neverError": true,
-              "responseFormat": "json"
-            }
-          }
+        "workflowId": {
+          "__rl": true,
+          "value": "escBuscarCuenta01",
+          "mode": "id"
         },
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth"
+        "options": {
+          "waitForSubWorkflow": true
+        }
       },
-      "id": "32c4943f-11de-5787-a7e7-471f655b54f9",
-      "name": "Consultar Supabase Auth",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "id": "1cb6c9ab-729b-505c-b9d8-7d83b3643812",
+      "name": "Buscar cuenta por correo",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
       "position": [
         1800,
-        0
-      ],
-      "onError": "continueRegularOutput",
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "supabaseServicio01",
-          "name": "Supabase rol de servicio"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst correo = $('Entrada valida').first().json.datos.correo;\nif (r.statusCode !== 200 || !r.body || !Array.isArray(r.body.users)) return [{ json: { ok: false, estado: 500, cuerpo: { error: { codigo: 'ERROR_INTERNO', mensaje: 'Error interno del servidor.' } } } }];\nconst u = r.body.users.find((x) => String(x.email || '').toLowerCase() === correo);\nif (!u) return [{ json: { ok: false, estado: 404, cuerpo: { error: { codigo: 'NO_ENCONTRADO', mensaje: 'No hay ninguna cuenta con ese correo.' } } } }];\nreturn [{ json: { ok: true, id: u.id, correo: u.email, nombre: (u.user_metadata || {}).nombre ?? null, verificado: !!u.email_confirmed_at } }];"
-      },
-      "id": "be4d4c5e-cc54-5510-91fd-0a85ed160ac2",
-      "name": "Elegir coincidencia",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2100,
         0
       ]
     },
@@ -345,7 +320,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2400,
+        2100,
         0
       ]
     },
@@ -362,7 +337,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        2700,
+        2400,
         0
       ],
       "credentials": {
@@ -376,14 +351,14 @@
     },
     {
       "parameters": {
-        "jsCode": "const u = $('Elegir coincidencia').first().json;\nreturn [{ json: { estado: 200, cuerpo: { id: u.id, correo: u.correo, nombre: u.nombre, verificado: u.verificado, roles: $input.first().json.roles } } }];"
+        "jsCode": "const u = $('Buscar cuenta por correo').first().json;\nreturn [{ json: { estado: 200, cuerpo: { id: u.id, correo: u.correo, nombre: u.nombre, verificado: u.verificado, roles: $input.first().json.roles } } }];"
       },
       "id": "b4296d4e-e10b-5426-9c13-7b30a82ac048",
       "name": "Armar respuesta",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3000,
+        2700,
         0
       ]
     },
@@ -412,7 +387,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        3300,
+        3000,
         0
       ]
     }
@@ -484,7 +459,7 @@
       "main": [
         [
           {
-            "node": "Consultar Supabase Auth",
+            "node": "Buscar cuenta por correo",
             "type": "main",
             "index": 0
           }
@@ -498,18 +473,7 @@
         ]
       ]
     },
-    "Consultar Supabase Auth": {
-      "main": [
-        [
-          {
-            "node": "Elegir coincidencia",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Elegir coincidencia": {
+    "Buscar cuenta por correo": {
       "main": [
         [
           {
@@ -582,14 +546,13 @@
       "description": "Valida y normaliza los campos con el subworkflow compartido."
     },
     {
-      "id": "2e8706d4-36f3-5012-a08e-5dd6a1ac49b8",
-      "name": "Buscar en Supabase Auth",
+      "id": "e80443d1-6ec1-592a-95b9-ea3c1857c6b8",
+      "name": "Buscar la cuenta",
       "nodeIds": [
-        "32c4943f-11de-5787-a7e7-471f655b54f9",
-        "be4d4c5e-cc54-5510-91fd-0a85ed160ac2",
+        "1cb6c9ab-729b-505c-b9d8-7d83b3643812",
         "98c8c891-2623-5c19-ba00-807ed8980e21"
       ],
-      "description": "Busca la cuenta por correo en la API admin de Supabase Auth."
+      "description": "Busca la cuenta con el subworkflow compartido."
     },
     {
       "id": "4d36e4c0-5d9f-5336-96b2-2f9161e23500",

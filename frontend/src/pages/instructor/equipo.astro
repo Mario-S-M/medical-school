@@ -1,0 +1,8 @@
+---
+import LayoutBase from '../../layouts/LayoutBase.astro';
+import PaginaEquipo from '../../componentes/instructor/PaginaEquipo';
+---
+
+<LayoutBase arriba titulo="Mi equipo de apoyo">
+  <PaginaEquipo client:only="react" />
+</LayoutBase>
