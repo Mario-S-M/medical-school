@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""Comprueba la geometría de las notas adhesivas de escuela/workflows/*/*.json (SPEC 07).
-Cada nodo debe quedar dentro de una sola nota de sección y ninguna nota debe pisar a otra.
+"""Comprueba las notas adhesivas y los grupos de nodos de escuela/workflows/*/*.json (SPEC 07).
+Cada nodo debe quedar dentro de una sola nota de sección, ninguna nota debe pisar a otra y cada workflow debe tener
+una nota general. Cada grupo de nodos debe ser conexo, sin disparadores y con una sola entrada y una sola salida
+(lo que n8n exige para poder colapsarlo).
 Los nodos miden 100x100 y su nombre ocupa unos 40 px debajo. Sale con código 1 si algo no encaja."""
 import json
 import sys
@@ -25,9 +27,24 @@ for archivo in sorted(Path(__file__).resolve().parent.parent.glob("workflows/*/*
             a, b = cajas[u], cajas[v]
             if a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]:
                 print(f"{archivo.name}: '{u}' se superpone con '{v}'"); problemas += 1
-    ids = {n["id"] for n in nodos}
+    if not any(n["parameters"]["content"].startswith("### " + d["name"]) for n in notas):
+        print(f"{archivo.name}: falta la nota general '{d['name']}'"); problemas += 1
+    ids = {n["id"]: n["name"] for n in nodos}
+    tipos = {n["name"]: n["type"] for n in nodos}
+    aristas = [(o, c["node"]) for o, v in d["connections"].items() for salida in v["main"] for c in salida]
     for g in d.get("nodeGroups", []):
-        if not set(g["nodeIds"]) <= ids:
-            print(f"{archivo.name}: el grupo '{g['name']}' apunta a nodos que no existen"); problemas += 1
+        if not set(g["nodeIds"]) <= set(ids):
+            print(f"{archivo.name}: el grupo '{g['name']}' apunta a nodos que no existen"); problemas += 1; continue
+        miembros = {ids[i] for i in g["nodeIds"]}
+        entradas = {b for a, b in aristas if b in miembros and a not in miembros} | {m for m in miembros if not any(b == m for _, b in aristas)}
+        salidas = {a for a, b in aristas if a in miembros and b not in miembros}
+        internas = [(a, b) for a, b in aristas if a in miembros and b in miembros]
+        alcanzados, pendientes = set(), [sorted(entradas)[0]] if entradas else []
+        while pendientes:
+            n = pendientes.pop()
+            if n not in alcanzados:
+                alcanzados.add(n); pendientes += [b for a, b in internas if a == n]
+        if len(entradas) > 1 or len(salidas) > 1 or alcanzados != miembros or any("Trigger" in tipos[m] or "webhook" in tipos[m] for m in miembros):
+            print(f"{archivo.name}: el grupo '{g['name']}' no se puede colapsar (entradas {sorted(entradas)}, salidas {sorted(salidas)})"); problemas += 1
     print(f"{archivo.name}: {len(nodos)} nodos, {len(notas)} notas, {len(d.get('nodeGroups', []))} grupos")
 sys.exit(1 if problemas else 0)
