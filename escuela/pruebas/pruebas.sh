@@ -31,6 +31,7 @@ borrar_portadas() {
 PREFIJOS_VIDEO=()
 borrar_videos() {
   [ "${#PREFIJOS_VIDEO[@]}" -gt 0 ] && ALMACEN="$ALMACEN" CLAVE_SERVICIO="$(leer_env SERVICE_ROLE_KEY)" python3 escuela/pruebas/limpiar_bucket.py videos "${PREFIJOS_VIDEO[@]}" > /dev/null 2>&1
+  docker compose unpause transcodificador > /dev/null 2>&1
   docker compose start transcodificador > /dev/null 2>&1
 }
 
@@ -793,14 +794,112 @@ cuerpo_tiene '"SERVICIO_NO_DISPONIBLE"' "transcodificador caído -> SERVICIO_NO_
 [ "$(psql_n8n "select estado from escuela.videos_clase where id = $VIDEO_1")" = "error" ]; verificar "el video queda en error cuando el servicio no responde" $?
 docker compose start transcodificador > /dev/null 2>&1; sleep 4
 psql_n8n "update escuela.videos_clase set estado = 'esperando_archivo', error = null where id = $VIDEO_1" > /dev/null
+psql_n8n "update escuela.videos_clase set estado = 'esperando_archivo', error = null where id = $VIDEO_1" > /dev/null
 api POST $CONFIRMAR "$TOKEN_invitado" "{\"video_id\":$VIDEO_1}"
 estado_es 202 "un miembro del equipo confirma la subida -> 202"
 cuerpo_tiene '"en_cola"' "la respuesta indica en_cola"
 api POST $CONFIRMAR "$TOKEN_instructor_a" "{\"video_id\":$VIDEO_1}"
 estado_es 409 "confirmar dos veces -> 409"
-[[ "$(psql_n8n "select estado from escuela.videos_clase where id = $VIDEO_1")" =~ ^(en_cola|procesando)$ ]]; verificar "el video quedó en cola en la base" $?
+[[ "$(psql_n8n "select estado from escuela.videos_clase where id = $VIDEO_1")" =~ ^(en_cola|procesando|listo)$ ]]; verificar "el video pasó a la cola en la base (y puede estar ya procesado)" $?
 ESTADO_TRABAJO="$(docker compose exec -T -e SEC="$(leer_env SECRETO_TRANSCODIFICADOR)" n8n node -e "fetch('http://transcodificador:8090/trabajos/$VIDEO_1',{headers:{'X-Secreto-Transcodificador':process.env.SEC}}).then(async r=>console.log(r.status))")"
 [ "$ESTADO_TRABAJO" = "200" ]; verificar "el transcodificador recibió el trabajo (GET /trabajos/<id> -> 200)" $?
+
+echo "== Videos: resultado, estado y reemplazo"
+ESTADO_VIDEO="/escuela/estado-video"
+solicitar GET "$ESTADO_VIDEO?clase_id=$CLASE_V"
+estado_es 401 "estado-video sin token -> 401"
+api GET "$ESTADO_VIDEO?clase_id=$CLASE_V" "$TOKEN_estudiante"
+estado_es 403 "estado-video sin rol -> 403"
+api GET "$ESTADO_VIDEO?clase_id=$CLASE_V" "$TOKEN_instructor_b"
+estado_es 403 "estado-video de una clase de un curso ajeno -> 403"
+api GET "$ESTADO_VIDEO?clase_id=99999999" "$TOKEN_instructor_a"
+estado_es 404 "estado-video de una clase inexistente -> 404"
+api GET "$ESTADO_VIDEO" "$TOKEN_instructor_a"
+estado_es 422 "estado-video sin clase_id -> 422"
+api GET "$ESTADO_VIDEO?clase_id=$CLASE_V&extra=1" "$TOKEN_instructor_a"
+estado_es 422 "estado-video con un parámetro extra -> 422"
+# esperar_estado <token> <clase_id> <condición en Python sobre d>: sondea estado-video hasta 2 minutos
+esperar_estado() {
+  local n=0
+  while [ "$n" -lt 60 ]; do
+    api GET "$ESTADO_VIDEO?clase_id=$2" "$1"
+    echo "$cuerpo" | python3 -c "import sys,json; d=json.load(sys.stdin); sys.exit(0 if ($3) else 1)" 2> /dev/null && return 0
+    sleep 2; n=$((n + 1))
+  done
+  return 1
+}
+esperar_estado "$TOKEN_instructor_a" "$CLASE_V" "d['vigente'] and d['vigente']['estado'] == 'listo'"; verificar "el video termina en listo (el aviso del transcodificador llegó a n8n)" $?
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['vigente']['id'] == $VIDEO_1 and abs(d['vigente']['duracion_segundos'] - 4) <= 1 and d['nuevo'] is None and d['vigente']['listo_en'] is not None)")" = "True" ]; verificar "el vigente es el video 1, con su duración real (±1 s) y no hay video nuevo" $?
+cuerpo_no_tiene "$CLAVE_HEX_V1" "estado-video no contiene la clave"
+existe_video() { curl -s -o /dev/null -w '%{http_code}' "$ALMACEN/object/videos/$1" -H "Authorization: Bearer $(leer_env SERVICE_ROLE_KEY)" -H "apikey: $(leer_env SERVICE_ROLE_KEY)"; }
+BASE_V1="cursos/$CURSO_V/secciones/$SEC_V2/clases/$CLASE_V/$VIDEO_1"
+[ "$(existe_video "$BASE_V1/hls/lista.m3u8")" = "200" ] && [ "$(existe_video "$BASE_V1/hls/segmento_00001.ts")" = "200" ]; verificar "la lista y los segmentos quedaron en la ruta ordenada del bucket" $?
+[ "$(existe_video "$BASE_V1/original.mp4")" != "200" ]; verificar "el original se borró del bucket" $?
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$ALMACEN/object/public/videos/$BASE_V1/hls/lista.m3u8")" != "200" ]; verificar "un visitante anónimo no puede leer el video (bucket privado)" $?
+[ "$(psql_n8n "select vigente from escuela.videos_clase where id = $VIDEO_1")" = "t" ]; verificar "el video quedó marcado como vigente" $?
+api GET "$ESTADO_VIDEO?clase_id=$CLASE_V" "$TOKEN_invitado"
+estado_es 200 "un miembro del equipo consulta el estado -> 200"
+llamar_aviso() { docker compose exec -T -e SEC="$1" -e CUERPO="$2" n8n node -e 'const cab={"Content-Type":"application/json"}; if (process.env.SEC) cab["X-Secreto-Transcodificador"]=process.env.SEC; fetch("http://localhost:5678/webhook/escuela/interno/video-procesado",{method:"POST",headers:cab,body:process.env.CUERPO}).then(async r=>console.log(r.status, await r.text()))'; }
+SECRETO_T="$(leer_env SECRETO_TRANSCODIFICADOR)"
+[[ "$(llamar_aviso "" "{\"video_id\":$VIDEO_1,\"resultado\":\"error\"}")" == 403* ]]; verificar "el webhook interno sin el secreto -> 403 (puerto 5678 directo)" $?
+[[ "$(llamar_aviso "equivocado" "{\"video_id\":$VIDEO_1,\"resultado\":\"error\"}")" == 403* ]]; verificar "el webhook interno con un secreto equivocado -> 403" $?
+[[ "$(llamar_aviso "$(leer_env SECRETO_PROXY)" "{\"video_id\":$VIDEO_1,\"resultado\":\"error\"}")" == 403* ]]; verificar "el secreto del proxy no sirve para el webhook interno -> 403" $?
+[[ "$(llamar_aviso "$SECRETO_T" '{"video_id":99999999,"resultado":"listo","duracion_segundos":5}')" == '200 {"aplicado":false}' ]]; verificar "un aviso de un video inexistente se ignora (200 aplicado false)" $?
+[[ "$(llamar_aviso "$SECRETO_T" "{\"video_id\":$VIDEO_1,\"resultado\":\"error\",\"mensaje\":\"tarde\"}")" == '200 {"aplicado":false}' ]]; verificar "un aviso de un video que ya está listo no lo cambia" $?
+[[ "$(llamar_aviso "$SECRETO_T" '{"video_id":1,"resultado":"raro"}')" == 422* ]]; verificar "un aviso con un resultado inválido -> 422" $?
+solicitar POST /escuela/interno/video-procesado -H 'Content-Type: application/json' -d '{"video_id":1,"resultado":"error"}'
+estado_es 404 "por Caddy, /escuela/interno/video-procesado -> 404"
+solicitar POST /webhook/escuela/interno/video-procesado -H 'Content-Type: application/json' -d '{"video_id":1,"resultado":"error"}'
+estado_es 404 "por Caddy, /webhook/escuela/interno/video-procesado -> 404"
+[ "$(psql_n8n "select estado from escuela.videos_clase where id = $VIDEO_1")" = "listo" ]; verificar "los avisos rechazados o ignorados no cambiaron el video" $?
+# --- reemplazo: el anterior sigue vigente mientras el nuevo se procesa
+docker compose exec -T transcodificador ffmpeg -hide_banner -v error -y -f lavfi -i testsrc2=size=1280x720:rate=25 -f lavfi -i sine=frequency=330 -t 90 -c:v libx264 -crf 32 -pix_fmt yuv420p -c:a aac /trabajo/larga_esc.mp4
+docker compose cp transcodificador:/trabajo/larga_esc.mp4 "$DIRECTORIO_TEMPORAL/larga.mp4" > /dev/null 2>&1
+api POST $SOLICITAR "$TOKEN_instructor_a" "$(datos_video video/mp4 "$(wc -c < "$DIRECTORIO_TEMPORAL/larga.mp4" | tr -d ' ')")"
+VIDEO_2="$(campo_json video_id)"; URL_V2="$(campo_json url_subida)"
+estado_es 201 "se puede solicitar otro video mientras el vigente está listo"
+curl -s -o /dev/null -X PUT "$ALMACEN${URL_V2#/almacen}" -H 'Content-Type: video/mp4' --data-binary "@$DIRECTORIO_TEMPORAL/larga.mp4"
+api POST $CONFIRMAR "$TOKEN_instructor_a" "{\"video_id\":$VIDEO_2}"
+estado_es 202 "confirmar el video de reemplazo -> 202"
+BASE_V2="cursos/$CURSO_V/secciones/$SEC_V2/clases/$CLASE_V/$VIDEO_2"
+api GET "$ESTADO_VIDEO?clase_id=$CLASE_V" "$TOKEN_instructor_a"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['vigente']['id'] == $VIDEO_1 and d['vigente']['estado'] == 'listo' and d['nuevo']['id'] == $VIDEO_2)")" = "True" ]; verificar "mientras el nuevo se procesa, el anterior sigue siendo el vigente" $?
+esperar_estado "$TOKEN_instructor_a" "$CLASE_V" "d['vigente']['id'] == $VIDEO_2 and d['nuevo'] is None"; verificar "al quedar listo, el nuevo pasa a ser el único vigente" $?
+[ "$(psql_n8n "select count(*) from escuela.videos_clase where clase_id = $CLASE_V and vigente")" = "1" ] && [ "$(psql_n8n "select count(*) from escuela.videos_clase where id = $VIDEO_1")" = "0" ]; verificar "queda un solo vigente y la fila del anterior se borró (con su clave)" $?
+[ "$(existe_video "$BASE_V1/hls/lista.m3u8")" != "200" ] && [ "$(existe_video "$BASE_V1/hls/segmento_00001.ts")" != "200" ]; verificar "los archivos del video anterior ya no existen en Storage" $?
+[ "$(existe_video "$BASE_V2/hls/lista.m3u8")" = "200" ]; verificar "los archivos del video nuevo sí existen" $?
+# --- un archivo corrupto termina en error sin tocar el vigente
+head -c 50000 /dev/urandom > "$DIRECTORIO_TEMPORAL/basura.mp4"
+api POST $SOLICITAR "$TOKEN_instructor_a" "$(datos_video video/mp4 50000)"
+VIDEO_3="$(campo_json video_id)"; URL_V3="$(campo_json url_subida)"
+curl -s -o /dev/null -X PUT "$ALMACEN${URL_V3#/almacen}" -H 'Content-Type: video/mp4' --data-binary "@$DIRECTORIO_TEMPORAL/basura.mp4"
+api POST $CONFIRMAR "$TOKEN_instructor_a" "{\"video_id\":$VIDEO_3}"
+estado_es 202 "confirmar un archivo corrupto se acepta (se descubre al procesar)"
+esperar_estado "$TOKEN_instructor_a" "$CLASE_V" "d['nuevo'] and d['nuevo']['estado'] == 'error'"; verificar "un archivo corrupto termina en error" $?
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; d=json.load(sys.stdin); print('dañado' in d['nuevo']['error'] and d['vigente']['id'] == $VIDEO_2)")" = "True" ]; verificar "el error es legible y el video vigente no cambió" $?
+[ "$(existe_video "cursos/$CURSO_V/secciones/$SEC_V2/clases/$CLASE_V/$VIDEO_3/original.mp4")" = "200" ]; verificar "con error el original se conserva en Storage" $?
+# --- tiempo máximo de 45 minutos
+psql_n8n "update escuela.videos_clase set estado = 'en_cola', error = null, actualizado_en = now() - interval '44 minutes' where id = $VIDEO_3" > /dev/null
+api GET "$ESTADO_VIDEO?clase_id=$CLASE_V" "$TOKEN_instructor_a"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; print(json.load(sys.stdin)['nuevo']['estado'])")" = "en_cola" ]; verificar "con 44 minutos sin cambios el video sigue en cola" $?
+psql_n8n "update escuela.videos_clase set actualizado_en = now() - interval '46 minutes' where id = $VIDEO_3" > /dev/null
+api GET "$ESTADO_VIDEO?clase_id=$CLASE_V" "$TOKEN_instructor_a"
+[ "$(echo "$cuerpo" | python3 -c "import sys,json; n=json.load(sys.stdin)['nuevo']; print(n['estado'] == 'error' and n['error'] == 'El procesamiento tardó demasiado.')")" = "True" ]; verificar "con 46 minutos sin cambios pasa a error: El procesamiento tardó demasiado." $?
+
+echo "== Videos: transcodificador colgado"
+api POST /escuela/guardar-clase "$TOKEN_instructor_a" "{\"seccion_id\":$SEC_V2,\"titulo\":\"Clase para el colgado\",\"es_muestra\":false}"; CLASE_V2="$(campo_json id)"
+api POST $SOLICITAR "$TOKEN_instructor_a" "{\"clase_id\":$CLASE_V2,\"nombre_archivo\":\"clase.mp4\",\"tipo_contenido\":\"video/mp4\",\"tamano_bytes\":$TAM}"
+VIDEO_C="$(campo_json video_id)"; URL_VC="$(campo_json url_subida)"
+curl -s -o /dev/null -X PUT "$ALMACEN${URL_VC#/almacen}" -H 'Content-Type: video/mp4' --data-binary "@$DIRECTORIO_TEMPORAL/clase.mp4"
+docker compose pause transcodificador > /dev/null 2>&1
+INICIO=$SECONDS
+api POST $CONFIRMAR "$TOKEN_instructor_a" "{\"video_id\":$VIDEO_C}"
+estado_es 503 "con el transcodificador colgado, confirmar -> 503 limpio (no 500)"
+[ $((SECONDS - INICIO)) -lt 14 ]; verificar "el 503 llega antes del límite de 15 s del workflow (espera máxima de 10 s)" $?
+[ "$(psql_n8n "select estado from escuela.videos_clase where id = $VIDEO_C")" = "error" ]; verificar "el video quedó en error" $?
+docker compose unpause transcodificador > /dev/null 2>&1
+n=0; until [[ "$(docker compose exec -T -e SEC="$SECRETO_T" n8n node -e "fetch('http://transcodificador:8090/trabajos/$VIDEO_C',{headers:{'X-Secreto-Transcodificador':process.env.SEC}}).then(async r=>console.log(r.status, await r.text()))")" =~ (listo|error) ]] || [ "$n" -ge 30 ]; do sleep 2; n=$((n + 1)); done
+[ "$(psql_n8n "select estado from escuela.videos_clase where id = $VIDEO_C")" = "error" ]; verificar "el aviso tardío del trabajo retenido no revive un video que ya estaba en error" $?
 
 echo
 echo "$((total - fallos)) de $total casos correctos"

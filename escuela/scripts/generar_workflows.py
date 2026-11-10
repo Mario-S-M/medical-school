@@ -16,6 +16,7 @@ from pathlib import Path
 SALIDA = Path(__file__).resolve().parent.parent / "workflows"
 RAIZ_UUID = uuid.UUID("5c0e1a00-0000-4000-8000-000000000007")
 CRED_PROXY = {"httpHeaderAuth": {"id": "secretoProxy01", "name": "Secreto proxy"}}
+CRED_TRANSCODIFICADOR = {"httpHeaderAuth": {"id": "secretoTranscodificador01", "name": "Secreto transcodificador"}}
 CRED_PG = {"postgres": {"id": "pgSupabase01", "name": "Postgres n8n (Supabase)"}}
 # Paleta de notas: un color por tipo de contenido
 # (el rojo se reserva para errores)
@@ -74,11 +75,11 @@ class Flujo:
         casillas[salida].append({"node": destino, "type": "main", "index": 0})
 
     # --- ayudantes por tipo de nodo ---
-    def webhook(self, metodo, ruta, x=0, y=0):
+    def webhook(self, metodo, ruta, x=0, y=0, credenciales=None):
         return self.nodo("Recibir solicitud", "n8n-nodes-base.webhook", 2.1,
                          {"httpMethod": metodo, "path": ruta, "authentication": "headerAuth",
                           "responseMode": "responseNode", "options": {}}, x, y,
-                         credentials=CRED_PROXY, webhookId=uid(self.id, "webhook"))
+                         credentials=credenciales or CRED_PROXY, webhookId=uid(self.id, "webhook"))
 
     def codigo(self, nombre, js, x, y):
         return self.nodo(nombre, "n8n-nodes-base.code", 2, {"jsCode": js}, x, y)
@@ -96,11 +97,13 @@ class Flujo:
                           "options": {"queryReplacement": parametros}}, x, y,
                          credentials=CRED_PG, onError="continueRegularOutput", alwaysOutputData=True)
 
-    def http(self, nombre, metodo, url, cabeceras, x, y, servicio=False, formato="json", transcodificador=False, cuerpo=None):
+    def http(self, nombre, metodo, url, cabeceras, x, y, servicio=False, formato="json", transcodificador=False, cuerpo=None, tiempo=None):
         p = {"method": metodo, "url": url, "options": {"response": {"response": {"fullResponse": True, "neverError": True, "responseFormat": formato}}},
              "sendHeaders": True, "specifyHeaders": "keypair",
              "headerParameters": {"parameters": [{"name": k, "value": v} for k, v in cabeceras.items()]}}
         extra = {}
+        if tiempo:  # milisegundos; si se pasa, el nodo falla y el workflow sigue por la rama de error
+            p["options"]["timeout"] = tiempo
         if cuerpo:
             p.update({"sendBody": True, "specifyBody": "json", "jsonBody": cuerpo})
         if transcodificador:  # credencial compartida con el transcodificador (cabecera X-Secreto-Transcodificador)
@@ -316,12 +319,12 @@ def validar_campos():
     f.guardar()
 
 
-def protegido(f, metodo, ruta, rol, origen, reglas, acceso=None):
+def protegido(f, metodo, ruta, rol, origen, reglas, acceso=None, credenciales=None):
     """Entrada común de un endpoint: webhook, permiso por rol (si rol) y validación de campos (si reglas).
     Los errores de los dos pasos van directo a "Responder". Devuelve la columna libre siguiente."""
-    f.webhook(metodo, ruta, 0, 0)
+    f.webhook(metodo, ruta, 0, 0, credenciales)
     anterior, x, previos = "Recibir solicitud", 240, []
-    f.seccion("Entrada", "Webhook protegido por el secreto del proxy (Caddy es la única entrada).", NOTA_ENTRADA, ["Recibir solicitud"])
+    f.seccion("Entrada", "Webhook protegido por " + ("el secreto del transcodificador (interno, no está en Caddy)." if credenciales else "el secreto del proxy (Caddy es la única entrada)."), NOTA_ENTRADA, ["Recibir solicitud"])
     if rol:
         f.codigo("Definir reglas", f"""const e = $input.first().json;
 return [{{ json: {{ headers: e.headers, rol_requerido: {json.dumps(rol)}, datos: e.{origen}, reglas: {json.dumps(reglas, ensure_ascii=False)}{', acceso: ' + json.dumps(acceso) if acceso else ''} }} }}];""", x, 0)
@@ -577,13 +580,15 @@ def curso_edicion():
   'secciones', coalesce((
     SELECT json_agg(json_build_object('id', s.id, 'titulo', s.titulo, 'posicion', s.posicion, 'clases', coalesce((
       SELECT json_agg(json_build_object('id', k.id, 'titulo', k.titulo, 'descripcion', k.descripcion,
-             'duracion_estimada_minutos', k.duracion_estimada_minutos, 'es_muestra', k.es_muestra, 'posicion', k.posicion) ORDER BY k.posicion)
+             'duracion_estimada_minutos', k.duracion_estimada_minutos, 'es_muestra', k.es_muestra, 'posicion', k.posicion,
+             'video', (SELECT json_build_object('estado', v.estado, 'duracion_segundos', v.duracion_segundos) FROM escuela.videos_clase v WHERE v.clase_id = k.id AND v.vigente),
+             'video_nuevo', (SELECT json_build_object('estado', v.estado, 'error', v.error) FROM escuela.videos_clase v WHERE v.clase_id = k.id AND NOT v.vigente ORDER BY v.id DESC LIMIT 1)) ORDER BY k.posicion)
       FROM escuela.clases k WHERE k.seccion_id = s.id), '[]'::json)) ORDER BY s.posicion)
     FROM escuela.secciones s WHERE s.curso_id = c.id), '[]'::json)) AS curso
 FROM escuela.cursos c WHERE c.id = $1::bigint;""", "={{ [$json.curso.id] }}", x, 0)
     f.codigo("Armar respuesta", "const dueno = $('Acceso valido').first().json.es_dueno;\nreturn [{ json: { estado: 200, cuerpo: { ...$input.first().json.curso, es_dueno: dueno } } }];", x + 240, 0)
     f.unir("Acceso valido", "Consultar curso completo"); f.unir("Consultar curso completo", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
-    cierre(f, x + 480, ["Consultar curso completo", "Armar respuesta"], "Leer el curso", "Devuelve el curso con sus secciones y clases en orden, y `es_dueno` para que el editor sepa si puede cambiar los datos del curso.")
+    cierre(f, x + 480, ["Consultar curso completo", "Armar respuesta"], "Leer el curso", "Devuelve el curso con sus secciones y clases en orden (cada clase con su `video` vigente y su `video_nuevo` en proceso o con error) y `es_dueno` para que el editor sepa si puede cambiar los datos del curso.")
     f.general("Curso para edicion", "`GET /escuela/curso-edicion?id=` · dueño o equipo de apoyo.\n\nTrae todo lo que necesita el editor: datos del curso, estado, comentario de la revisión y temario. A diferencia de la ficha pública, incluye cursos en borrador y en revisión.")
     f.guardar()
 
@@ -654,9 +659,9 @@ ROLES_TEMARIO = ["instructor", "equipo_apoyo"]
 TEXTO_ID = {"tipo": "entero", "minimo": 1, "maximo": 9007199254740}
 
 
-def respuesta_temario(f, x, ok_js, titulo_nota):
+def respuesta_temario(f, x, ok_js, titulo_nota, fuente="$input.first().json"):
     """Nodo "Armar respuesta" común de los endpoints del temario: 404 si el SQL no encontró nada."""
-    f.codigo("Armar respuesta", f"""const r = $input.first().json;
+    f.codigo("Armar respuesta", f"""const r = {fuente};
 {ok_js}
 return [{{ json: {{ estado: 404, cuerpo: {{ error: {{ codigo: 'NO_ENCONTRADO', mensaje: '{titulo_nota} no existe en este curso.' }} }} }} }}];""", x, 0)
 
@@ -685,7 +690,9 @@ def borrar_seccion():
     f = Flujo("escBorrarSeccion01", "Borrar seccion", "POST /escuela/borrar-seccion. Borra una sección con sus clases y renumera las demás (instructor dueño o su equipo; no en revisión). No guarda ejecuciones.", "escuela")
     x = protegido(f, "POST", "escuela/borrar-seccion", ROLES_TEMARIO, "body", {"seccion_id": TEXTO_ID},
                   {"modo": "dueno_o_equipo", "editable": True, "tipo": "seccion", "campo": "seccion_id"})
-    f.sql("Borrar y renumerar", """WITH borrada AS (
+    f.sql("Borrar y renumerar", """WITH rutas AS (
+  SELECT coalesce(array_agg(v.ruta_base), '{}') AS rutas FROM escuela.videos_clase v JOIN escuela.clases k ON k.id = v.clase_id WHERE k.seccion_id = $1::bigint
+), borrada AS (
   DELETE FROM escuela.secciones WHERE id = $1::bigint RETURNING curso_id
 ), renumeradas AS (
   UPDATE escuela.secciones s SET posicion = n.nueva
@@ -693,10 +700,13 @@ def borrar_seccion():
         WHERE curso_id = (SELECT curso_id FROM borrada) AND id <> $1::bigint) n
   WHERE s.id = n.id RETURNING s.id
 )
-SELECT EXISTS (SELECT 1 FROM borrada) AS borrada;""", "={{ [$json.datos.seccion_id] }}", x, 0)
-    respuesta_temario(f, x + 240, "if (r.borrada) return [{ json: { estado: 204, cuerpo: null } }];", "La sección")
-    f.unir("Acceso valido", "Borrar y renumerar"); f.unir("Borrar y renumerar", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
-    cierre(f, x + 480, ["Borrar y renumerar", "Armar respuesta"], "Borrar la seccion", "Borra la sección (sus clases se van con ella) y deja las demás numeradas `1..n` sin huecos, todo en una sola consulta.")
+SELECT EXISTS (SELECT 1 FROM borrada) AS borrada, (SELECT rutas FROM rutas) AS rutas_base;""", "={{ [$json.datos.seccion_id] }}", x, 0)
+    f.codigo("Preparar rutas de videos", "const r = $input.first().json;\nreturn [{ json: { rutas_base: r.borrada ? (r.rutas_base || []) : [] } }];", x + 240, 0)
+    f.subflujo("Borrar archivos de video", "escBorrarArchivosVideo01", x + 480, 0)
+    respuesta_temario(f, x + 720, "if (r.borrada) return [{ json: { estado: 204, cuerpo: null } }];", "La sección", "$('Borrar y renumerar').first().json")
+    f.unir("Acceso valido", "Borrar y renumerar"); f.unir("Borrar y renumerar", "Preparar rutas de videos"); f.unir("Preparar rutas de videos", "Borrar archivos de video")
+    f.unir("Borrar archivos de video", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 960, ["Borrar y renumerar", "Preparar rutas de videos", "Borrar archivos de video", "Armar respuesta"], "Borrar y limpiar", "Borra la sección (sus clases y videos se van con ella), deja las demás numeradas `1..n` sin huecos y borra de Storage los archivos de sus videos (subworkflow compartido).")
     f.general("Borrar seccion", "`POST /escuela/borrar-seccion` · instructor dueño o equipo de apoyo.\n\nEntrada: `{ seccion_id }`. Responde `204`.")
     f.guardar()
 
@@ -729,7 +739,9 @@ def borrar_clase():
     f = Flujo("escBorrarClase01", "Borrar clase", "POST /escuela/borrar-clase. Borra una clase y renumera las de su sección (instructor dueño o su equipo; no en revisión). No guarda ejecuciones.", "escuela")
     x = protegido(f, "POST", "escuela/borrar-clase", ROLES_TEMARIO, "body", {"clase_id": TEXTO_ID},
                   {"modo": "dueno_o_equipo", "editable": True, "tipo": "clase", "campo": "clase_id"})
-    f.sql("Borrar y renumerar", """WITH borrada AS (
+    f.sql("Borrar y renumerar", """WITH rutas AS (
+  SELECT coalesce(array_agg(ruta_base), '{}') AS rutas FROM escuela.videos_clase WHERE clase_id = $1::bigint
+), borrada AS (
   DELETE FROM escuela.clases WHERE id = $1::bigint RETURNING seccion_id
 ), renumeradas AS (
   UPDATE escuela.clases k SET posicion = n.nueva
@@ -737,10 +749,13 @@ def borrar_clase():
         WHERE seccion_id = (SELECT seccion_id FROM borrada) AND id <> $1::bigint) n
   WHERE k.id = n.id RETURNING k.id
 )
-SELECT EXISTS (SELECT 1 FROM borrada) AS borrada;""", "={{ [$json.datos.clase_id] }}", x, 0)
-    respuesta_temario(f, x + 240, "if (r.borrada) return [{ json: { estado: 204, cuerpo: null } }];", "La clase")
-    f.unir("Acceso valido", "Borrar y renumerar"); f.unir("Borrar y renumerar", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
-    cierre(f, x + 480, ["Borrar y renumerar", "Armar respuesta"], "Borrar la clase", "Borra la clase y deja las demás de su sección numeradas `1..n` sin huecos.")
+SELECT EXISTS (SELECT 1 FROM borrada) AS borrada, (SELECT rutas FROM rutas) AS rutas_base;""", "={{ [$json.datos.clase_id] }}", x, 0)
+    f.codigo("Preparar rutas de videos", "const r = $input.first().json;\nreturn [{ json: { rutas_base: r.borrada ? (r.rutas_base || []) : [] } }];", x + 240, 0)
+    f.subflujo("Borrar archivos de video", "escBorrarArchivosVideo01", x + 480, 0)
+    respuesta_temario(f, x + 720, "if (r.borrada) return [{ json: { estado: 204, cuerpo: null } }];", "La clase", "$('Borrar y renumerar').first().json")
+    f.unir("Acceso valido", "Borrar y renumerar"); f.unir("Borrar y renumerar", "Preparar rutas de videos"); f.unir("Preparar rutas de videos", "Borrar archivos de video")
+    f.unir("Borrar archivos de video", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 960, ["Borrar y renumerar", "Preparar rutas de videos", "Borrar archivos de video", "Armar respuesta"], "Borrar y limpiar", "Borra la clase (y su video), deja las demás de su sección numeradas `1..n` sin huecos y borra de Storage los archivos del video (subworkflow compartido).")
     f.general("Borrar clase", "`POST /escuela/borrar-clase` · instructor dueño o equipo de apoyo.\n\nEntrada: `{ clase_id }`. Responde `204`.")
     f.guardar()
 
@@ -778,7 +793,7 @@ SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM s_act UNION ALL SELECT 1 FROM c_act) 
 JS_MENSAJES_FALTA = """const MENSAJES = {
   falta_subtitulo: 'Falta el subtítulo.', falta_descripcion: 'Falta la descripción.', falta_nivel: 'Falta elegir el nivel.',
   falta_categoria: 'Falta elegir la categoría.', falta_portada: 'Falta la portada.', falta_secciones: 'El curso necesita al menos una sección.',
-  seccion_vacia: 'Hay secciones sin ninguna clase.' };"""
+  seccion_vacia: 'Hay secciones sin ninguna clase.', falta_video: 'Hay clases sin video listo.' };"""
 JSON_CURSO_COMPLETO = """json_build_object(
   'id', c.id, 'slug', c.slug, 'titulo', c.titulo, 'subtitulo', c.subtitulo, 'descripcion', c.descripcion,
   'conocimientos_previos', c.conocimientos_previos, 'lo_que_aprenderas', c.lo_que_aprenderas, 'nivel', c.nivel,
@@ -806,7 +821,9 @@ faltas AS (
     CASE WHEN c.portada_ruta IS NULL THEN 'falta_portada' END,
     CASE WHEN NOT EXISTS (SELECT 1 FROM escuela.secciones s WHERE s.curso_id = c.id) THEN 'falta_secciones' END,
     CASE WHEN EXISTS (SELECT 1 FROM escuela.secciones s WHERE s.curso_id = c.id
-                      AND NOT EXISTS (SELECT 1 FROM escuela.clases k WHERE k.seccion_id = s.id)) THEN 'seccion_vacia' END
+                      AND NOT EXISTS (SELECT 1 FROM escuela.clases k WHERE k.seccion_id = s.id)) THEN 'seccion_vacia' END,
+    CASE WHEN EXISTS (SELECT 1 FROM escuela.clases k JOIN escuela.secciones s ON s.id = k.seccion_id WHERE s.curso_id = c.id
+                      AND NOT EXISTS (SELECT 1 FROM escuela.videos_clase v WHERE v.clase_id = k.id AND v.vigente AND v.estado = 'listo')) THEN 'falta_video' END
   ], NULL) AS lista FROM c
 ), enviado AS (
   UPDATE escuela.cursos SET estado = 'en_revision', comentario_revision = NULL, actualizado_en = now()
@@ -824,7 +841,7 @@ if (Array.isArray(r.faltas) && r.faltas.length) {{
 return [{{ json: {{ estado: 500, cuerpo: {ERROR_INTERNO_JS} }} }}];""", x + 240, 0)
     f.unir("Acceso valido", "Comprobar y enviar"); f.unir("Comprobar y enviar", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
     cierre(f, x + 480, ["Comprobar y enviar", "Armar respuesta"], "Comprobar y enviar", "En una sola consulta revisa que el curso esté completo y, si lo está, lo pasa a `en_revision`. Si falta algo: `422 CURSO_INCOMPLETO` con cada falta en `detalles`.")
-    f.general("Enviar a revision", "`POST /escuela/enviar-revision` · solo el `instructor` dueño.\n\nEntrada: `{ curso_id }`. Exige título, subtítulo, descripción, nivel, categoría, portada, al menos una sección y ninguna sección vacía. Responde `200 { estado: 'en_revision' }`; un curso que no está en borrador da `409`.")
+    f.general("Enviar a revision", "`POST /escuela/enviar-revision` · solo el `instructor` dueño.\n\nEntrada: `{ curso_id }`. Exige título, subtítulo, descripción, nivel, categoría, portada, al menos una sección, ninguna sección vacía y un video `listo` en cada clase. Responde `200 { estado: 'en_revision' }`; un curso que no está en borrador da `409`.")
     f.guardar()
 
 
@@ -1236,57 +1253,190 @@ return [{{ json: {{ estado: 409, cuerpo: {{ error: {{ codigo: 'VIDEO_EN_PROCESO'
     f.guardar()
 
 
-def confirmar_subida_video():
-    f = Flujo("escConfirmarSubidaVideo01", "Confirmar subida de video", "POST /escuela/confirmar-subida-video. Comprueba en Storage que el video se subió y coincide con lo declarado y le pide el trabajo al transcodificador (instructor dueño o su equipo; no en revisión). No guarda ejecuciones.", "escuela")
-    x = protegido(f, "POST", "escuela/confirmar-subida-video", ROLES_TEMARIO, "body", {"video_id": TEXTO_ID},
-                  {"modo": "dueno_o_equipo", "editable": True, "tipo": "video", "campo": "video_id"})
+def encolar_video():
+    f = Flujo("escEncolarVideo01", "Encolar video",
+              "Subworkflow. Recibe { video_id, estado_requerido } (esperando_archivo al confirmar una subida, error al reintentar), comprueba en Storage que el original exista y coincida con lo declarado, "
+              "pasa el video a en_cola y le pide el trabajo al transcodificador. Devuelve { ok, estado, cuerpo } listo para responder (202 o el error). Lo usan Confirmar subida de video y Reintentar video.", "escuela")
+    f.nodo("Disparador", "n8n-nodes-base.executeWorkflowTrigger", 1.1, {"inputSource": "passthrough"}, 0, 0)
     f.sql("Consultar video", """SELECT v.id, v.estado, v.tipo_contenido, v.tamano_bytes, v.ruta_base, encode(k.clave, 'hex') AS clave_hex
-FROM escuela.videos_clase v JOIN escuela.claves_video k ON k.video_id = v.id WHERE v.id = $1::bigint;""", "={{ [$json.datos.video_id] }}", x, 0)
+FROM escuela.videos_clase v JOIN escuela.claves_video k ON k.video_id = v.id WHERE v.id = $1::bigint;""", "={{ [$json.video_id] }}", 240, 0)
     f.codigo("Revisar estado", f"""const v = $input.first().json;
+const requerido = $('Disparador').first().json.estado_requerido;
 const EXT = {json.dumps(VIDEO_MIME)};
 const error = (estado, codigo, mensaje) => [{{ json: {{ ok: false, estado, cuerpo: {{ error: {{ codigo, mensaje }} }} }} }}];
 if (!v.id) return error(404, 'NO_ENCONTRADO', 'El video no existe.');
-if (v.estado !== 'esperando_archivo') return error(409, 'ESTADO_INVALIDO', 'Este video ya se confirmó.');
-return [{{ json: {{ ok: true, video_id: Number(v.id), tipo_contenido: v.tipo_contenido, tamano_bytes: Number(v.tamano_bytes), ruta_base: v.ruta_base, ruta_original: `${{v.ruta_base}}/original.${{EXT[v.tipo_contenido]}}`, clave_hex: v.clave_hex }} }}];""", x + 240, 0)
-    f.si("Video por confirmar", "={{ $json.ok }}", x + 480, 0)
-    f.http("Consultar archivo en Storage", "GET", f"={STORAGE}/object/info/videos/{{{{ $json.ruta_original }}}}", {}, x + 720, 0, servicio=True)
+if (v.estado !== requerido) return error(409, 'ESTADO_INVALIDO', requerido === 'error' ? 'Solo se puede reintentar un video con error.' : 'Este video ya se confirmó.');
+return [{{ json: {{ ok: true, video_id: Number(v.id), requerido, tipo_contenido: v.tipo_contenido, tamano_bytes: Number(v.tamano_bytes), ruta_base: v.ruta_base, ruta_original: `${{v.ruta_base}}/original.${{EXT[v.tipo_contenido]}}`, clave_hex: v.clave_hex }} }}];""", 480, 0)
+    f.si("Video por encolar", "={{ $json.ok }}", 720, 0)
+    f.http("Consultar archivo en Storage", "GET", f"={STORAGE}/object/info/videos/{{{{ $json.ruta_original }}}}", {}, 960, 0, servicio=True)
     f.codigo("Clasificar archivo", f"""const r = $input.first().json;
 const v = $('Revisar estado').first().json;
 const b = r.body || {{}};
 const tamano = Number(b.size || (b.metadata || {{}}).size || 0);
 const tipo = b.content_type || (b.metadata || {{}}).mimetype || '';
 const error = (mensaje) => [{{ json: {{ ok: false, estado: 422, cuerpo: {{ error: {{ codigo: 'VIDEO_INVALIDO', mensaje }} }} }} }}];
-if (r.statusCode !== 200) return error('El video todavía no se subió.');
+if (r.statusCode !== 200) return error(v.requerido === 'error' ? 'El archivo original ya no está: sube el video otra vez.' : 'El video todavía no se subió.');
 if (tamano !== v.tamano_bytes || tipo !== v.tipo_contenido) return error('El archivo subido no coincide con lo declarado.');
-return [{{ json: {{ ok: true }} }}];""", x + 960, 0)
-    f.si("Archivo valido", "={{ $json.ok }}", x + 1200, 0)
-    f.sql("Pasar a en cola", "UPDATE escuela.videos_clase SET estado = 'en_cola', actualizado_en = now() WHERE id = $1::bigint AND estado = 'esperando_archivo' RETURNING id;",
-          "={{ [$('Revisar estado').first().json.video_id] }}", x + 1440, 0)
-    f.http("Pedir trabajo al transcodificador", "POST", "http://transcodificador:8090/trabajos", {}, x + 1680, 0, transcodificador=True,
+return [{{ json: {{ ok: true }} }}];""", 1200, 0)
+    f.si("Archivo valido", "={{ $json.ok }}", 1440, 0)
+    f.sql("Pasar a en cola", "UPDATE escuela.videos_clase SET estado = 'en_cola', error = NULL, actualizado_en = now() WHERE id = $1::bigint AND estado = $2::text RETURNING id;",
+          "={{ [$('Revisar estado').first().json.video_id, $('Revisar estado').first().json.requerido] }}", 1680, 0)
+    f.http("Pedir trabajo al transcodificador", "POST", "http://transcodificador:8090/trabajos", {}, 1920, 0, transcodificador=True, tiempo=10000,
            cuerpo="={{ JSON.stringify({ video_id: $('Revisar estado').first().json.video_id, ruta_original: $('Revisar estado').first().json.ruta_original, ruta_base: $('Revisar estado').first().json.ruta_base, clave_hex: $('Revisar estado').first().json.clave_hex }) }}")
-    f.si("Trabajo aceptado", "={{ $json.statusCode === 202 }}", x + 1920, 0)
-    f.codigo("Armar respuesta", "return [{ json: { estado: 202, cuerpo: { estado: 'en_cola' } } }];", x + 2160, 0)
+    f.si("Trabajo aceptado", "={{ $json.statusCode === 202 }}", 2160, 0)
+    f.codigo("Armar respuesta", "return [{ json: { ok: true, estado: 202, cuerpo: { estado: 'en_cola' } } }];", 2400, 0)
     f.sql("Marcar error de servicio", "UPDATE escuela.videos_clase SET estado = 'error', error = 'El servicio de video no responde. Inténtalo de nuevo.', actualizado_en = now() WHERE id = $1::bigint RETURNING id;",
-          "={{ [$('Revisar estado').first().json.video_id] }}", x + 2160, 500)
-    f.codigo("Armar error de servicio", f"return [{{ json: {{ estado: 503, cuerpo: {{ error: {{ codigo: 'SERVICIO_NO_DISPONIBLE', mensaje: 'El servicio de video no responde. Inténtalo de nuevo en unos minutos.' }} }} }} }}];", x + 2400, 500)
-    f.unir("Acceso valido", "Consultar video"); f.unir("Consultar video", "Revisar estado"); f.unir("Revisar estado", "Video por confirmar")
-    f.unir("Video por confirmar", "Consultar archivo en Storage", 0); f.unir("Video por confirmar", "Responder", 1)
+          "={{ [$('Revisar estado').first().json.video_id] }}", 2400, 500)
+    f.codigo("Armar error de servicio", "return [{ json: { ok: false, estado: 503, cuerpo: { error: { codigo: 'SERVICIO_NO_DISPONIBLE', mensaje: 'El servicio de video no responde. Inténtalo de nuevo en unos minutos.' } } } }];", 2640, 500)
+    f.nodo("Devolver error", "n8n-nodes-base.noOp", 1, {}, 960, 500)
+    f.unir("Disparador", "Consultar video"); f.unir("Consultar video", "Revisar estado"); f.unir("Revisar estado", "Video por encolar")
+    f.unir("Video por encolar", "Consultar archivo en Storage", 0); f.unir("Video por encolar", "Devolver error", 1)
     f.unir("Consultar archivo en Storage", "Clasificar archivo"); f.unir("Clasificar archivo", "Archivo valido")
-    f.unir("Archivo valido", "Pasar a en cola", 0); f.unir("Archivo valido", "Responder", 1)
+    f.unir("Archivo valido", "Pasar a en cola", 0); f.unir("Archivo valido", "Devolver error", 1)
     f.unir("Pasar a en cola", "Pedir trabajo al transcodificador"); f.unir("Pedir trabajo al transcodificador", "Trabajo aceptado")
     f.unir("Trabajo aceptado", "Armar respuesta", 0); f.unir("Trabajo aceptado", "Marcar error de servicio", 1)
-    f.unir("Armar respuesta", "Responder"); f.unir("Marcar error de servicio", "Armar error de servicio"); f.unir("Armar error de servicio", "Responder")
-    f.seccion("Leer el video", "Solo se confirma un video en `esperando_archivo` (si no, `409`). Lee su clave en n8n; la clave no sale de ahí.", NOTA_DATOS,
-              ["Consultar video", "Revisar estado", "Video por confirmar"], True, "Lee el video y comprueba que esté esperando su archivo.")
-    f.seccion("Comprobar en Storage", "Pregunta a Storage por el archivo (`/object/info`): debe existir y coincidir con el tipo y el tamaño declarados; si no, `422 VIDEO_INVALIDO`.", NOTA_PERMISOS,
-              ["Consultar archivo en Storage", "Clasificar archivo", "Archivo valido"], True, "Comprueba que el archivo se subió y coincide con lo declarado.")
-    f.seccion("Encolar el trabajo", "Pasa el video a `en_cola` y le pide el trabajo al transcodificador (credencial `Secreto transcodificador`). Acepta con `202`.", NOTA_ENTRADA,
+    f.unir("Marcar error de servicio", "Armar error de servicio")
+    f.seccion("Entrada", "Recibe `video_id` y `estado_requerido`.", NOTA_ENTRADA, ["Disparador"])
+    f.seccion("Leer el video", "Solo se encola un video que esté en el estado requerido (`esperando_archivo` o `error`); si no, `409`. Lee su clave en n8n; no sale de ahí.", NOTA_DATOS,
+              ["Consultar video", "Revisar estado", "Video por encolar"], True, "Lee el video y comprueba su estado.")
+    f.seccion("Comprobar en Storage", "El original debe existir y coincidir con el tipo y el tamaño declarados; si no, `422 VIDEO_INVALIDO`.", NOTA_PERMISOS,
+              ["Consultar archivo en Storage", "Clasificar archivo", "Archivo valido"], True, "Comprueba el original en Storage.")
+    f.seccion("Encolar el trabajo", "Pasa el video a `en_cola` y pide el trabajo al transcodificador (credencial `Secreto transcodificador`, máximo 10 s de espera).", NOTA_ENTRADA,
               ["Pasar a en cola", "Pedir trabajo al transcodificador", "Trabajo aceptado"], True, "Pasa el video a en cola y pide el trabajo.")
-    f.responder(x + 2640, 0)
-    f.seccion("Respuesta", "`202 { estado: 'en_cola' }`, o el error de cualquier paso.", NOTA_RESPUESTA, ["Armar respuesta", "Responder"])
-    f.seccion("Servicio no disponible", "Si el transcodificador no responde, el video pasa a `error` (se puede reintentar) y se responde `503 SERVICIO_NO_DISPONIBLE`.", NOTA_ERROR,
+    f.seccion("Respuesta", "`202 { estado: 'en_cola' }`.", NOTA_RESPUESTA, ["Armar respuesta"])
+    f.seccion("Servicio no disponible", "Si el transcodificador no responde (o tarda más de 10 s), el video pasa a `error` (se puede reintentar) y se devuelve `503`.", NOTA_ERROR,
               ["Marcar error de servicio", "Armar error de servicio"], True, "Marca el video en error cuando el transcodificador no responde.")
+    f.seccion("Salida con error", "Un video que no está en el estado requerido o cuyo original no coincide sale tal cual.", NOTA_ERROR, ["Devolver error"])
+    f.general("Encolar video", "Subworkflow compartido: **confirmar y reintentar no repiten el encolado**.\n\nEntrada: `{ video_id, estado_requerido }`. Salida: `{ ok, estado, cuerpo }` listo para el nodo *Responder* del workflow que lo llama.")
+    f.guardar()
+
+
+def confirmar_subida_video():
+    f = Flujo("escConfirmarSubidaVideo01", "Confirmar subida de video", "POST /escuela/confirmar-subida-video. Comprueba en Storage que el video se subió y coincide con lo declarado y le pide el trabajo al transcodificador (instructor dueño o su equipo; no en revisión). No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/confirmar-subida-video", ROLES_TEMARIO, "body", {"video_id": TEXTO_ID},
+                  {"modo": "dueno_o_equipo", "editable": True, "tipo": "video", "campo": "video_id"})
+    f.codigo("Preparar encolado", "return [{ json: { video_id: $input.first().json.datos.video_id, estado_requerido: 'esperando_archivo' } }];", x, 0)
+    f.subflujo("Encolar video", "escEncolarVideo01", x + 240, 0)
+    f.responder(x + 480, 0)
+    f.unir("Acceso valido", "Preparar encolado"); f.unir("Preparar encolado", "Encolar video"); f.unir("Encolar video", "Responder")
+    f.seccion("Encolar", "Subworkflow `Encolar video` con `estado_requerido: esperando_archivo`: comprueba el archivo en Storage y pide el trabajo. Responde `202`, `409`, `422` o `503`.", NOTA_DATOS,
+              ["Preparar encolado", "Encolar video"], True, "Comprueba el archivo y pide el trabajo con el subworkflow compartido.")
+    f.seccion("Respuesta", "Devuelve tal cual lo que responde el subworkflow, o el error de permisos o de datos.", NOTA_RESPUESTA, ["Responder"])
     f.general("Confirmar subida de video", "`POST /escuela/confirmar-subida-video` · instructor dueño o equipo de apoyo.\n\nEntrada: `{ video_id }`. Responde `202 { estado: 'en_cola' }`. El resultado llega después, por el webhook interno *Video procesado*, y se consulta con *Estado del video*.")
+    f.guardar()
+
+
+def reintentar_video():
+    f = Flujo("escReintentarVideo01", "Reintentar video", "POST /escuela/reintentar-video. Vuelve a encolar un video que terminó en error, si su original se conservó (instructor dueño o su equipo; no en revisión). No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/reintentar-video", ROLES_TEMARIO, "body", {"video_id": TEXTO_ID},
+                  {"modo": "dueno_o_equipo", "editable": True, "tipo": "video", "campo": "video_id"})
+    f.codigo("Preparar encolado", "return [{ json: { video_id: $input.first().json.datos.video_id, estado_requerido: 'error' } }];", x, 0)
+    f.subflujo("Encolar video", "escEncolarVideo01", x + 240, 0)
+    f.responder(x + 480, 0)
+    f.unir("Acceso valido", "Preparar encolado"); f.unir("Preparar encolado", "Encolar video"); f.unir("Encolar video", "Responder")
+    f.seccion("Encolar", "Subworkflow `Encolar video` con `estado_requerido: error`. Si el original ya no está en Storage: `422 VIDEO_INVALIDO` (hay que subirlo otra vez).", NOTA_DATOS,
+              ["Preparar encolado", "Encolar video"], True, "Vuelve a encolar con el subworkflow compartido.")
+    f.seccion("Respuesta", "Devuelve tal cual lo que responde el subworkflow, o el error de permisos o de datos.", NOTA_RESPUESTA, ["Responder"])
+    f.general("Reintentar video", "`POST /escuela/reintentar-video` · instructor dueño o equipo de apoyo.\n\nEntrada: `{ video_id }`. Responde `202 { estado: 'en_cola' }`. Solo para un video en `error`.")
+    f.guardar()
+
+
+def borrar_video():
+    f = Flujo("escBorrarVideo01", "Borrar video", "POST /escuela/borrar-video. Borra el video vigente de una clase y cualquiera en proceso o con error, con sus archivos de Storage (instructor dueño o su equipo; no en revisión). No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/borrar-video", ROLES_TEMARIO, "body", {"clase_id": TEXTO_ID},
+                  {"modo": "dueno_o_equipo", "editable": True, "tipo": "clase", "campo": "clase_id"})
+    f.sql("Borrar videos de la clase", "WITH borrados AS (DELETE FROM escuela.videos_clase WHERE clase_id = $1::bigint RETURNING ruta_base) SELECT coalesce(array_agg(ruta_base), '{}') AS rutas_base, count(*)::int AS cantidad FROM borrados;",
+          "={{ [$json.datos.clase_id] }}", x, 0)
+    f.codigo("Preparar rutas de videos", "const r = $input.first().json;\nreturn [{ json: { rutas_base: r.rutas_base || [] } }];", x + 240, 0)
+    f.subflujo("Borrar archivos de video", "escBorrarArchivosVideo01", x + 480, 0)
+    respuesta_temario(f, x + 720, "if (r.cantidad > 0) return [{ json: { estado: 204, cuerpo: null } }];", "El video", "$('Borrar videos de la clase').first().json")
+    f.unir("Acceso valido", "Borrar videos de la clase"); f.unir("Borrar videos de la clase", "Preparar rutas de videos"); f.unir("Preparar rutas de videos", "Borrar archivos de video")
+    f.unir("Borrar archivos de video", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 960, ["Borrar videos de la clase", "Preparar rutas de videos", "Borrar archivos de video", "Armar respuesta"], "Borrar y limpiar", "Borra de la base el video vigente y los que estén en proceso o con error (con sus claves) y luego sus archivos de Storage. Una clase sin video da `404`.")
+    f.general("Borrar video", "`POST /escuela/borrar-video` · instructor dueño o equipo de apoyo.\n\nEntrada: `{ clase_id }`. Responde `204`. Si un trabajo de ese video sigue en el transcodificador, su aviso se ignora (el video ya no existe).")
+    f.guardar()
+
+
+def borrar_archivos_video():
+    f = Flujo("escBorrarArchivosVideo01", "Borrar archivos de video",
+              "Subworkflow. Recibe { rutas_base: [..] } (carpetas de videos del bucket privado videos), lista todo lo que cuelga de cada una (el original y la carpeta hls) "
+              "y lo borra de Supabase Storage con la credencial de rol de servicio. Lo usan Video procesado, Borrar video y las limpiezas de clases y secciones.", "escuela")
+    f.nodo("Disparador", "n8n-nodes-base.executeWorkflowTrigger", 1.1, {"inputSource": "passthrough"}, 0, 0)
+    f.codigo("Preparar carpetas", "const bases = $input.first().json.rutas_base || [];\nreturn bases.flatMap((b) => [{ json: { prefijo: b } }, { json: { prefijo: `${b}/hls` } }]);", 240, 0)
+    f.http("Listar archivos", "POST", f"={STORAGE}/object/list/videos", {}, 480, 0, servicio=True, cuerpo="={{ JSON.stringify({ prefix: $json.prefijo, limit: 1000 }) }}")
+    f.codigo("Juntar archivos", """const carpetas = $('Preparar carpetas').all();
+const rutas = [];
+$input.all().forEach((r, i) => {
+  const lista = Array.isArray(r.json.body) ? r.json.body : [];
+  lista.filter((e) => e.id).forEach((e) => rutas.push(`${carpetas[i].json.prefijo}/${e.name}`));
+});
+return [{ json: { rutas } }];""", 720, 0)
+    f.si("Hay archivos", "={{ $json.rutas.length > 0 }}", 960, 0)
+    f.http("Borrar archivos en Storage", "DELETE", f"={STORAGE}/object/videos", {}, 1200, -100, servicio=True, cuerpo="={{ JSON.stringify({ prefixes: $json.rutas }) }}")
+    f.unir("Disparador", "Preparar carpetas"); f.unir("Preparar carpetas", "Listar archivos"); f.unir("Listar archivos", "Juntar archivos")
+    f.unir("Juntar archivos", "Hay archivos"); f.unir("Hay archivos", "Borrar archivos en Storage", 0)
+    f.seccion("Entrada", "Recibe `rutas_base`: las carpetas `cursos/<c>/secciones/<s>/clases/<k>/<video>` que hay que vaciar.", NOTA_ENTRADA, ["Disparador"])
+    f.seccion("Listar", "Por cada carpeta lista el original y la subcarpeta `hls` (Storage no borra por prefijo).", NOTA_DATOS, ["Preparar carpetas", "Listar archivos", "Juntar archivos"], True, "Lista los archivos de cada carpeta de video.")
+    f.seccion("Borrar", "Borra todos los archivos de golpe. Si no hay ninguno, termina sin hacer nada.", NOTA_ERROR, ["Hay archivos", "Borrar archivos en Storage"], True, "Borra los archivos listados de Storage.")
+    f.general("Borrar archivos de video", "Subworkflow compartido: **nadie repite la limpieza de Storage**.\n\nEntrada: `{ rutas_base: [...] }`. Con la credencial **Supabase rol de servicio**. El borrado es de mejor esfuerzo: la fila de la base ya no existe cuando se llama.")
+    f.guardar()
+
+
+def video_procesado():
+    f = Flujo("escVideoProcesado01", "Video procesado", "POST /webhook/escuela/interno/video-procesado. Webhook interno: el transcodificador avisa del resultado de un video. Si quedó listo, lo hace el vigente de su clase y borra el anterior con sus archivos; si falló, lo deja en error con el mensaje. No está en Caddy. No guarda ejecuciones.", "escuela")
+    x = protegido(f, "POST", "escuela/interno/video-procesado", None, "body", {
+        "video_id": TEXTO_ID, "resultado": {"tipo": "opcion", "valores": ["listo", "error"]},
+        "duracion_segundos": {"tipo": "entero", "opcional": True, "minimo": 1, "maximo": 86400}, "mensaje": {"tipo": "texto", "opcional": True, "maximo": 500, "multilinea": True}},
+        None, CRED_TRANSCODIFICADOR)
+    f.sql("Registrar resultado", """UPDATE escuela.videos_clase SET
+  estado = CASE WHEN $2::text = 'listo' THEN 'listo' ELSE 'error' END,
+  duracion_segundos = CASE WHEN $2::text = 'listo' THEN $3::int END,
+  listo_en = CASE WHEN $2::text = 'listo' THEN now() END,
+  error = CASE WHEN $2::text = 'listo' THEN NULL ELSE coalesce($4::text, 'El video no se pudo procesar.') END,
+  actualizado_en = now()
+WHERE id = $1::bigint AND estado IN ('en_cola', 'procesando') RETURNING id, clase_id;""",
+          "={{ [$json.datos.video_id, $json.datos.resultado, $json.datos.duracion_segundos, $json.datos.mensaje] }}", x, 0)
+    f.codigo("Clasificar resultado", """const r = $input.first().json;
+const d = $('Entrada valida').first().json.datos;
+return [{ json: { aplicado: !!r.id, listo: !!r.id && d.resultado === 'listo', video_id: d.video_id, clase_id: r.clase_id ? Number(r.clase_id) : null } }];""", x + 240, 0)
+    f.si("Es video listo", "={{ $json.listo }}", x + 480, 0)
+    f.sql("Retirar anterior", "DELETE FROM escuela.videos_clase WHERE clase_id = $1::bigint AND vigente AND id <> $2::bigint RETURNING ruta_base;",
+          "={{ [$json.clase_id, $json.video_id] }}", x + 720, -100)
+    f.sql("Hacer vigente", "UPDATE escuela.videos_clase SET vigente = true WHERE id = $1::bigint RETURNING id;",
+          "={{ [$('Clasificar resultado').first().json.video_id] }}", x + 960, -100)
+    f.codigo("Preparar rutas anteriores", "return [{ json: { rutas_base: $('Retirar anterior').all().map((i) => i.json.ruta_base).filter(Boolean) } }];", x + 1200, -100)
+    f.subflujo("Borrar archivos de video", "escBorrarArchivosVideo01", x + 1440, -100)
+    f.codigo("Armar respuesta", "return [{ json: { estado: 200, cuerpo: { aplicado: $('Clasificar resultado').first().json.aplicado } } }];", x + 1680, 0)
+    f.unir("Entrada valida", "Registrar resultado"); f.unir("Registrar resultado", "Clasificar resultado"); f.unir("Clasificar resultado", "Es video listo")
+    f.unir("Es video listo", "Retirar anterior", 0); f.unir("Es video listo", "Armar respuesta", 1)
+    f.unir("Retirar anterior", "Hacer vigente"); f.unir("Hacer vigente", "Preparar rutas anteriores"); f.unir("Preparar rutas anteriores", "Borrar archivos de video")
+    f.unir("Borrar archivos de video", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    f.seccion("Anotar el resultado", "Solo cambia un video que sigue `en_cola` o `procesando`: un aviso repetido o de un video ya borrado se ignora (`aplicado: false`). `listo` guarda la duración; `error` guarda el mensaje y conserva el original.", NOTA_DATOS,
+              ["Registrar resultado", "Clasificar resultado", "Es video listo"], True, "Anota listo o error en el video.")
+    f.seccion("Reemplazar el anterior", "El video nuevo pasa a ser el único vigente de su clase: se borra la fila del anterior, se marca vigente el nuevo y después se borran del bucket los archivos del anterior (subworkflow compartido).", NOTA_PERMISOS,
+              ["Retirar anterior", "Hacer vigente", "Preparar rutas anteriores", "Borrar archivos de video"], True, "Pone el video nuevo como vigente y borra el anterior.")
+    f.responder(x + 1920, 0)
+    f.seccion("Respuesta", "`200 { aplicado }` para el transcodificador.", NOTA_RESPUESTA, ["Armar respuesta", "Responder"])
+    f.general("Video procesado", "`POST /webhook/escuela/interno/video-procesado` · **interno**: solo el transcodificador, con la credencial *Secreto transcodificador*. No está en Caddy.\n\nEntrada: `{ video_id, resultado: 'listo' | 'error', duracion_segundos?, mensaje? }`.")
+    f.guardar()
+
+
+def estado_video():
+    f = Flujo("escEstadoVideo01", "Estado del video", "GET /escuela/estado-video?clase_id=. Devuelve el video vigente de una clase y, si lo hay, el que se está subiendo, procesando o terminó en error (instructor dueño o su equipo). Un video en cola o procesando sin cambios en 45 minutos pasa a error. No guarda ejecuciones.", "escuela")
+    x = protegido(f, "GET", "escuela/estado-video", ROLES_TEMARIO, "query", {"clase_id": TEXTO_ID},
+                  {"modo": "dueno_o_equipo", "editable": False, "tipo": "clase", "campo": "clase_id"})
+    f.sql("Cerrar vencidos", "UPDATE escuela.videos_clase SET estado = 'error', error = 'El procesamiento tardó demasiado.', actualizado_en = now() WHERE clase_id = $1::bigint AND estado IN ('en_cola', 'procesando') AND actualizado_en < now() - interval '45 minutes' RETURNING id;",
+          "={{ [$json.datos.clase_id] }}", x, 0)
+    f.sql("Consultar estado", """SELECT
+  (SELECT json_build_object('id', v.id, 'estado', v.estado, 'duracion_segundos', v.duracion_segundos, 'listo_en', v.listo_en)
+   FROM escuela.videos_clase v WHERE v.clase_id = $1::bigint AND v.vigente) AS vigente,
+  (SELECT json_build_object('id', v.id, 'estado', v.estado, 'error', v.error)
+   FROM escuela.videos_clase v WHERE v.clase_id = $1::bigint AND NOT v.vigente ORDER BY v.id DESC LIMIT 1) AS nuevo;""",
+          "={{ [$('Entrada valida').first().json.datos.clase_id] }}", x + 240, 0)
+    f.codigo("Armar respuesta", "const r = $input.first().json;\nreturn [{ json: { estado: 200, cuerpo: { vigente: r.vigente, nuevo: r.nuevo } } }];", x + 480, 0)
+    f.unir("Acceso valido", "Cerrar vencidos"); f.unir("Cerrar vencidos", "Consultar estado"); f.unir("Consultar estado", "Armar respuesta"); f.unir("Armar respuesta", "Responder")
+    cierre(f, x + 720, ["Cerrar vencidos", "Consultar estado", "Armar respuesta"], "Consultar el estado", "Primero cierra como `error` los videos en cola o procesando con más de 45 minutos sin cambios (\"El procesamiento tardó demasiado.\") y luego lee el vigente y el último no vigente de la clase.")
+    f.general("Estado del video", "`GET /escuela/estado-video?clase_id=` · instructor dueño o equipo de apoyo.\n\nResponde `{ vigente, nuevo }`: `vigente` es el video que se sirve; `nuevo`, el que se está subiendo o procesando (o falló, con su `error`). El front lo consulta cada 3 s mientras hay uno en cola.")
     f.guardar()
 
 
@@ -1326,4 +1476,10 @@ if __name__ == "__main__":
     mis_invitaciones()
     responder_invitacion()
     solicitar_subida_video()
+    encolar_video()
     confirmar_subida_video()
+    reintentar_video()
+    borrar_video()
+    borrar_archivos_video()
+    video_procesado()
+    estado_video()

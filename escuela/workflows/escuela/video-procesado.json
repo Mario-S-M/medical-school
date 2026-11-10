@@ -1,0 +1,585 @@
+{
+  "id": "escVideoProcesado01",
+  "name": "Video procesado",
+  "description": "POST /webhook/escuela/interno/video-procesado. Webhook interno: el transcodificador avisa del resultado de un video. Si quedó listo, lo hace el vigente de su clase y borra el anterior con sus archivos; si falló, lo deja en error con el mensaje. No está en Caddy. No guarda ejecuciones.",
+  "active": false,
+  "isArchived": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "executionTimeout": 15
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Entrada\nWebhook protegido por el secreto del transcodificador (interno, no está en Caddy).",
+        "height": 430,
+        "width": 240,
+        "color": 4
+      },
+      "id": "940cf177-563e-586f-8b00-d02644d36ecf",
+      "name": "Nota Entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -70,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Validar entrada\nSubworkflow `Validar campos`: tipos, largos y campos extra. Si falla, `422 VALIDACION_FALLIDA` con la lista de reglas.",
+        "height": 430,
+        "width": 780,
+        "color": 4
+      },
+      "id": "8b9eb4a8-2766-5dec-bd90-c7424fe3a8fc",
+      "name": "Nota Validar entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        260,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Anotar el resultado\nSolo cambia un video que sigue `en_cola` o `procesando`: un aviso repetido o de un video ya borrado se ignora (`aplicado: false`). `listo` guarda la duración; `error` guarda el mensaje y conserva el original.",
+        "height": 430,
+        "width": 780,
+        "color": 6
+      },
+      "id": "148f5c4d-66e5-5a3e-b75f-ef8373c481c5",
+      "name": "Nota Anotar el resultado",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Reemplazar el anterior\nEl video nuevo pasa a ser el único vigente de su clase: se borra la fila del anterior, se marca vigente el nuevo y después se borran del bucket los archivos del anterior (subworkflow compartido).",
+        "height": 430,
+        "width": 1080,
+        "color": 1
+      },
+      "id": "a7fd9b70-a0be-5887-a746-1f48757ab66d",
+      "name": "Nota Reemplazar el anterior",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2060,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Respuesta\n`200 { aplicado }` para el transcodificador.",
+        "height": 430,
+        "width": 480,
+        "color": 5
+      },
+      "id": "1801ceb2-43ff-5420-937d-1caefbf93ef2",
+      "name": "Nota Respuesta",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3260,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Video procesado\n`POST /webhook/escuela/interno/video-procesado` · **interno**: solo el transcodificador, con la credencial *Secreto transcodificador*. No está en Caddy.\n\nEntrada: `{ video_id, resultado: 'listo' | 'error', duracion_segundos?, mensaje? }`.",
+        "height": 150,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "f441b9f4-f793-5a03-b964-a6288cdfdb5f",
+      "name": "Nota Video procesado",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -550
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "escuela/interno/video-procesado",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "3a408642-4c13-53bd-aa75-05a55287793c",
+      "name": "Recibir solicitud",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "secretoTranscodificador01",
+          "name": "Secreto transcodificador"
+        }
+      },
+      "webhookId": "628ed2ed-d467-5c89-b6df-fa7fb02b2ce6"
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $input.first().json;\nreturn [{ json: { datos: e.body, reglas: {\"video_id\": {\"tipo\": \"entero\", \"minimo\": 1, \"maximo\": 9007199254740}, \"resultado\": {\"tipo\": \"opcion\", \"valores\": [\"listo\", \"error\"]}, \"duracion_segundos\": {\"tipo\": \"entero\", \"opcional\": true, \"minimo\": 1, \"maximo\": 86400}, \"mensaje\": {\"tipo\": \"texto\", \"opcional\": true, \"maximo\": 500, \"multilinea\": true}} } }];"
+      },
+      "id": "7fd6235f-3e39-506c-ba51-477cc84d2740",
+      "name": "Definir reglas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escValidarCampos01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "8da9cf79-5429-536d-b318-d5bd90e6d6d0",
+      "name": "Validar campos",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "009f6ada-d1e2-5c72-980f-14f160fd8180",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c496aa5c-5e77-5f51-a165-42c0c916b49c",
+      "name": "Entrada valida",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE escuela.videos_clase SET\n  estado = CASE WHEN $2::text = 'listo' THEN 'listo' ELSE 'error' END,\n  duracion_segundos = CASE WHEN $2::text = 'listo' THEN $3::int END,\n  listo_en = CASE WHEN $2::text = 'listo' THEN now() END,\n  error = CASE WHEN $2::text = 'listo' THEN NULL ELSE coalesce($4::text, 'El video no se pudo procesar.') END,\n  actualizado_en = now()\nWHERE id = $1::bigint AND estado IN ('en_cola', 'procesando') RETURNING id, clase_id;",
+        "options": {
+          "queryReplacement": "={{ [$json.datos.video_id, $json.datos.resultado, $json.datos.duracion_segundos, $json.datos.mensaje] }}"
+        }
+      },
+      "id": "99ca8743-85dd-5c72-afcb-d0487ff4f171",
+      "name": "Registrar resultado",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1200,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgSupabase01",
+          "name": "Postgres n8n (Supabase)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst d = $('Entrada valida').first().json.datos;\nreturn [{ json: { aplicado: !!r.id, listo: !!r.id && d.resultado === 'listo', video_id: d.video_id, clase_id: r.clase_id ? Number(r.clase_id) : null } }];"
+      },
+      "id": "4126b70d-9af4-567f-bfd1-3bf55d9713c1",
+      "name": "Clasificar resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7db4ef61-6c90-5beb-9951-071e1e6438c6",
+              "leftValue": "={{ $json.listo }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d9fe3356-6ed3-54ca-a678-aed1117de95e",
+      "name": "Es video listo",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1800,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM escuela.videos_clase WHERE clase_id = $1::bigint AND vigente AND id <> $2::bigint RETURNING ruta_base;",
+        "options": {
+          "queryReplacement": "={{ [$json.clase_id, $json.video_id] }}"
+        }
+      },
+      "id": "15c9d21b-9077-5396-902c-4bbf9829ce9f",
+      "name": "Retirar anterior",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2100,
+        -100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgSupabase01",
+          "name": "Postgres n8n (Supabase)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE escuela.videos_clase SET vigente = true WHERE id = $1::bigint RETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$('Clasificar resultado').first().json.video_id] }}"
+        }
+      },
+      "id": "7306283d-9ad4-56a5-8ab2-e382d5986c24",
+      "name": "Hacer vigente",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2400,
+        -100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgSupabase01",
+          "name": "Postgres n8n (Supabase)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { rutas_base: $('Retirar anterior').all().map((i) => i.json.ruta_base).filter(Boolean) } }];"
+      },
+      "id": "4b98336f-8631-571d-b4e5-e73dab70eae9",
+      "name": "Preparar rutas anteriores",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2700,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escBorrarArchivosVideo01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "f867293c-c630-5aec-a3b1-ff3266a1f3cd",
+      "name": "Borrar archivos de video",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3000,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { estado: 200, cuerpo: { aplicado: $('Clasificar resultado').first().json.aplicado } } }];"
+      },
+      "id": "0ebc908f-1128-5a2e-ac81-1c67721e734f",
+      "name": "Armar respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.cuerpo === null ? '' : JSON.stringify($json.cuerpo) }}",
+        "options": {
+          "responseCode": "={{ $json.estado }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "X-Flujo",
+                "value": "escuela"
+              }
+            ]
+          }
+        }
+      },
+      "id": "f602ef46-9135-550b-9304-5cdb8ac27100",
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        3600,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Recibir solicitud": {
+      "main": [
+        [
+          {
+            "node": "Definir reglas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Definir reglas": {
+      "main": [
+        [
+          {
+            "node": "Validar campos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar campos": {
+      "main": [
+        [
+          {
+            "node": "Entrada valida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrada valida": {
+      "main": [
+        [
+          {
+            "node": "Registrar resultado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar resultado": {
+      "main": [
+        [
+          {
+            "node": "Clasificar resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clasificar resultado": {
+      "main": [
+        [
+          {
+            "node": "Es video listo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Es video listo": {
+      "main": [
+        [
+          {
+            "node": "Retirar anterior",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Armar respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retirar anterior": {
+      "main": [
+        [
+          {
+            "node": "Hacer vigente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hacer vigente": {
+      "main": [
+        [
+          {
+            "node": "Preparar rutas anteriores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar rutas anteriores": {
+      "main": [
+        [
+          {
+            "node": "Borrar archivos de video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Borrar archivos de video": {
+      "main": [
+        [
+          {
+            "node": "Armar respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar respuesta": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [
+    {
+      "id": "78a34872-2f83-515d-aae7-375730734856",
+      "name": "Validar entrada",
+      "nodeIds": [
+        "7fd6235f-3e39-506c-ba51-477cc84d2740",
+        "8da9cf79-5429-536d-b318-d5bd90e6d6d0",
+        "c496aa5c-5e77-5f51-a165-42c0c916b49c"
+      ],
+      "description": "Valida y normaliza los campos con el subworkflow compartido."
+    },
+    {
+      "id": "8134305c-f2e1-5730-a70a-17ac8514b807",
+      "name": "Anotar el resultado",
+      "nodeIds": [
+        "99ca8743-85dd-5c72-afcb-d0487ff4f171",
+        "4126b70d-9af4-567f-bfd1-3bf55d9713c1",
+        "d9fe3356-6ed3-54ca-a678-aed1117de95e"
+      ],
+      "description": "Anota listo o error en el video."
+    },
+    {
+      "id": "d95ca9c6-6061-5e82-b058-d1c56c6a0510",
+      "name": "Reemplazar el anterior",
+      "nodeIds": [
+        "15c9d21b-9077-5396-902c-4bbf9829ce9f",
+        "7306283d-9ad4-56a5-8ab2-e382d5986c24",
+        "4b98336f-8631-571d-b4e5-e73dab70eae9",
+        "f867293c-c630-5aec-a3b1-ff3266a1f3cd"
+      ],
+      "description": "Pone el video nuevo como vigente y borra el anterior."
+    }
+  ],
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}
