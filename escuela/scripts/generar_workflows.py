@@ -582,7 +582,7 @@ def curso_edicion():
       SELECT json_agg(json_build_object('id', k.id, 'titulo', k.titulo, 'descripcion', k.descripcion,
              'duracion_estimada_minutos', k.duracion_estimada_minutos, 'es_muestra', k.es_muestra, 'posicion', k.posicion,
              'video', (SELECT json_build_object('estado', v.estado, 'duracion_segundos', v.duracion_segundos) FROM escuela.videos_clase v WHERE v.clase_id = k.id AND v.vigente),
-             'video_nuevo', (SELECT json_build_object('estado', v.estado, 'error', v.error) FROM escuela.videos_clase v WHERE v.clase_id = k.id AND NOT v.vigente ORDER BY v.id DESC LIMIT 1)) ORDER BY k.posicion)
+             'video_nuevo', (SELECT json_build_object('id', v.id, 'estado', v.estado, 'error', v.error) FROM escuela.videos_clase v WHERE v.clase_id = k.id AND NOT v.vigente ORDER BY v.id DESC LIMIT 1)) ORDER BY k.posicion)
       FROM escuela.clases k WHERE k.seccion_id = s.id), '[]'::json)) ORDER BY s.posicion)
     FROM escuela.secciones s WHERE s.curso_id = c.id), '[]'::json)) AS curso
 FROM escuela.cursos c WHERE c.id = $1::bigint;""", "={{ [$json.curso.id] }}", x, 0)
@@ -1362,22 +1362,26 @@ def borrar_archivos_video():
               "Subworkflow. Recibe { rutas_base: [..] } (carpetas de videos del bucket privado videos), lista todo lo que cuelga de cada una (el original y la carpeta hls) "
               "y lo borra de Supabase Storage con la credencial de rol de servicio. Lo usan Video procesado, Borrar video y las limpiezas de clases y secciones.", "escuela")
     f.nodo("Disparador", "n8n-nodes-base.executeWorkflowTrigger", 1.1, {"inputSource": "passthrough"}, 0, 0)
-    f.codigo("Preparar carpetas", "const bases = $input.first().json.rutas_base || [];\nreturn bases.flatMap((b) => [{ json: { prefijo: b } }, { json: { prefijo: `${b}/hls` } }]);", 240, 0)
-    f.http("Listar archivos", "POST", f"={STORAGE}/object/list/videos", {}, 480, 0, servicio=True, cuerpo="={{ JSON.stringify({ prefix: $json.prefijo, limit: 1000 }) }}")
+    f.codigo("Preparar carpetas", "const bases = $input.first().json.rutas_base || [];\nif (bases.length === 0) return [{ json: { vacio: true } }];\nreturn bases.flatMap((b) => [{ json: { prefijo: b } }, { json: { prefijo: `${b}/hls` } }]);", 240, 0)
+    f.si("Hay carpetas", "={{ !$json.vacio }}", 480, 0)
+    f.http("Listar archivos", "POST", f"={STORAGE}/object/list/videos", {}, 720, 0, servicio=True, cuerpo="={{ JSON.stringify({ prefix: $json.prefijo, limit: 1000 }) }}")
     f.codigo("Juntar archivos", """const carpetas = $('Preparar carpetas').all();
 const rutas = [];
 $input.all().forEach((r, i) => {
   const lista = Array.isArray(r.json.body) ? r.json.body : [];
   lista.filter((e) => e.id).forEach((e) => rutas.push(`${carpetas[i].json.prefijo}/${e.name}`));
 });
-return [{ json: { rutas } }];""", 720, 0)
-    f.si("Hay archivos", "={{ $json.rutas.length > 0 }}", 960, 0)
-    f.http("Borrar archivos en Storage", "DELETE", f"={STORAGE}/object/videos", {}, 1200, -100, servicio=True, cuerpo="={{ JSON.stringify({ prefixes: $json.rutas }) }}")
-    f.unir("Disparador", "Preparar carpetas"); f.unir("Preparar carpetas", "Listar archivos"); f.unir("Listar archivos", "Juntar archivos")
-    f.unir("Juntar archivos", "Hay archivos"); f.unir("Hay archivos", "Borrar archivos en Storage", 0)
+return [{ json: { rutas } }];""", 960, 0)
+    f.si("Hay archivos", "={{ $json.rutas.length > 0 }}", 1200, 0)
+    f.http("Borrar archivos en Storage", "DELETE", f"={STORAGE}/object/videos", {}, 1440, -100, servicio=True, cuerpo="={{ JSON.stringify({ prefixes: $json.rutas }) }}")
+    f.unir("Disparador", "Preparar carpetas"); f.unir("Preparar carpetas", "Hay carpetas"); f.unir("Hay carpetas", "Listar archivos", 0); f.unir("Hay carpetas", "Nada que borrar", 1); f.unir("Listar archivos", "Juntar archivos")
+    f.nodo("Nada que borrar", "n8n-nodes-base.noOp", 1, {}, 1440, 500)  # si no hay archivos, igual devuelve un elemento: sin él n8n corta al workflow que lo llama
+    f.unir("Juntar archivos", "Hay archivos"); f.unir("Hay archivos", "Borrar archivos en Storage", 0); f.unir("Hay archivos", "Nada que borrar", 1)
     f.seccion("Entrada", "Recibe `rutas_base`: las carpetas `cursos/<c>/secciones/<s>/clases/<k>/<video>` que hay que vaciar.", NOTA_ENTRADA, ["Disparador"])
-    f.seccion("Listar", "Por cada carpeta lista el original y la subcarpeta `hls` (Storage no borra por prefijo).", NOTA_DATOS, ["Preparar carpetas", "Listar archivos", "Juntar archivos"], True, "Lista los archivos de cada carpeta de video.")
-    f.seccion("Borrar", "Borra todos los archivos de golpe. Si no hay ninguno, termina sin hacer nada.", NOTA_ERROR, ["Hay archivos", "Borrar archivos en Storage"], True, "Borra los archivos listados de Storage.")
+    f.seccion("Preparar", "Por cada carpeta pide el original y la subcarpeta `hls` (Storage no borra por prefijo). Sin carpetas, sale por *Nada que borrar*.", NOTA_ENTRADA, ["Preparar carpetas", "Hay carpetas"], True, "Arma la lista de carpetas a vaciar.")
+    f.seccion("Listar", "Lista los archivos de cada carpeta.", NOTA_DATOS, ["Listar archivos", "Juntar archivos"], True, "Lista los archivos de cada carpeta de video.")
+    f.seccion("Borrar", "Borra todos los archivos de golpe.", NOTA_ERROR, ["Hay archivos", "Borrar archivos en Storage"], True, "Borra los archivos listados de Storage.")
+    f.seccion("Sin archivos", "Sin carpetas o sin archivos termina sin borrar nada pero **devuelve un elemento**: un subworkflow sin salida corta al workflow que lo llamó y nunca llega a su `Responder`.", NOTA_RESPUESTA, ["Nada que borrar"])
     f.general("Borrar archivos de video", "Subworkflow compartido: **nadie repite la limpieza de Storage**.\n\nEntrada: `{ rutas_base: [...] }`. Con la credencial **Supabase rol de servicio**. El borrado es de mejor esfuerzo: la fila de la base ya no existe cuando se llama.")
     f.guardar()
 

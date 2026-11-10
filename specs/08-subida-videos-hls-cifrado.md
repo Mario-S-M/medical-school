@@ -54,7 +54,7 @@ Por qué las dos mitades no van juntas: esta spec añade un servicio nuevo (el t
 - **Reemplazo:** subir otro video a una clase que ya tiene uno crea un video nuevo; el anterior **sigue siendo el vigente** hasta que el nuevo queda `listo`. Solo puede haber un video en proceso por clase (`409 VIDEO_EN_PROCESO`).
 - **Limpieza:** `borrar-clase` y `borrar-seccion` borran también los archivos de sus videos en Storage.
 - **Cambios a lo existente:**
-  - `curso-edicion` devuelve en cada clase `video: { estado, duracion_segundos } | null` (el vigente) y `video_nuevo: { estado, error } | null`.
+  - `curso-edicion` devuelve en cada clase `video: { estado, duracion_segundos } | null` (el vigente) y `video_nuevo: { id, estado, error } | null` (el `id` lo necesita el botón de reintentar).
   - `enviar-revision` suma la falta `falta_video`: **cada clase necesita su video `listo`**.
   - Las pruebas de la SPEC 07 que enviaban cursos a revisión sin video se ajustan.
   - Caddy permite las cinco rutas públicas nuevas.
@@ -153,7 +153,7 @@ CREATE TABLE IF NOT EXISTS escuela.claves_video (
 ```json
 { "id": 7, "titulo": "Bienvenida", "es_muestra": true, "duracion_estimada_minutos": 4,
   "video": { "estado": "listo", "duracion_segundos": 252 },
-  "video_nuevo": { "estado": "procesando", "error": null } }
+  "video_nuevo": { "id": 31, "estado": "procesando", "error": null } }
 ```
 
 **Variables del `.env`:** `SECRETO_TRANSCODIFICADOR` (nueva). El servicio `transcodificador` también lee `SERVICE_ROLE_KEY`, que ya existe, para hablar con Storage.

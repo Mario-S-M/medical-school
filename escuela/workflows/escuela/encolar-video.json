@@ -1,0 +1,654 @@
+{
+  "id": "escEncolarVideo01",
+  "name": "Encolar video",
+  "description": "Subworkflow. Recibe { video_id, estado_requerido } (esperando_archivo al confirmar una subida, error al reintentar), comprueba en Storage que el original exista y coincida con lo declarado, pasa el video a en_cola y le pide el trabajo al transcodificador. Devuelve { ok, estado, cuerpo } listo para responder (202 o el error). Lo usan Confirmar subida de video y Reintentar video.",
+  "active": false,
+  "isArchived": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "executionTimeout": 15
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Entrada\nRecibe `video_id` y `estado_requerido`.",
+        "height": 430,
+        "width": 240,
+        "color": 4
+      },
+      "id": "87c1723c-d0b4-55e0-a32e-8b572fa1f566",
+      "name": "Nota Entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -70,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Leer el video\nSolo se encola un video que esté en el estado requerido (`esperando_archivo` o `error`); si no, `409`. Lee su clave en n8n; no sale de ahí.",
+        "height": 430,
+        "width": 780,
+        "color": 6
+      },
+      "id": "55ffe198-40f2-562f-b46e-d60670a8de9d",
+      "name": "Nota Leer el video",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        260,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Comprobar en Storage\nEl original debe existir y coincidir con el tipo y el tamaño declarados; si no, `422 VIDEO_INVALIDO`.",
+        "height": 430,
+        "width": 780,
+        "color": 1
+      },
+      "id": "cca5a38f-57e3-5c07-8680-f95d5e076780",
+      "name": "Nota Comprobar en Storage",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Encolar el trabajo\nPasa el video a `en_cola` y pide el trabajo al transcodificador (credencial `Secreto transcodificador`, máximo 10 s de espera).",
+        "height": 430,
+        "width": 780,
+        "color": 4
+      },
+      "id": "941472eb-15e4-5aa6-b76d-399fd9c49724",
+      "name": "Nota Encolar el trabajo",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2060,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Respuesta\n`202 { estado: 'en_cola' }`.",
+        "height": 430,
+        "width": 240,
+        "color": 5
+      },
+      "id": "801f1f93-8de8-5998-8191-10cebc26c2c1",
+      "name": "Nota Respuesta",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2930,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Servicio no disponible\nSi el transcodificador no responde (o tarda más de 10 s), el video pasa a `error` (se puede reintentar) y se devuelve `503`.",
+        "height": 430,
+        "width": 480,
+        "color": 3
+      },
+      "id": "501586d0-34f9-54c8-ae00-61f0d13bf6a9",
+      "name": "Nota Servicio no disponible",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2960,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Salida con error\nUn video que no está en el estado requerido o cuyo original no coincide sale tal cual.",
+        "height": 430,
+        "width": 240,
+        "color": 3
+      },
+      "id": "5014a376-ac96-5c2b-9448-adba041e4edb",
+      "name": "Nota Salida con error",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1130,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Encolar video\nSubworkflow compartido: **confirmar y reintentar no repiten el encolado**.\n\nEntrada: `{ video_id, estado_requerido }`. Salida: `{ ok, estado, cuerpo }` listo para el nodo *Responder* del workflow que lo llama.",
+        "height": 150,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "3990cfd1-3f2f-5eb4-8fe7-24c6da499506",
+      "name": "Nota Encolar video",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -450
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "e6422249-9cf5-5e0d-af31-c190a0ab1b11",
+      "name": "Disparador",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT v.id, v.estado, v.tipo_contenido, v.tamano_bytes, v.ruta_base, encode(k.clave, 'hex') AS clave_hex\nFROM escuela.videos_clase v JOIN escuela.claves_video k ON k.video_id = v.id WHERE v.id = $1::bigint;",
+        "options": {
+          "queryReplacement": "={{ [$json.video_id] }}"
+        }
+      },
+      "id": "0d55fabd-2e33-5dd0-a9b7-92ef2ec2329f",
+      "name": "Consultar video",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        300,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgSupabase01",
+          "name": "Postgres n8n (Supabase)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const v = $input.first().json;\nconst requerido = $('Disparador').first().json.estado_requerido;\nconst EXT = {\"video/mp4\": \"mp4\", \"video/quicktime\": \"mov\", \"video/webm\": \"webm\"};\nconst error = (estado, codigo, mensaje) => [{ json: { ok: false, estado, cuerpo: { error: { codigo, mensaje } } } }];\nif (!v.id) return error(404, 'NO_ENCONTRADO', 'El video no existe.');\nif (v.estado !== requerido) return error(409, 'ESTADO_INVALIDO', requerido === 'error' ? 'Solo se puede reintentar un video con error.' : 'Este video ya se confirmó.');\nreturn [{ json: { ok: true, video_id: Number(v.id), requerido, tipo_contenido: v.tipo_contenido, tamano_bytes: Number(v.tamano_bytes), ruta_base: v.ruta_base, ruta_original: `${v.ruta_base}/original.${EXT[v.tipo_contenido]}`, clave_hex: v.clave_hex } }];"
+      },
+      "id": "a4298952-861d-58b2-8b6a-f4bee6a978fa",
+      "name": "Revisar estado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "83a590d3-b01a-5e25-908e-74a51f8c1c93",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4f6fd0a4-34e7-56ce-a882-1ebd52631128",
+      "name": "Video por encolar",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://storage:5000/object/info/videos/{{ $json.ruta_original }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "ca05b8b8-4e21-5e06-a12c-384a4370ba15",
+      "name": "Consultar archivo en Storage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabaseServicio01",
+          "name": "Supabase rol de servicio"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst v = $('Revisar estado').first().json;\nconst b = r.body || {};\nconst tamano = Number(b.size || (b.metadata || {}).size || 0);\nconst tipo = b.content_type || (b.metadata || {}).mimetype || '';\nconst error = (mensaje) => [{ json: { ok: false, estado: 422, cuerpo: { error: { codigo: 'VIDEO_INVALIDO', mensaje } } } }];\nif (r.statusCode !== 200) return error(v.requerido === 'error' ? 'El archivo original ya no está: sube el video otra vez.' : 'El video todavía no se subió.');\nif (tamano !== v.tamano_bytes || tipo !== v.tipo_contenido) return error('El archivo subido no coincide con lo declarado.');\nreturn [{ json: { ok: true } }];"
+      },
+      "id": "2e2bd4ac-ccb0-57ba-b9c6-44c71c63e530",
+      "name": "Clasificar archivo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9254d9e2-73ba-572b-9c5a-6906fab873da",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d1589bb8-9585-56ca-820e-6beab007bd58",
+      "name": "Archivo valido",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1800,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE escuela.videos_clase SET estado = 'en_cola', error = NULL, actualizado_en = now() WHERE id = $1::bigint AND estado = $2::text RETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$('Revisar estado').first().json.video_id, $('Revisar estado').first().json.requerido] }}"
+        }
+      },
+      "id": "b9c68a30-51f6-5a9e-a064-0e9c25b52996",
+      "name": "Pasar a en cola",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2100,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgSupabase01",
+          "name": "Postgres n8n (Supabase)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://transcodificador:8090/trabajos",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ video_id: $('Revisar estado').first().json.video_id, ruta_original: $('Revisar estado').first().json.ruta_original, ruta_base: $('Revisar estado').first().json.ruta_base, clave_hex: $('Revisar estado').first().json.clave_hex }) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "5c51ad01-ce19-5de8-bddd-bcbb75972be0",
+      "name": "Pedir trabajo al transcodificador",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2400,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "secretoTranscodificador01",
+          "name": "Secreto transcodificador"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "85bd911b-5061-5bd3-b6a3-4cd869b1f9ab",
+              "leftValue": "={{ $json.statusCode === 202 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "094b3645-5349-5a55-b269-4fce98e2a180",
+      "name": "Trabajo aceptado",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2700,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ok: true, estado: 202, cuerpo: { estado: 'en_cola' } } }];"
+      },
+      "id": "7d35777c-7b64-5d56-a48e-9d78ff3e7bcb",
+      "name": "Armar respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3000,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE escuela.videos_clase SET estado = 'error', error = 'El servicio de video no responde. Inténtalo de nuevo.', actualizado_en = now() WHERE id = $1::bigint RETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$('Revisar estado').first().json.video_id] }}"
+        }
+      },
+      "id": "6ee7a753-61ee-5293-916a-4cb2ed890b15",
+      "name": "Marcar error de servicio",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3000,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "pgSupabase01",
+          "name": "Postgres n8n (Supabase)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ok: false, estado: 503, cuerpo: { error: { codigo: 'SERVICIO_NO_DISPONIBLE', mensaje: 'El servicio de video no responde. Inténtalo de nuevo en unos minutos.' } } } }];"
+      },
+      "id": "4e583f21-5454-5100-96c8-becadc228e75",
+      "name": "Armar error de servicio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        500
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "d01ad1e3-b5be-54eb-a1ed-f142102b29ca",
+      "name": "Devolver error",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Disparador": {
+      "main": [
+        [
+          {
+            "node": "Consultar video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar video": {
+      "main": [
+        [
+          {
+            "node": "Revisar estado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revisar estado": {
+      "main": [
+        [
+          {
+            "node": "Video por encolar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video por encolar": {
+      "main": [
+        [
+          {
+            "node": "Consultar archivo en Storage",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Devolver error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar archivo en Storage": {
+      "main": [
+        [
+          {
+            "node": "Clasificar archivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clasificar archivo": {
+      "main": [
+        [
+          {
+            "node": "Archivo valido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Archivo valido": {
+      "main": [
+        [
+          {
+            "node": "Pasar a en cola",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Devolver error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pasar a en cola": {
+      "main": [
+        [
+          {
+            "node": "Pedir trabajo al transcodificador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pedir trabajo al transcodificador": {
+      "main": [
+        [
+          {
+            "node": "Trabajo aceptado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trabajo aceptado": {
+      "main": [
+        [
+          {
+            "node": "Armar respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Marcar error de servicio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar error de servicio": {
+      "main": [
+        [
+          {
+            "node": "Armar error de servicio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [
+    {
+      "id": "4003e143-5d15-5989-878a-e4a633742170",
+      "name": "Leer el video",
+      "nodeIds": [
+        "0d55fabd-2e33-5dd0-a9b7-92ef2ec2329f",
+        "a4298952-861d-58b2-8b6a-f4bee6a978fa",
+        "4f6fd0a4-34e7-56ce-a882-1ebd52631128"
+      ],
+      "description": "Lee el video y comprueba su estado."
+    },
+    {
+      "id": "58966cee-3730-5c82-bb7b-b209843fbc19",
+      "name": "Comprobar en Storage",
+      "nodeIds": [
+        "ca05b8b8-4e21-5e06-a12c-384a4370ba15",
+        "2e2bd4ac-ccb0-57ba-b9c6-44c71c63e530",
+        "d1589bb8-9585-56ca-820e-6beab007bd58"
+      ],
+      "description": "Comprueba el original en Storage."
+    },
+    {
+      "id": "4003c854-1795-5d20-9ad4-fb9a6b57d190",
+      "name": "Encolar el trabajo",
+      "nodeIds": [
+        "b9c68a30-51f6-5a9e-a064-0e9c25b52996",
+        "5c51ad01-ce19-5de8-bddd-bcbb75972be0",
+        "094b3645-5349-5a55-b269-4fce98e2a180"
+      ],
+      "description": "Pasa el video a en cola y pide el trabajo."
+    },
+    {
+      "id": "cea43bef-1284-5be3-b299-23afda51d5b3",
+      "name": "Servicio no disponible",
+      "nodeIds": [
+        "6ee7a753-61ee-5293-916a-4cb2ed890b15",
+        "4e583f21-5454-5100-96c8-becadc228e75"
+      ],
+      "description": "Marca el video en error cuando el transcodificador no responde."
+    }
+  ],
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}

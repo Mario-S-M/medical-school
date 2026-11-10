@@ -1,0 +1,565 @@
+{
+  "id": "escReintentarVideo01",
+  "name": "Reintentar video",
+  "description": "POST /escuela/reintentar-video. Vuelve a encolar un video que terminó en error, si su original se conservó (instructor dueño o su equipo; no en revisión). No guarda ejecuciones.",
+  "active": false,
+  "isArchived": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "executionTimeout": 15
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Entrada\nWebhook protegido por el secreto del proxy (Caddy es la única entrada).",
+        "height": 430,
+        "width": 240,
+        "color": 4
+      },
+      "id": "6ae26079-a3f6-5446-b358-2bdc9e81ccd3",
+      "name": "Nota Entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -70,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Comprobar permiso\nExige el rol `['instructor', 'equipo_apoyo']` con el subworkflow `Exigir rol`. Sin sesión da `401`; sin el rol, `403`.",
+        "height": 430,
+        "width": 780,
+        "color": 1
+      },
+      "id": "a40da3fd-6f3c-5043-a1e1-77c0645b6d0d",
+      "name": "Nota Comprobar permiso",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        260,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Validar entrada\nSubworkflow `Validar campos`: tipos, largos y campos extra. Si falla, `422 VALIDACION_FALLIDA` con la lista de reglas.",
+        "height": 430,
+        "width": 480,
+        "color": 4
+      },
+      "id": "0c2a58df-4977-5ad6-9071-64b9e89cfb7f",
+      "name": "Nota Validar entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Comprobar curso\nSubworkflow `Validar acceso a curso`: solo el dueño o su equipo de apoyo. Curso ajeno: `403`; inexistente: `404`; en revisión: `409`.",
+        "height": 430,
+        "width": 480,
+        "color": 1
+      },
+      "id": "9aced7da-8ab0-5b4b-836b-540e726940a5",
+      "name": "Nota Comprobar curso",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Encolar\nSubworkflow `Encolar video` con `estado_requerido: error`. Si el original ya no está en Storage: `422 VIDEO_INVALIDO` (hay que subirlo otra vez).",
+        "height": 430,
+        "width": 480,
+        "color": 6
+      },
+      "id": "8e014fb2-f8d0-54df-b868-3c3dcb3d007b",
+      "name": "Nota Encolar",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2360,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Respuesta\nDevuelve tal cual lo que responde el subworkflow, o el error de permisos o de datos.",
+        "height": 430,
+        "width": 240,
+        "color": 5
+      },
+      "id": "272b6dd4-fb44-5de6-8e5c-89cb1ae4395d",
+      "name": "Nota Respuesta",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2930,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Reintentar video\n`POST /escuela/reintentar-video` · instructor dueño o equipo de apoyo.\n\nEntrada: `{ video_id }`. Responde `202 { estado: 'en_cola' }`. Solo para un video en `error`.",
+        "height": 150,
+        "width": 1000,
+        "color": 7
+      },
+      "id": "457ff6cc-9da0-53bb-8576-3e00bc2e9dbe",
+      "name": "Nota Reintentar video",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -450
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "escuela/reintentar-video",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "7d6be3f1-f7d4-5ef4-905d-6f560649122d",
+      "name": "Recibir solicitud",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "secretoProxy01",
+          "name": "Secreto proxy"
+        }
+      },
+      "webhookId": "b099bffc-764e-52c0-a7a9-fbf0987067ef"
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $input.first().json;\nreturn [{ json: { headers: e.headers, rol_requerido: [\"instructor\", \"equipo_apoyo\"], datos: e.body, reglas: {\"video_id\": {\"tipo\": \"entero\", \"minimo\": 1, \"maximo\": 9007199254740}}, acceso: {\"modo\": \"dueno_o_equipo\", \"editable\": true, \"tipo\": \"video\", \"campo\": \"video_id\"} } }];"
+      },
+      "id": "dae9e7fc-26d8-5cbf-ac6c-a1fe3afe5864",
+      "name": "Definir reglas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escExigirRol01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "b14fccfc-a8ca-5cf7-9225-5fd10c6ea97e",
+      "name": "Exigir rol",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9bd86174-7df9-5b9d-bc47-12d3b5ebbeb9",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9967b1d2-c1fb-52a3-ae05-8b6d38c9af53",
+      "name": "Permiso valido",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escValidarCampos01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "0456e1a7-a76c-572d-a815-af199e360ab6",
+      "name": "Validar campos",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "38ca3361-5a9d-5a0b-a2e0-fee42f82f34f",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1ab914be-8c2c-5640-b2ca-45e7f6d0ee9b",
+      "name": "Entrada valida",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escValidarAcceso01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "f43be6fe-b51d-5154-ad7d-28a87e4b228b",
+      "name": "Validar acceso a curso",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1800,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bf014eca-f150-576c-b127-bee7f1207f33",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c38e96c4-de70-579f-b30c-d50424e99d4d",
+      "name": "Acceso valido",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { video_id: $input.first().json.datos.video_id, estado_requerido: 'error' } }];"
+      },
+      "id": "ee6f9df7-ead3-5fad-8350-41b3b6fbaaf1",
+      "name": "Preparar encolado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escEncolarVideo01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "4c770bad-117c-533f-947f-ba16f24ebdcb",
+      "name": "Encolar video",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2700,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.cuerpo === null ? '' : JSON.stringify($json.cuerpo) }}",
+        "options": {
+          "responseCode": "={{ $json.estado }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "X-Flujo",
+                "value": "escuela"
+              }
+            ]
+          }
+        }
+      },
+      "id": "6beed4b5-1022-56f2-9403-72ad784c5fb7",
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        3000,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Recibir solicitud": {
+      "main": [
+        [
+          {
+            "node": "Definir reglas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Definir reglas": {
+      "main": [
+        [
+          {
+            "node": "Exigir rol",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exigir rol": {
+      "main": [
+        [
+          {
+            "node": "Permiso valido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Permiso valido": {
+      "main": [
+        [
+          {
+            "node": "Validar campos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar campos": {
+      "main": [
+        [
+          {
+            "node": "Entrada valida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrada valida": {
+      "main": [
+        [
+          {
+            "node": "Validar acceso a curso",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar acceso a curso": {
+      "main": [
+        [
+          {
+            "node": "Acceso valido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acceso valido": {
+      "main": [
+        [
+          {
+            "node": "Preparar encolado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar encolado": {
+      "main": [
+        [
+          {
+            "node": "Encolar video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encolar video": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [
+    {
+      "id": "aaaeea07-5808-5edf-9476-f20dca48056f",
+      "name": "Comprobar permiso",
+      "nodeIds": [
+        "dae9e7fc-26d8-5cbf-ac6c-a1fe3afe5864",
+        "b14fccfc-a8ca-5cf7-9225-5fd10c6ea97e",
+        "9967b1d2-c1fb-52a3-ae05-8b6d38c9af53"
+      ],
+      "description": "Exige el rol ['instructor', 'equipo_apoyo'] con el subworkflow compartido."
+    },
+    {
+      "id": "aeafdc13-29e5-5a4b-948e-170f716742e6",
+      "name": "Validar entrada",
+      "nodeIds": [
+        "0456e1a7-a76c-572d-a815-af199e360ab6",
+        "1ab914be-8c2c-5640-b2ca-45e7f6d0ee9b"
+      ],
+      "description": "Valida y normaliza los campos con el subworkflow compartido."
+    },
+    {
+      "id": "cea80e0d-0a0b-5314-b54b-f8ce0d476412",
+      "name": "Comprobar curso",
+      "nodeIds": [
+        "f43be6fe-b51d-5154-ad7d-28a87e4b228b",
+        "c38e96c4-de70-579f-b30c-d50424e99d4d"
+      ],
+      "description": "Comprueba que el curso existe y que el usuario puede tocarlo."
+    },
+    {
+      "id": "4252d3a2-1a8b-5d38-a7d6-7ddb309a8a61",
+      "name": "Encolar",
+      "nodeIds": [
+        "ee6f9df7-ead3-5fad-8350-41b3b6fbaaf1",
+        "4c770bad-117c-533f-947f-ba16f24ebdcb"
+      ],
+      "description": "Vuelve a encolar con el subworkflow compartido."
+    }
+  ],
+  "pinData": {},
+  "meta": null,
+  "tags": []
+}

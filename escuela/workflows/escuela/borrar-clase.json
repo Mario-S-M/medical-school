@@ -79,13 +79,13 @@
     },
     {
       "parameters": {
-        "content": "### Borrar la clase\nBorra la clase y deja las demás de su sección numeradas `1..n` sin huecos.",
+        "content": "### Borrar y limpiar\nBorra la clase (y su video), deja las demás de su sección numeradas `1..n` sin huecos y borra de Storage los archivos del video (subworkflow compartido).",
         "height": 430,
-        "width": 480,
+        "width": 1080,
         "color": 6
       },
-      "id": "ab478607-18e2-5436-aa3b-eb4aed62cef1",
-      "name": "Nota Borrar la clase",
+      "id": "c20dbb78-5f9b-5836-a695-fd5664958f32",
+      "name": "Nota Borrar y limpiar",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
@@ -105,7 +105,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2930,
+        3530,
         -260
       ]
     },
@@ -327,7 +327,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH borrada AS (\n  DELETE FROM escuela.clases WHERE id = $1::bigint RETURNING seccion_id\n), renumeradas AS (\n  UPDATE escuela.clases k SET posicion = n.nueva\n  FROM (SELECT id, row_number() OVER (ORDER BY posicion) AS nueva FROM escuela.clases\n        WHERE seccion_id = (SELECT seccion_id FROM borrada) AND id <> $1::bigint) n\n  WHERE k.id = n.id RETURNING k.id\n)\nSELECT EXISTS (SELECT 1 FROM borrada) AS borrada;",
+        "query": "WITH rutas AS (\n  SELECT coalesce(array_agg(ruta_base), '{}') AS rutas FROM escuela.videos_clase WHERE clase_id = $1::bigint\n), borrada AS (\n  DELETE FROM escuela.clases WHERE id = $1::bigint RETURNING seccion_id\n), renumeradas AS (\n  UPDATE escuela.clases k SET posicion = n.nueva\n  FROM (SELECT id, row_number() OVER (ORDER BY posicion) AS nueva FROM escuela.clases\n        WHERE seccion_id = (SELECT seccion_id FROM borrada) AND id <> $1::bigint) n\n  WHERE k.id = n.id RETURNING k.id\n)\nSELECT EXISTS (SELECT 1 FROM borrada) AS borrada, (SELECT rutas FROM rutas) AS rutas_base;",
         "options": {
           "queryReplacement": "={{ [$json.datos.clase_id] }}"
         }
@@ -351,14 +351,47 @@
     },
     {
       "parameters": {
-        "jsCode": "const r = $input.first().json;\nif (r.borrada) return [{ json: { estado: 204, cuerpo: null } }];\nreturn [{ json: { estado: 404, cuerpo: { error: { codigo: 'NO_ENCONTRADO', mensaje: 'La clase no existe en este curso.' } } } }];"
+        "jsCode": "const r = $input.first().json;\nreturn [{ json: { rutas_base: r.borrada ? (r.rutas_base || []) : [] } }];"
+      },
+      "id": "663c3a4c-11a8-5e41-bfd1-ac9323114076",
+      "name": "Preparar rutas de videos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2700,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "escBorrarArchivosVideo01",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "77ead994-a99e-590f-8ada-47599e590d30",
+      "name": "Borrar archivos de video",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3000,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $('Borrar y renumerar').first().json;\nif (r.borrada) return [{ json: { estado: 204, cuerpo: null } }];\nreturn [{ json: { estado: 404, cuerpo: { error: { codigo: 'NO_ENCONTRADO', mensaje: 'La clase no existe en este curso.' } } } }];"
       },
       "id": "2e0434a3-5e5e-57a7-9669-ea9816ef94a7",
       "name": "Armar respuesta",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2700,
+        3300,
         0
       ]
     },
@@ -387,7 +420,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        3000,
+        3600,
         0
       ]
     }
@@ -506,6 +539,28 @@
       "main": [
         [
           {
+            "node": "Preparar rutas de videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar rutas de videos": {
+      "main": [
+        [
+          {
+            "node": "Borrar archivos de video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Borrar archivos de video": {
+      "main": [
+        [
+          {
             "node": "Armar respuesta",
             "type": "main",
             "index": 0
@@ -555,13 +610,15 @@
       "description": "Comprueba que el curso existe y que el usuario puede tocarlo."
     },
     {
-      "id": "e6c71b33-420c-5e84-8318-0559b238e65e",
-      "name": "Borrar la clase",
+      "id": "b39e100d-f710-5047-b62a-44468b4b0e4e",
+      "name": "Borrar y limpiar",
       "nodeIds": [
         "e1139cc4-5041-5df1-8bc1-5ae544f88a1f",
+        "663c3a4c-11a8-5e41-bfd1-ac9323114076",
+        "77ead994-a99e-590f-8ada-47599e590d30",
         "2e0434a3-5e5e-57a7-9669-ea9816ef94a7"
       ],
-      "description": "Borra la clase y deja las demás de su sección numeradas 1..n sin huecos."
+      "description": "Borra la clase (y su video), deja las demás de su sección numeradas 1..n sin huecos y borra de Storage los archivos del video (subworkflow compartido)"
     }
   ],
   "pinData": {},

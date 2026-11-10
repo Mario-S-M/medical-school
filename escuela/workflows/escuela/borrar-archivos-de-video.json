@@ -31,13 +31,13 @@
     },
     {
       "parameters": {
-        "content": "### Listar\nPor cada carpeta lista el original y la subcarpeta `hls` (Storage no borra por prefijo).",
+        "content": "### Preparar\nPor cada carpeta pide el original y la subcarpeta `hls` (Storage no borra por prefijo). Sin carpetas, sale por *Nada que borrar*.",
         "height": 430,
-        "width": 780,
-        "color": 6
+        "width": 480,
+        "color": 4
       },
-      "id": "b929e2fc-314b-5faa-9017-faba981fd564",
-      "name": "Nota Listar",
+      "id": "9517ae5c-f8b2-590a-b265-c0b1898f1c53",
+      "name": "Nota Preparar",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
@@ -47,7 +47,23 @@
     },
     {
       "parameters": {
-        "content": "### Borrar\nBorra todos los archivos de golpe. Si no hay ninguno, termina sin hacer nada.",
+        "content": "### Listar\nLista los archivos de cada carpeta.",
+        "height": 430,
+        "width": 480,
+        "color": 6
+      },
+      "id": "b929e2fc-314b-5faa-9017-faba981fd564",
+      "name": "Nota Listar",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        860,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Borrar\nBorra todos los archivos de golpe.",
         "height": 530,
         "width": 480,
         "color": 3
@@ -57,8 +73,24 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1160,
+        1460,
         -360
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Sin archivos\nSin carpetas o sin archivos termina sin borrar nada pero **devuelve un elemento**: un subworkflow sin salida corta al workflow que lo llamó y nunca llega a su `Responder`.",
+        "height": 430,
+        "width": 240,
+        "color": 5
+      },
+      "id": "7725df5f-01b5-5552-a4de-00ee83e12704",
+      "name": "Nota Sin archivos",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1730,
+        240
       ]
     },
     {
@@ -92,7 +124,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const bases = $input.first().json.rutas_base || [];\nreturn bases.flatMap((b) => [{ json: { prefijo: b } }, { json: { prefijo: `${b}/hls` } }]);"
+        "jsCode": "const bases = $input.first().json.rutas_base || [];\nif (bases.length === 0) return [{ json: { vacio: true } }];\nreturn bases.flatMap((b) => [{ json: { prefijo: b } }, { json: { prefijo: `${b}/hls` } }]);"
       },
       "id": "29a2931f-c377-506e-8c86-7189f5357ca3",
       "name": "Preparar carpetas",
@@ -100,6 +132,40 @@
       "typeVersion": 2,
       "position": [
         300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "226c5a87-5be8-5902-8868-ad7347c698a4",
+              "leftValue": "={{ !$json.vacio }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f90e0cdc-3f15-5113-960d-6dc73595426b",
+      "name": "Hay carpetas",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        600,
         0
       ]
     },
@@ -127,7 +193,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        600,
+        900,
         0
       ],
       "onError": "continueRegularOutput",
@@ -147,7 +213,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        900,
+        1200,
         0
       ]
     },
@@ -181,7 +247,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1200,
+        1500,
         0
       ]
     },
@@ -209,7 +275,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1500,
+        1800,
         -100
       ],
       "onError": "continueRegularOutput",
@@ -219,6 +285,17 @@
           "name": "Supabase rol de servicio"
         }
       }
+    },
+    {
+      "parameters": {},
+      "id": "f634f6fb-dda5-526f-a87c-d8aa95a0b67f",
+      "name": "Nada que borrar",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        500
+      ]
     }
   ],
   "connections": {
@@ -237,7 +314,25 @@
       "main": [
         [
           {
+            "node": "Hay carpetas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hay carpetas": {
+      "main": [
+        [
+          {
             "node": "Listar archivos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nada que borrar",
             "type": "main",
             "index": 0
           }
@@ -274,16 +369,31 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Nada que borrar",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     }
   },
   "nodeGroups": [
     {
+      "id": "f2d3af41-d564-502e-96bc-2578d4ce62ed",
+      "name": "Preparar",
+      "nodeIds": [
+        "29a2931f-c377-506e-8c86-7189f5357ca3",
+        "f90e0cdc-3f15-5113-960d-6dc73595426b"
+      ],
+      "description": "Arma la lista de carpetas a vaciar."
+    },
+    {
       "id": "155a194f-d892-506f-b6c9-3b0a85d7cbec",
       "name": "Listar",
       "nodeIds": [
-        "29a2931f-c377-506e-8c86-7189f5357ca3",
         "a0329391-3def-57a4-9b44-1ee452d03132",
         "7603c6e1-7964-5ec8-93cc-82cf16316066"
       ],

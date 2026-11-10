@@ -141,6 +141,8 @@ cuerpo_tiene '"administrador"' "administrador -> rol administrador"
 
 id_de() { psql_postgres "select id from auth.users where email = '$1'"; }
 UUID_FALSO="00000000-0000-4000-8000-000000000000"
+# poner_video_listo <clase_id>: deja un video listo y vigente (sin archivos) para los casos que solo necesitan que la clase "tenga video"
+poner_video_listo() { psql_n8n "insert into escuela.videos_clase (clase_id, estado, vigente, nombre_original, tipo_contenido, tamano_bytes, duracion_segundos, ruta_base, listo_en) values ($1, 'listo', true, 'a.mp4', 'video/mp4', 10, 60, 'x', now())" > /dev/null; }
 
 echo "== Administración: permisos"
 for ruta in "GET /escuela/admin/buscar-usuario?correo=a@b.co"; do
@@ -430,9 +432,14 @@ SEC_V="$(campo_json id)"
 api POST /escuela/enviar-revision "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A}"
 cuerpo_tiene '"seccion_vacia"' "una sección sin clases cuenta como falta (seccion_vacia)"
 api POST /escuela/guardar-clase "$TOKEN_instructor_a" "{\"seccion_id\":$SEC_V,\"titulo\":\"Clase única\",\"es_muestra\":true}"
+CLA_UNICA="$(campo_json id)"
 psql_n8n "update escuela.cursos set portada_ruta = 'cursos/$CURSO_A/portada-prueba.png' where id = $CURSO_A" > /dev/null
 api POST /escuela/enviar-revision "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A}"
-estado_es 200 "enviar-revision de un curso completo -> 200"
+estado_es 422 "enviar-revision con todo menos el video de la clase -> 422"
+cuerpo_tiene '"falta_video"' "sin video listo, la falta es falta_video (SPEC 08)"
+poner_video_listo "$CLA_UNICA"
+api POST /escuela/enviar-revision "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_A}"
+estado_es 200 "enviar-revision de un curso completo, con video en cada clase -> 200"
 [ "$(psql_n8n "select estado from escuela.cursos where id = $CURSO_A")" = "en_revision" ]; verificar "el curso quedó en_revision" $?
 api GET /escuela/admin/cursos-en-revision "$TOKEN_estudiante"
 estado_es 403 "cursos-en-revision sin rol administrador -> 403"
@@ -901,6 +908,100 @@ docker compose unpause transcodificador > /dev/null 2>&1
 n=0; until [[ "$(docker compose exec -T -e SEC="$SECRETO_T" n8n node -e "fetch('http://transcodificador:8090/trabajos/$VIDEO_C',{headers:{'X-Secreto-Transcodificador':process.env.SEC}}).then(async r=>console.log(r.status, await r.text()))")" =~ (listo|error) ]] || [ "$n" -ge 30 ]; do sleep 2; n=$((n + 1)); done
 [ "$(psql_n8n "select estado from escuela.videos_clase where id = $VIDEO_C")" = "error" ]; verificar "el aviso tardío del trabajo retenido no revive un video que ya estaba en error" $?
 
+echo "== Videos: reintentar, borrar y limpieza"
+REINTENTAR="/escuela/reintentar-video"; BORRAR_VIDEO="/escuela/borrar-video"
+solicitar POST $REINTENTAR -H 'Content-Type: application/json' -d "{\"video_id\":$VIDEO_3}"
+estado_es 401 "reintentar-video sin token -> 401"
+api POST $REINTENTAR "$TOKEN_estudiante" "{\"video_id\":$VIDEO_3}"
+estado_es 403 "reintentar-video sin rol -> 403"
+api POST $REINTENTAR "$TOKEN_instructor_b" "{\"video_id\":$VIDEO_3}"
+estado_es 403 "reintentar-video de un curso ajeno -> 403"
+api POST $REINTENTAR "$TOKEN_instructor_a" '{"video_id":99999999}'
+estado_es 404 "reintentar-video de un video inexistente -> 404"
+api POST $REINTENTAR "$TOKEN_instructor_a" "{\"video_id\":$VIDEO_2}"
+estado_es 409 "reintentar un video que ya está listo -> 409"
+psql_n8n "update escuela.cursos set estado = 'en_revision' where id = $CURSO_V" > /dev/null
+api POST $REINTENTAR "$TOKEN_instructor_a" "{\"video_id\":$VIDEO_3}"
+estado_es 409 "reintentar-video en un curso en revisión -> 409"
+api POST $BORRAR_VIDEO "$TOKEN_instructor_a" "{\"clase_id\":$CLASE_V}"
+estado_es 409 "borrar-video en un curso en revisión -> 409"
+psql_n8n "update escuela.cursos set estado = 'borrador' where id = $CURSO_V" > /dev/null
+psql_n8n "update escuela.videos_clase set estado = 'error', actualizado_en = now() where id = $VIDEO_3" > /dev/null
+api POST $REINTENTAR "$TOKEN_instructor_a" "{\"video_id\":$VIDEO_3}"
+estado_es 202 "reintentar un video en error con su original -> 202"
+esperar_estado "$TOKEN_instructor_a" "$CLASE_V" "d['nuevo'] and d['nuevo']['estado'] == 'error' and 'dañado' in d['nuevo']['error']"; verificar "el archivo corrupto vuelve a terminar en error tras el reintento" $?
+curl -s -o /dev/null -X DELETE "$ALMACEN/object/videos/cursos/$CURSO_V/secciones/$SEC_V2/clases/$CLASE_V/$VIDEO_3/original.mp4" -H "Authorization: Bearer $(leer_env SERVICE_ROLE_KEY)" -H "apikey: $(leer_env SERVICE_ROLE_KEY)"
+api POST $REINTENTAR "$TOKEN_instructor_a" "{\"video_id\":$VIDEO_3}"
+estado_es 422 "reintentar sin el original en Storage -> 422"
+cuerpo_tiene "ya no está" "el mensaje pide subir el video otra vez"
+# crear_video_listo <clase_id>: sube un video real, lo procesa y deja el id en LISTO_ID y su carpeta en LISTO_BASE
+crear_video_listo() {
+  api POST $SOLICITAR "$TOKEN_instructor_a" "{\"clase_id\":$1,\"nombre_archivo\":\"clase.mp4\",\"tipo_contenido\":\"video/mp4\",\"tamano_bytes\":$TAM}"
+  LISTO_ID="$(campo_json video_id)"; LISTO_BASE="$(campo_json ruta)"; LISTO_BASE="${LISTO_BASE%/original.mp4}"
+  curl -s -o /dev/null -X PUT "$ALMACEN$(campo_json url_subida | sed 's#^/almacen##')" -H 'Content-Type: video/mp4' --data-binary "@$DIRECTORIO_TEMPORAL/clase.mp4"
+  api POST $CONFIRMAR "$TOKEN_instructor_a" "{\"video_id\":$LISTO_ID}" > /dev/null
+  esperar_estado "$TOKEN_instructor_a" "$1" "d['vigente'] and d['vigente']['id'] == $LISTO_ID"
+}
+api POST $BORRAR_VIDEO "$TOKEN_estudiante" "{\"clase_id\":$CLASE_V}"
+estado_es 403 "borrar-video sin rol -> 403"
+api POST $BORRAR_VIDEO "$TOKEN_instructor_b" "{\"clase_id\":$CLASE_V}"
+estado_es 403 "borrar-video de un curso ajeno -> 403"
+api POST $BORRAR_VIDEO "$TOKEN_instructor_a" '{"clase_id":99999999}'
+estado_es 404 "borrar-video de una clase inexistente -> 404"
+api POST /escuela/guardar-clase "$TOKEN_instructor_a" "{\"seccion_id\":$SEC_V2,\"titulo\":\"Clase sin video\",\"es_muestra\":false}"; CLASE_SIN="$(campo_json id)"
+api POST $BORRAR_VIDEO "$TOKEN_instructor_a" "{\"clase_id\":$CLASE_SIN}"
+estado_es 404 "borrar-video de una clase sin video -> 404"
+api GET "/escuela/curso-edicion?id=$CURSO_V" "$TOKEN_instructor_a"
+[ "$(echo "$cuerpo" | python3 -c "
+import sys,json
+c={k['id']:k for s in json.load(sys.stdin)['secciones'] for k in s['clases']}[$CLASE_V]
+print(c['video']['estado']=='listo' and c['video']['duracion_segundos'] is not None and c['video_nuevo']['estado']=='error')")" = "True" ]; verificar "curso-edicion muestra en cada clase su video vigente y el video nuevo con error" $?
+cuerpo_no_tiene "$(psql_n8n "select encode(clave,'hex') from escuela.claves_video where video_id = $VIDEO_2")" "curso-edicion no contiene la clave de cifrado"
+api GET "/escuela/curso-edicion?id=$CURSO_V" "$TOKEN_instructor_a"
+[ "$(echo "$cuerpo" | python3 -c "
+import sys,json
+c={k['id']:k for s in json.load(sys.stdin)['secciones'] for k in s['clases']}[$CLASE_SIN]
+print(c['video'] is None and c['video_nuevo'] is None)")" = "True" ]; verificar "una clase sin video muestra video y video_nuevo en null" $?
+BASE_V2="cursos/$CURSO_V/secciones/$SEC_V2/clases/$CLASE_V/$VIDEO_2"
+api POST $BORRAR_VIDEO "$TOKEN_invitado" "{\"clase_id\":$CLASE_V}"
+estado_es 204 "un miembro del equipo borra el video de la clase (vigente y con error) -> 204"
+[ "$(psql_n8n "select count(*) from escuela.videos_clase where clase_id = $CLASE_V")" = "0" ] && [ "$(psql_n8n "select count(*) from escuela.claves_video where video_id in ($VIDEO_2, $VIDEO_3)")" = "0" ]; verificar "se borraron las filas de la base y sus claves" $?
+[ "$(existe_video "$BASE_V2/hls/lista.m3u8")" != "200" ] && [ "$(existe_video "$BASE_V2/hls/segmento_00001.ts")" != "200" ]; verificar "se borraron los archivos del video de Storage" $?
+api GET "$ESTADO_VIDEO?clase_id=$CLASE_V" "$TOKEN_instructor_a"
+cuerpo_tiene '"vigente":null,"nuevo":null' "estado-video de la clase sin videos -> vigente y nuevo en null"
+# --- borrar-clase y borrar-seccion limpian los archivos
+crear_video_listo "$CLASE_SIN"; verificar "un video real se procesa hasta quedar listo" $?
+BASE_K="$LISTO_BASE"; ID_K="$LISTO_ID"
+[ "$(existe_video "$BASE_K/hls/lista.m3u8")" = "200" ]; verificar "su lista HLS existe en Storage" $?
+api POST /escuela/borrar-clase "$TOKEN_instructor_a" "{\"clase_id\":$CLASE_SIN}"
+estado_es 204 "borrar-clase con video -> 204"
+[ "$(existe_video "$BASE_K/hls/lista.m3u8")" != "200" ] && [ "$(psql_n8n "select count(*) from escuela.videos_clase where id = $ID_K")" = "0" ]; verificar "borrar-clase borra también los archivos y la fila de su video" $?
+api POST /escuela/guardar-seccion "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_V,\"titulo\":\"Sección para borrar\"}"; SEC_B="$(campo_json id)"
+api POST /escuela/guardar-clase "$TOKEN_instructor_a" "{\"seccion_id\":$SEC_B,\"titulo\":\"Clase de la sección\",\"es_muestra\":false}"; CLASE_B="$(campo_json id)"
+crear_video_listo "$CLASE_B"; verificar "otro video real queda listo en una sección nueva" $?
+BASE_S="$LISTO_BASE"; ID_S="$LISTO_ID"; PREFIJOS_VIDEO+=("cursos/$CURSO_V")
+api POST /escuela/borrar-seccion "$TOKEN_instructor_a" "{\"seccion_id\":$SEC_B}"
+estado_es 204 "borrar-seccion con una clase con video -> 204"
+[ "$(existe_video "$BASE_S/hls/lista.m3u8")" != "200" ] && [ "$(psql_n8n "select count(*) from escuela.videos_clase where id = $ID_S")" = "0" ]; verificar "borrar-seccion borra también los archivos de los videos de sus clases" $?
+# --- enviar-revision exige un video listo en cada clase
+api POST /escuela/crear-curso "$TOKEN_instructor_a" "{\"titulo\":\"Prueba esc $SUFIJO Revision con video\"}"; CURSO_W="$(campo_json id)"
+api POST /escuela/editar-curso "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_W,\"subtitulo\":\"S\",\"descripcion\":\"D\",\"nivel\":\"basico\",\"categoria_id\":$ID_CAT}"
+api POST /escuela/guardar-seccion "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_W,\"titulo\":\"Única\"}"; SEC_W="$(campo_json id)"
+api POST /escuela/guardar-clase "$TOKEN_instructor_a" "{\"seccion_id\":$SEC_W,\"titulo\":\"Con video\",\"es_muestra\":false}"; CLASE_W1="$(campo_json id)"
+api POST /escuela/guardar-clase "$TOKEN_instructor_a" "{\"seccion_id\":$SEC_W,\"titulo\":\"Sin video\",\"es_muestra\":false}"; CLASE_W2="$(campo_json id)"
+psql_n8n "update escuela.cursos set portada_ruta = 'cursos/$CURSO_W/portada-prueba.png' where id = $CURSO_W" > /dev/null
+poner_video_listo "$CLASE_W1"
+api POST /escuela/enviar-revision "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_W}"
+estado_es 422 "enviar a revisión con una clase sin video listo -> 422"
+cuerpo_tiene '"falta_video"' "la falta es falta_video"
+psql_n8n "insert into escuela.videos_clase (clase_id, estado, nombre_original, tipo_contenido, tamano_bytes, ruta_base) values ($CLASE_W2, 'en_cola', 'a.mp4', 'video/mp4', 10, 'x')" > /dev/null
+api POST /escuela/enviar-revision "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_W}"
+cuerpo_tiene '"falta_video"' "un video en cola todavía no cuenta (falta_video)"
+psql_n8n "delete from escuela.videos_clase where clase_id = $CLASE_W2" > /dev/null; poner_video_listo "$CLASE_W2"
+api POST /escuela/enviar-revision "$TOKEN_instructor_a" "{\"curso_id\":$CURSO_W}"
+estado_es 200 "con un video listo en cada clase el curso se envía a revisión -> 200"
+
 echo
 echo "$((total - fallos)) de $total casos correctos"
+
 [ "$fallos" -eq 0 ]

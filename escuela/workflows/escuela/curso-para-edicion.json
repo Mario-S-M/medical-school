@@ -79,7 +79,7 @@
     },
     {
       "parameters": {
-        "content": "### Leer el curso\nDevuelve el curso con sus secciones y clases en orden, y `es_dueno` para que el editor sepa si puede cambiar los datos del curso.",
+        "content": "### Leer el curso\nDevuelve el curso con sus secciones y clases en orden (cada clase con su `video` vigente y su `video_nuevo` en proceso o con error) y `es_dueno` para que el editor sepa si puede cambiar los datos del curso.",
         "height": 430,
         "width": 480,
         "color": 6
@@ -327,7 +327,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT json_build_object(\n  'id', c.id, 'slug', c.slug, 'titulo', c.titulo, 'subtitulo', c.subtitulo, 'descripcion', c.descripcion,\n  'conocimientos_previos', c.conocimientos_previos, 'lo_que_aprenderas', c.lo_que_aprenderas, 'nivel', c.nivel,\n  'categoria_id', c.categoria_id, 'estado', c.estado, 'comentario_revision', c.comentario_revision,\n  'portada_ruta', c.portada_ruta, 'actualizado_en', c.actualizado_en,\n  'secciones', coalesce((\n    SELECT json_agg(json_build_object('id', s.id, 'titulo', s.titulo, 'posicion', s.posicion, 'clases', coalesce((\n      SELECT json_agg(json_build_object('id', k.id, 'titulo', k.titulo, 'descripcion', k.descripcion,\n             'duracion_estimada_minutos', k.duracion_estimada_minutos, 'es_muestra', k.es_muestra, 'posicion', k.posicion) ORDER BY k.posicion)\n      FROM escuela.clases k WHERE k.seccion_id = s.id), '[]'::json)) ORDER BY s.posicion)\n    FROM escuela.secciones s WHERE s.curso_id = c.id), '[]'::json)) AS curso\nFROM escuela.cursos c WHERE c.id = $1::bigint;",
+        "query": "SELECT json_build_object(\n  'id', c.id, 'slug', c.slug, 'titulo', c.titulo, 'subtitulo', c.subtitulo, 'descripcion', c.descripcion,\n  'conocimientos_previos', c.conocimientos_previos, 'lo_que_aprenderas', c.lo_que_aprenderas, 'nivel', c.nivel,\n  'categoria_id', c.categoria_id, 'estado', c.estado, 'comentario_revision', c.comentario_revision,\n  'portada_ruta', c.portada_ruta, 'actualizado_en', c.actualizado_en,\n  'secciones', coalesce((\n    SELECT json_agg(json_build_object('id', s.id, 'titulo', s.titulo, 'posicion', s.posicion, 'clases', coalesce((\n      SELECT json_agg(json_build_object('id', k.id, 'titulo', k.titulo, 'descripcion', k.descripcion,\n             'duracion_estimada_minutos', k.duracion_estimada_minutos, 'es_muestra', k.es_muestra, 'posicion', k.posicion,\n             'video', (SELECT json_build_object('estado', v.estado, 'duracion_segundos', v.duracion_segundos) FROM escuela.videos_clase v WHERE v.clase_id = k.id AND v.vigente),\n             'video_nuevo', (SELECT json_build_object('id', v.id, 'estado', v.estado, 'error', v.error) FROM escuela.videos_clase v WHERE v.clase_id = k.id AND NOT v.vigente ORDER BY v.id DESC LIMIT 1)) ORDER BY k.posicion)\n      FROM escuela.clases k WHERE k.seccion_id = s.id), '[]'::json)) ORDER BY s.posicion)\n    FROM escuela.secciones s WHERE s.curso_id = c.id), '[]'::json)) AS curso\nFROM escuela.cursos c WHERE c.id = $1::bigint;",
         "options": {
           "queryReplacement": "={{ [$json.curso.id] }}"
         }
@@ -561,7 +561,7 @@
         "aaf2a8b3-c2d7-5ef5-ac67-250bb1ac316b",
         "636a233c-52ad-58c5-bcc1-8f6c9a2a14d9"
       ],
-      "description": "Devuelve el curso con sus secciones y clases en orden, y es_dueno para que el editor sepa si puede cambiar los datos del curso."
+      "description": "Devuelve el curso con sus secciones y clases en orden (cada clase con su video vigente y su video_nuevo en proceso o con error) y es_dueno para que el"
     }
   ],
   "pinData": {},
