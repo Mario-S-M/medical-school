@@ -65,6 +65,28 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  transcodificador:
+    # Convierte los videos de clase a HLS cifrado con ffmpeg (SPEC 08). Solo se alcanza por la red de Docker.
+    build: ./transcodificador
+    restart: unless-stopped
+    environment:
+      SECRETO_TRANSCODIFICADOR: ${SECRETO_TRANSCODIFICADOR}
+      CLAVE_SERVICIO: ${SERVICE_ROLE_KEY}
+      URL_STORAGE: http://storage:5000
+      URL_CALLBACK: http://n8n:5678/webhook/escuela/interno/video-procesado
+    volumes:
+      - transcodificador-trabajo:/trabajo
+    tmpfs:
+      - /tmp
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2g
+    depends_on:
+      - n8n
+
   caddy:
     image: caddy:2.11.9-alpine
     restart: unless-stopped
@@ -89,3 +111,4 @@ services:
 
 volumes:
   pgadmin_data:
+  transcodificador-trabajo:
