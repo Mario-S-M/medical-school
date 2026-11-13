@@ -2,14 +2,14 @@
 # Pruebas del transcodificador (SPEC 08). Desde la raíz del repo, con el stack levantado:
 #   bash transcodificador/pruebas/pruebas.sh
 # Genera sus videos con el ffmpeg del propio contenedor, los sube a un curso de prueba del bucket "videos"
-# (cursos/9001/...) y lo borra todo al terminar. No contiene secretos: los lee de .env. Sale con código 1 si algo falla.
+# (cursos/9001/...) y lo borra todo al terminar. No contiene secretos: la clave de servicio se lee de .env y el secreto del transcodificador sale del contenedor api. Sale con código 1 si algo falla.
 set -u
 
 DIRECTORIO_TEMPORAL="$(mktemp -d)"
 total=0; fallos=0
 leer_env() { grep -E "^$1=" .env | head -1 | cut -d= -f2-; }
 CLAVE_SERVICIO="$(leer_env SERVICE_ROLE_KEY)"
-SECRETO="$(leer_env SECRETO_TRANSCODIFICADOR)"
+SECRETO="@entorno"  # marcador: el contenedor api usa su propio SECRETO_TRANSCODIFICADOR, que nunca se imprime
 ALMACEN="http://127.0.0.1:$(leer_env KONG_HTTP_PORT)/storage/v1"
 BASE_PRUEBA="cursos/9001/secciones/1/clases/1"
 IDS=()
@@ -43,11 +43,13 @@ print(json.dumps(rutas))
 PY
 }
 
-# api <método> <ruta> [secreto] [cuerpo]: llama al transcodificador DESDE el contenedor de n8n; imprime "estado cuerpo"
+# api <método> <ruta> [secreto] [cuerpo]: llama al transcodificador DESDE el contenedor api (el mismo camino que usa la API real);
+# imprime "estado cuerpo". Con el secreto "@entorno" (por omisión) manda el SECRETO_TRANSCODIFICADOR del propio contenedor.
 api() {
-  docker compose exec -T -e METODO="$1" -e RUTA="$2" -e SEC="${3-$SECRETO}" -e CUERPO="${4:-}" n8n node -e '
+  docker compose exec -T -e METODO="$1" -e RUTA="$2" -e SEC="${3-$SECRETO}" -e CUERPO="${4:-}" api node -e '
     const cab = { "Content-Type": "application/json" };
-    if (process.env.SEC) cab["X-Secreto-Transcodificador"] = process.env.SEC;
+    const secreto = process.env.SEC === "@entorno" ? process.env.SECRETO_TRANSCODIFICADOR : process.env.SEC;
+    if (secreto) cab["X-Secreto-Transcodificador"] = secreto;
     fetch("http://transcodificador:8090" + process.env.RUTA, { method: process.env.METODO, headers: cab, body: process.env.CUERPO || undefined })
       .then(async (r) => console.log(r.status, await r.text()));'
 }
@@ -86,7 +88,7 @@ existe() { curl -s -o /dev/null -w '%{http_code}' "$ALMACEN/object/videos/$1" -H
 alto_de() { docker compose exec -T transcodificador ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "$1" | grep -m1 -E "^[0-9]+" | tr -d "\r"; }
 
 echo "== Aislamiento y autenticación"
-[ "$(docker compose exec -T n8n node -e 'fetch("http://transcodificador:8090/salud").then(async r=>console.log(r.status, await r.text()))')" = '200 {"listo": true}' ]; verificar "/salud responde 200 desde el contenedor de n8n" $?
+[ "$(docker compose exec -T api node -e 'fetch("http://transcodificador:8090/salud").then(async r=>console.log(r.status, await r.text()))')" = '200 {"listo": true}' ]; verificar "/salud responde 200 desde el contenedor api" $?
 [ -z "$(docker compose port transcodificador 8090 2> /dev/null | grep -v ':0$')" ]; verificar "el puerto 8090 no está publicado en el host" $?
 [ "$(docker compose exec -T transcodificador id -u)" = "10001" ]; verificar "el servicio corre con un usuario sin privilegios" $?
 docker compose exec -T transcodificador sh -c 'touch /app/x' > /dev/null 2>&1; [ $? -ne 0 ]; verificar "el sistema de archivos es de solo lectura" $?

@@ -1,8 +1,8 @@
 ---
-import LayoutBase from '../layouts/LayoutBase.astro';
-import PanelProtegido from '../componentes/auth/PanelProtegido';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import ProtectedPanel from '../features/auth/components/ProtectedPanel';
 ---
 
-<LayoutBase titulo="Panel">
-  <PanelProtegido client:only="react" />
-</LayoutBase>
+<BaseLayout title="Panel">
+  <ProtectedPanel client:only="react" />
+</BaseLayout>

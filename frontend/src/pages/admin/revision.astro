@@ -1,8 +1,8 @@
 ---
-import LayoutBase from '../../layouts/LayoutBase.astro';
-import PaginaRevision from '../../componentes/admin/PaginaRevision';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import ReviewPage from '../../features/admin/components/ReviewPage';
 ---
 
-<LayoutBase arriba titulo="Revisión">
-  <PaginaRevision client:only="react" />
-</LayoutBase>
+<BaseLayout alignTop title="Revisión">
+  <ReviewPage client:only="react" />
+</BaseLayout>

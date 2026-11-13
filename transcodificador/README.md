@@ -3,8 +3,8 @@
 Servicio de Docker (Python estándar y `ffmpeg`) que convierte el video original de una clase a **HLS de una sola calidad cifrado con AES-128** y lo guarda en el bucket privado `videos` de Supabase Storage. Definido en `specs/08-subida-videos-hls-cifrado.md`. Solo se alcanza por la red interna de Docker (`http://transcodificador:8090`): **no publica ningún puerto**.
 
 ```
-n8n ──POST /trabajos──► transcodificador ──descarga el original / sube el HLS──► Supabase Storage (bucket videos)
-n8n ◄──webhook interno video-procesado── transcodificador
+API ──POST /trabajos──► transcodificador ──descarga el original / sube el HLS──► Supabase Storage (bucket videos)
+API ◄──aviso interno video-procesado── transcodificador
 ```
 
 ## API
@@ -25,7 +25,7 @@ Las rutas `/trabajos` exigen la cabecera `X-Secreto-Transcodificador` (el valor 
 1. Descarga el original de Storage (con la clave de servicio) y lo mide con `ffprobe`. Si no es un video legible, `error`; si dura más de **30 minutos**, `error` con "El video dura más de 30 minutos."
 2. Lo convierte con `ffmpeg`: H.264 (`main`) y AAC estéreo, **alto máximo 720** (un original menor no se amplía), un fotograma clave cada 2 s y **segmentos de 6 s** cifrados con AES-128 (`-hls_key_info_file`, IV aleatorio por video). La lista declara `#EXT-X-KEY:METHOD=AES-128,URI="clave",IV=0x…`: el `URI` es un marcador que la reproducción protegida (SPEC 09) sustituirá.
 3. Sube `lista.m3u8` y los `segmento_00001.ts`… a `<ruta_base>/hls/` y **borra el original**. Si algo falla, el original se conserva para reintentar.
-4. Avisa a n8n con `POST http://n8n:5678/webhook/escuela/interno/video-procesado` (`{ video_id, resultado, duracion_segundos?, mensaje? }` y la misma cabecera secreta), hasta 5 intentos con espera creciente.
+4. Avisa a la API con `POST` a `URL_CALLBACK` (`http://api:3000/api/v1/interno/video-procesado`) (`{ video_id, resultado, duracion_segundos?, mensaje? }` y la misma cabecera secreta), hasta 5 intentos con espera creciente.
 
 Procesa **un trabajo a la vez**; la cola vive en memoria, así que un reinicio la pierde (los videos se reintentan desde la escuela).
 

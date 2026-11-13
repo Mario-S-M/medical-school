@@ -1,8 +1,8 @@
 ---
-import LayoutBase from '../../layouts/LayoutBase.astro';
-import PaginaEquipo from '../../componentes/instructor/PaginaEquipo';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import TeamPage from '../../features/team/components/TeamPage';
 ---
 
-<LayoutBase arriba titulo="Mi equipo de apoyo">
-  <PaginaEquipo client:only="react" />
-</LayoutBase>
+<BaseLayout alignTop title="Mi equipo de apoyo">
+  <TeamPage client:only="react" />
+</BaseLayout>

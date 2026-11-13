@@ -1,8 +1,8 @@
 ---
-import LayoutBase from '../layouts/LayoutBase.astro';
-import FichaCurso from '../componentes/catalogo/FichaCurso';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import CourseSheet from '../features/catalog/components/CourseSheet';
 ---
 
-<LayoutBase arriba titulo="Curso">
-  <FichaCurso client:only="react" />
-</LayoutBase>
+<BaseLayout alignTop title="Curso">
+  <CourseSheet client:only="react" />
+</BaseLayout>

@@ -6,33 +6,6 @@ include:
     env_file: .env
 
 services:
-  n8n:
-    image: docker.n8n.io/n8nio/n8n:2.46.6
-    restart: unless-stopped
-    environment:
-      DB_TYPE: postgresdb
-      DB_POSTGRESDB_HOST: db
-      DB_POSTGRESDB_PORT: 5432
-      DB_POSTGRESDB_DATABASE: n8n
-      DB_POSTGRESDB_USER: ${USUARIO_BD_N8N}
-      DB_POSTGRESDB_PASSWORD: ${CONTRASENA_BD_N8N}
-      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
-      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE}
-      TZ: ${GENERIC_TIMEZONE}
-      N8N_SECURE_COOKIE: "false"
-      N8N_RUNNERS_ENABLED: "true"
-      # Las ejecuciones "no guardadas" se marcan como borradas y su contenido (con contraseñas de la API
-      # de autenticación) queda hasta el borrado definitivo: se reduce de 1 h a unos minutos.
-      EXECUTIONS_DATA_HARD_DELETE_BUFFER: "0"
-      EXECUTIONS_DATA_PRUNE_HARD_DELETE_INTERVAL: "1"
-    ports:
-      - "127.0.0.1:5678:5678"
-    volumes:
-      - ./n8n:/home/node/.n8n
-    depends_on:
-      db:
-        condition: service_healthy
-
   pgadmin:
     image: dpage/pgadmin4:9.19
     restart: unless-stopped
@@ -73,7 +46,7 @@ services:
       SECRETO_TRANSCODIFICADOR: ${SECRETO_TRANSCODIFICADOR}
       CLAVE_SERVICIO: ${SERVICE_ROLE_KEY}
       URL_STORAGE: http://storage:5000
-      URL_CALLBACK: http://n8n:5678/webhook/escuela/interno/video-procesado
+      URL_CALLBACK: http://api:3000/api/v1/interno/video-procesado
     volumes:
       - transcodificador-trabajo:/trabajo
     tmpfs:
@@ -85,29 +58,44 @@ services:
       - no-new-privileges:true
     mem_limit: 2g
     depends_on:
-      - n8n
+      - api
 
-  caddy:
-    image: caddy:2.11.9-alpine
+  api:
+    # API NestJS (SPEC 09). Aplica las migraciones de la base plataforma antes de servir.
+    build: ./api
     restart: unless-stopped
     environment:
+      NODE_ENV: production
+      PUERTO: "3000"
       ORIGEN_FRONT: ${ORIGEN_FRONT}
-      SECRETO_PROXY: ${SECRETO_PROXY}
+      JWT_SECRET: ${JWT_SECRET}
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL}
+      URL_SUPABASE_AUTH: http://auth:9999
+      # API admin de Supabase Auth (buscar_usuario, asignar_rol, invitar_equipo) y Storage (portadas)
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      URL_STORAGE: http://storage:5000
+      # Transcodificador de videos (red interna): la API le pide los trabajos y recibe su aviso con el mismo secreto
+      URL_TRANSCODIFICADOR: http://transcodificador:8090
+      SECRETO_TRANSCODIFICADOR: ${SECRETO_TRANSCODIFICADOR}
+      # Correo de las invitaciones del equipo: Mailpit, sin TLS ni autenticación
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      BD_HOST: db
+      BD_PUERTO: "5432"
+      USUARIO_BD_PLATAFORMA: ${USUARIO_BD_PLATAFORMA}
+      CONTRASENA_BD_PLATAFORMA: ${CONTRASENA_BD_PLATAFORMA}
     ports:
-      - "127.0.0.1:8080:8080"
-    volumes:
-      - ./auth/proxy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./auth/plantillas:/plantillas:ro
+      - "127.0.0.1:3000:3000"
     tmpfs:
-      - /data
-      - /config
+      - /tmp
     read_only: true
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
     depends_on:
-      - n8n
+      db:
+        condition: service_healthy
 
 volumes:
   pgadmin_data:

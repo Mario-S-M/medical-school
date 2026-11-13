@@ -6,7 +6,7 @@ API interna (solo red de Docker, cabecera X-Secreto-Transcodificador):
   GET  /salud               -> { listo: true }
 
 Un trabajo descarga el original de Storage, lo mide, lo convierte a HLS de una sola calidad (H.264 + AAC,
-alto máximo 720, segmentos de 6 s) cifrado con AES-128, sube el resultado, borra el original y avisa a n8n.
+alto máximo 720, segmentos de 6 s) cifrado con AES-128, sube el resultado, borra el original y avisa a la API (URL_CALLBACK, /api/v1/interno/video-procesado).
 Procesa un trabajo a la vez. Solo usa la biblioteca estándar y ffmpeg.
 """
 import hmac

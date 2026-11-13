@@ -134,6 +134,10 @@ services:
       db:
         # Disable this if you are using an external Postgres database
         condition: service_healthy
+      # Descarga las plantillas de correo de la API. Solo en este sentido: la API llama a auth en cada petición,
+      # no al arrancar, así que no hay dependencia circular.
+      api:
+        condition: service_started
     environment:
       GOTRUE_API_HOST: 0.0.0.0
       GOTRUE_API_PORT: 9999
@@ -183,14 +187,14 @@ services:
       GOTRUE_SMTP_SENDER_NAME: ${SMTP_SENDER_NAME}
       # Los códigos de verificación y recuperación caducan a los 15 minutos
       GOTRUE_MAILER_OTP_EXP: "900"
-      # Todas las llamadas llegan desde n8n (una sola IP): los límites por IP de Supabase Auth no distinguen
-      # usuarios, así que los límites reales son los de n8n (tabla eventos_codigo)
+      # Todas las llamadas llegan desde la API (una sola IP): los límites por IP de Supabase Auth no distinguen
+      # usuarios, así que los límites reales son los de la API (tabla autenticacion.eventos_codigo en la base plataforma)
       GOTRUE_RATE_LIMIT_VERIFY: "1000"
       GOTRUE_RATE_LIMIT_EMAIL_SENT: "1000"
-      # Plantillas en español (las sirve Caddy por la red interna) y aviso de cambio de contraseña
-      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: http://caddy:8081/verificacion.html
-      GOTRUE_MAILER_TEMPLATES_RECOVERY: http://caddy:8081/recuperacion.html
-      GOTRUE_MAILER_TEMPLATES_PASSWORD_CHANGED_NOTIFICATION: http://caddy:8081/cambio_contrasena.html
+      # Plantillas en español (las sirve la API NestJS por la red interna, /plantillas-correo/) y aviso de cambio de contraseña
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: http://api:3000/plantillas-correo/verificacion.html
+      GOTRUE_MAILER_TEMPLATES_RECOVERY: http://api:3000/plantillas-correo/recuperacion.html
+      GOTRUE_MAILER_TEMPLATES_PASSWORD_CHANGED_NOTIFICATION: http://api:3000/plantillas-correo/cambio_contrasena.html
       GOTRUE_MAILER_SUBJECTS_CONFIRMATION: Tu código de verificación
       GOTRUE_MAILER_SUBJECTS_RECOVERY: Tu código para recuperar la contraseña
       GOTRUE_MAILER_SUBJECTS_PASSWORD_CHANGED_NOTIFICATION: Tu contraseña fue cambiada
@@ -518,8 +522,8 @@ services:
       - ./volumes/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:Z
       # Initialize the database settings with JWT_SECRET and JWT_EXP
       - ./volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:Z
-      # Rol y base de n8n (usa USUARIO_BD_N8N y CONTRASENA_BD_N8N del entorno)
-      - ./volumes/db/n8n.sql:/docker-entrypoint-initdb.d/init-scripts/99-n8n.sql:Z
+      # Rol y base de la plataforma (usa USUARIO_BD_PLATAFORMA y CONTRASENA_BD_PLATAFORMA del entorno)
+      - ./volumes/db/plataforma.sql:/docker-entrypoint-initdb.d/init-scripts/99-plataforma.sql:Z
       # PGDATA directory is persisted between restarts
       - ./volumes/db/data:/var/lib/postgresql/data:Z
       # Changes required for internal supabase data such as _analytics
@@ -553,8 +557,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXP: ${JWT_EXPIRY}
-      USUARIO_BD_N8N: ${USUARIO_BD_N8N}
-      CONTRASENA_BD_N8N: ${CONTRASENA_BD_N8N}
+      USUARIO_BD_PLATAFORMA: ${USUARIO_BD_PLATAFORMA}
+      CONTRASENA_BD_PLATAFORMA: ${CONTRASENA_BD_PLATAFORMA}
     command:
       [
         "postgres",

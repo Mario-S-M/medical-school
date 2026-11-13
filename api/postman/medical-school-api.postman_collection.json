@@ -1,0 +1,1927 @@
+{
+  "info": {
+    "_postman_id": "6c2b6865-5f12-5128-a341-47e8c6526926",
+    "name": "Medical School API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "API de la plataforma (SPEC 09): REST en /api/v1 para autenticacion y GraphQL en /api/graphql. Entra por {{base_url}} (NestJS, puerto 3000). Contrato completo en api/README.md. Orden sugerido: Registrar usuario, Verificar correo (codigo en Mailpit), Iniciar sesion, yo."
+  },
+  "item": [
+    {
+      "id": "3becbf7a-54af-59ab-920c-fd96ee26d89a",
+      "name": "Auth",
+      "description": "REST de autenticacion y salud. Las cookies las gestiona Postman.",
+      "item": [
+        {
+          "id": "3f6b8599-ddb6-5640-af5b-d9648d7a92ba",
+          "name": "Registrar usuario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/usuarios",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "usuarios"
+              ]
+            },
+            "description": "Crea la cuenta sin verificar y envia un codigo de 6 digitos por correo (en local, a Mailpit: http://127.0.0.1:8025). Responde 201 igual exista o no el correo y no abre sesion.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"{{nombre}}\",\n  \"correo\": \"{{correo}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 Cuenta creada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/usuarios",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "usuarios"
+                  ]
+                },
+                "description": "Crea la cuenta sin verificar y envia un codigo de 6 digitos por correo (en local, a Mailpit: http://127.0.0.1:8025). Responde 201 igual exista o no el correo y no abre sesion.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nombre\": \"{{nombre}}\",\n  \"correo\": \"{{correo}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"mensaje\": \"Cuenta creada. Revisa tu correo y verifícala con el código que te enviamos.\"\n}"
+            },
+            {
+              "name": "422 Contraseña insegura",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/usuarios",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "usuarios"
+                  ]
+                },
+                "description": "Crea la cuenta sin verificar y envia un codigo de 6 digitos por correo (en local, a Mailpit: http://127.0.0.1:8025). Responde 201 igual exista o no el correo y no abre sesion.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nombre\": \"{{nombre}}\",\n  \"correo\": \"{{correo}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"CONTRASENA_INSEGURA\",\n    \"mensaje\": \"La contraseña no cumple los requisitos.\",\n    \"detalles\": [\n      {\n        \"campo\": \"contrasena\",\n        \"regla\": \"no_es_comun\",\n        \"mensaje\": \"Es una contraseña demasiado común.\"\n      }\n    ]\n  }\n}"
+            },
+            {
+              "name": "422 Validación fallida",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/usuarios",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "usuarios"
+                  ]
+                },
+                "description": "Crea la cuenta sin verificar y envia un codigo de 6 digitos por correo (en local, a Mailpit: http://127.0.0.1:8025). Responde 201 igual exista o no el correo y no abre sesion.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nombre\": \"{{nombre}}\",\n  \"correo\": \"{{correo}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"VALIDACION_FALLIDA\",\n    \"mensaje\": \"La solicitud no es válida.\",\n    \"detalles\": [\n      {\n        \"campo\": \"correo\",\n        \"regla\": \"formato_invalido\",\n        \"mensaje\": \"Debe ser un correo válido de hasta 254 caracteres.\"\n      }\n    ]\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "653c12e7-270f-520d-bcfa-2435ddeff540",
+          "name": "Verificar correo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/verificaciones-correo",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "verificaciones-correo"
+              ]
+            },
+            "description": "Canjea el codigo de 6 digitos que llego a Mailpit. Solo confirma el correo, no abre sesion.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Correo verificado",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/verificaciones-correo",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "verificaciones-correo"
+                  ]
+                },
+                "description": "Canjea el codigo de 6 digitos que llego a Mailpit. Solo confirma el correo, no abre sesion.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"mensaje\": \"Correo verificado. Ya puedes iniciar sesión.\"\n}"
+            },
+            {
+              "name": "400 Código inválido",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/verificaciones-correo",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "verificaciones-correo"
+                  ]
+                },
+                "description": "Canjea el codigo de 6 digitos que llego a Mailpit. Solo confirma el correo, no abre sesion.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"CODIGO_INVALIDO\",\n    \"mensaje\": \"El código no es válido o expiró.\"\n  }\n}"
+            },
+            {
+              "name": "429 Código bloqueado",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/verificaciones-correo",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "verificaciones-correo"
+                  ]
+                },
+                "description": "Canjea el codigo de 6 digitos que llego a Mailpit. Solo confirma el correo, no abre sesion.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "900"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"CODIGO_BLOQUEADO\",\n    \"mensaje\": \"Demasiados códigos erróneos. Inténtalo de nuevo más tarde.\",\n    \"reintentar_en_segundos\": 900\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "f7c2cb00-29ca-5f6c-aa65-0b5eceeb23c6",
+          "name": "Reenviar verificación",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/verificaciones-correo/reenvio",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "verificaciones-correo",
+                "reenvio"
+              ]
+            },
+            "description": "Reenvia el codigo de verificacion. Responde 202 igual exista, este verificado o no el correo. Maximo 3 solicitudes por correo y hora.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "202 Solicitud aceptada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/verificaciones-correo/reenvio",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "verificaciones-correo",
+                    "reenvio"
+                  ]
+                },
+                "description": "Reenvia el codigo de verificacion. Responde 202 igual exista, este verificado o no el correo. Maximo 3 solicitudes por correo y hora.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Accepted",
+              "code": 202,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"mensaje\": \"Si el correo está registrado y sin verificar, te enviamos un código.\"\n}"
+            },
+            {
+              "name": "429 Demasiados intentos",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/verificaciones-correo/reenvio",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "verificaciones-correo",
+                    "reenvio"
+                  ]
+                },
+                "description": "Reenvia el codigo de verificacion. Responde 202 igual exista, este verificado o no el correo. Maximo 3 solicitudes por correo y hora.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "3600"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"DEMASIADOS_INTENTOS\",\n    \"mensaje\": \"Demasiadas solicitudes. Inténtalo más tarde.\",\n    \"reintentar_en_segundos\": 3600\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 202\", function () { pm.response.to.have.status(202); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "f45ba247-f3db-51a6-8bc9-055a62531e83",
+          "name": "Iniciar sesión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sesiones",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sesiones"
+              ]
+            },
+            "description": "Devuelve token_acceso (JWT de 15 minutos) y la cookie HttpOnly token_renovacion. El script guarda token_acceso en el entorno.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Sesión iniciada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/sesiones",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sesiones"
+                  ]
+                },
+                "description": "Devuelve token_acceso (JWT de 15 minutos) y la cookie HttpOnly token_renovacion. El script guarda token_acceso en el entorno.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "token_renovacion=<valor>; HttpOnly; SameSite=Strict; Path=/api/v1/sesiones; Max-Age=604800"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"token_acceso\": \"<JWT>\",\n  \"tipo_token\": \"Bearer\",\n  \"expira_en\": 900,\n  \"usuario\": {\n    \"id\": \"0b5e1c1e-3f7a-4a2b-9c58-1d9f6e2a7c10\",\n    \"correo\": \"ana@example.com\",\n    \"nombre\": \"Ana\"\n  }\n}"
+            },
+            {
+              "name": "401 Credenciales inválidas",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/sesiones",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sesiones"
+                  ]
+                },
+                "description": "Devuelve token_acceso (JWT de 15 minutos) y la cookie HttpOnly token_renovacion. El script guarda token_acceso en el entorno.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"CREDENCIALES_INVALIDAS\",\n    \"mensaje\": \"Correo o contraseña incorrectos.\"\n  }\n}"
+            },
+            {
+              "name": "403 Correo no verificado",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/sesiones",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sesiones"
+                  ]
+                },
+                "description": "Devuelve token_acceso (JWT de 15 minutos) y la cookie HttpOnly token_renovacion. El script guarda token_acceso en el entorno.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"CORREO_NO_VERIFICADO\",\n    \"mensaje\": \"Debes verificar tu correo antes de iniciar sesión.\"\n  }\n}"
+            },
+            {
+              "name": "429 Cuenta bloqueada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/sesiones",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sesiones"
+                  ]
+                },
+                "description": "Devuelve token_acceso (JWT de 15 minutos) y la cookie HttpOnly token_renovacion. El script guarda token_acceso en el entorno.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"contrasena\": \"{{contrasena}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "900"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"CUENTA_BLOQUEADA\",\n    \"mensaje\": \"Demasiados intentos fallidos. Inténtalo de nuevo más tarde.\",\n    \"reintentar_en_segundos\": 900\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+                  "const cuerpo = pm.response.json();",
+                  "pm.test(\"Trae token_acceso y tipo_token Bearer\", function () { pm.expect(cuerpo.token_acceso).to.be.a(\"string\"); pm.expect(cuerpo.tipo_token).to.eql(\"Bearer\"); });",
+                  "pm.environment.set(\"token_acceso\", cuerpo.token_acceso);",
+                  "pm.test(\"Cookie token_renovacion\", function () { pm.expect(pm.cookies.has(\"token_renovacion\")).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "beb0fb7a-91ae-5773-868f-11208d8d46dc",
+          "name": "Renovar sesión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Solicitado-Con",
+                "value": "front"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sesiones/renovacion",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sesiones",
+                "renovacion"
+              ]
+            },
+            "description": "Usa la cookie token_renovacion (Postman la guarda sola) y exige X-Solicitado-Con: front. Devuelve un token nuevo y rota la cookie."
+          },
+          "response": [
+            {
+              "name": "200 Sesión renovada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Solicitado-Con",
+                    "value": "front"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/sesiones/renovacion",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sesiones",
+                    "renovacion"
+                  ]
+                },
+                "description": "Usa la cookie token_renovacion (Postman la guarda sola) y exige X-Solicitado-Con: front. Devuelve un token nuevo y rota la cookie."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "token_renovacion=<valor>; HttpOnly; SameSite=Strict; Path=/api/v1/sesiones; Max-Age=604800"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"token_acceso\": \"<JWT>\",\n  \"tipo_token\": \"Bearer\",\n  \"expira_en\": 900,\n  \"usuario\": {\n    \"id\": \"0b5e1c1e-3f7a-4a2b-9c58-1d9f6e2a7c10\",\n    \"correo\": \"ana@example.com\",\n    \"nombre\": \"Ana\"\n  }\n}"
+            },
+            {
+              "name": "401 Token inválido",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Solicitado-Con",
+                    "value": "front"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/sesiones/renovacion",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sesiones",
+                    "renovacion"
+                  ]
+                },
+                "description": "Usa la cookie token_renovacion (Postman la guarda sola) y exige X-Solicitado-Con: front. Devuelve un token nuevo y rota la cookie."
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "token_renovacion=; HttpOnly; SameSite=Strict; Path=/api/v1/sesiones; Max-Age=0"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"TOKEN_INVALIDO\",\n    \"mensaje\": \"La sesión no es válida o expiró. Inicia sesión de nuevo.\"\n  }\n}"
+            },
+            {
+              "name": "403 Falta X-Solicitado-Con",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Solicitado-Con",
+                    "value": "front"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/sesiones/renovacion",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sesiones",
+                    "renovacion"
+                  ]
+                },
+                "description": "Usa la cookie token_renovacion (Postman la guarda sola) y exige X-Solicitado-Con: front. Devuelve un token nuevo y rota la cookie."
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"ORIGEN_NO_PERMITIDO\",\n    \"mensaje\": \"Origen no permitido.\"\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+                  "const cuerpo = pm.response.json();",
+                  "pm.test(\"Trae token_acceso y tipo_token Bearer\", function () { pm.expect(cuerpo.token_acceso).to.be.a(\"string\"); pm.expect(cuerpo.tipo_token).to.eql(\"Bearer\"); });",
+                  "pm.environment.set(\"token_acceso\", cuerpo.token_acceso);",
+                  "pm.test(\"Cookie token_renovacion\", function () { pm.expect(pm.cookies.has(\"token_renovacion\")).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "151a9ccb-cf27-5415-87fb-d34c85e83e29",
+          "name": "Cerrar sesión",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/sesiones/actual",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sesiones",
+                "actual"
+              ]
+            },
+            "description": "Revoca la sesion en Supabase y borra la cookie. Responde 204 sin cuerpo. El token de acceso sigue valiendo hasta 15 minutos (verificacion local).",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_acceso}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "204 Sesión cerrada",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/sesiones/actual",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sesiones",
+                    "actual"
+                  ]
+                },
+                "description": "Revoca la sesion en Supabase y borra la cookie. Responde 204 sin cuerpo. El token de acceso sigue valiendo hasta 15 minutos (verificacion local).",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token_acceso}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "status": "No Content",
+              "code": 204,
+              "_postman_previewlanguage": "text",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "token_renovacion=; HttpOnly; SameSite=Strict; Path=/api/v1/sesiones; Max-Age=0"
+                }
+              ],
+              "cookie": [],
+              "body": ""
+            },
+            {
+              "name": "401 Sin token",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/sesiones/actual",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sesiones",
+                    "actual"
+                  ]
+                },
+                "description": "Revoca la sesion en Supabase y borra la cookie. Responde 204 sin cuerpo. El token de acceso sigue valiendo hasta 15 minutos (verificacion local).",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token_acceso}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"TOKEN_INVALIDO\",\n    \"mensaje\": \"El token de acceso falta, no es válido o expiró.\"\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 204\", function () { pm.response.to.have.status(204); });",
+                  "pm.environment.set(\"token_acceso\", \"\");"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "5539163c-ba2c-52ca-a14c-4470bb262f7e",
+          "name": "Recuperar contraseña",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/recuperaciones",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recuperaciones"
+              ]
+            },
+            "description": "Envia un codigo de 6 digitos al correo. Responde 202 igual exista o no el correo.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "202 Solicitud aceptada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/recuperaciones",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "recuperaciones"
+                  ]
+                },
+                "description": "Envia un codigo de 6 digitos al correo. Responde 202 igual exista o no el correo.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Accepted",
+              "code": 202,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"mensaje\": \"Si el correo está registrado, te enviamos un código.\"\n}"
+            },
+            {
+              "name": "429 Demasiados intentos",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/recuperaciones",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "recuperaciones"
+                  ]
+                },
+                "description": "Envia un codigo de 6 digitos al correo. Responde 202 igual exista o no el correo.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "3600"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"DEMASIADOS_INTENTOS\",\n    \"mensaje\": \"Demasiadas solicitudes. Inténtalo más tarde.\",\n    \"reintentar_en_segundos\": 3600\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 202\", function () { pm.response.to.have.status(202); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "8c8bc9e9-f49b-590d-bcbe-28f013a0165d",
+          "name": "Restablecer contraseña",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/recuperaciones/restablecimiento",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recuperaciones",
+                "restablecimiento"
+              ]
+            },
+            "description": "Cambia la contrasena con el codigo de Mailpit. Revoca todas las sesiones del usuario. Si la contrasena es insegura el codigo no se gasta.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\",\n  \"contrasena_nueva\": \"{{contrasena_nueva}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Contraseña actualizada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/recuperaciones/restablecimiento",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "recuperaciones",
+                    "restablecimiento"
+                  ]
+                },
+                "description": "Cambia la contrasena con el codigo de Mailpit. Revoca todas las sesiones del usuario. Si la contrasena es insegura el codigo no se gasta.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\",\n  \"contrasena_nueva\": \"{{contrasena_nueva}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"mensaje\": \"Contraseña actualizada. Inicia sesión con la nueva.\"\n}"
+            },
+            {
+              "name": "400 Código inválido",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/recuperaciones/restablecimiento",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "recuperaciones",
+                    "restablecimiento"
+                  ]
+                },
+                "description": "Cambia la contrasena con el codigo de Mailpit. Revoca todas las sesiones del usuario. Si la contrasena es insegura el codigo no se gasta.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\",\n  \"contrasena_nueva\": \"{{contrasena_nueva}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"CODIGO_INVALIDO\",\n    \"mensaje\": \"El código no es válido o expiró.\"\n  }\n}"
+            },
+            {
+              "name": "422 Contraseña insegura",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/recuperaciones/restablecimiento",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "recuperaciones",
+                    "restablecimiento"
+                  ]
+                },
+                "description": "Cambia la contrasena con el codigo de Mailpit. Revoca todas las sesiones del usuario. Si la contrasena es insegura el codigo no se gasta.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"correo\": \"{{correo}}\",\n  \"codigo\": \"{{codigo}}\",\n  \"contrasena_nueva\": \"{{contrasena_nueva}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"CONTRASENA_INSEGURA\",\n    \"mensaje\": \"La contraseña no cumple los requisitos.\",\n    \"detalles\": [\n      {\n        \"campo\": \"contrasena_nueva\",\n        \"regla\": \"minimo_12_caracteres\",\n        \"mensaje\": \"Debe tener al menos 12 caracteres.\"\n      }\n    ]\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "ba5ff004-e8bd-56b5-ba8d-7672edfe8aa7",
+          "name": "Salud",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/salud",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "salud"
+              ]
+            },
+            "description": "Comprueba que la API responde."
+          },
+          "response": [
+            {
+              "name": "200 Lista",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/salud",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "salud"
+                  ]
+                },
+                "description": "Comprueba que la API responde."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"listo\": true\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "5966542a-ced4-53b2-bd3a-f15aca0ef305",
+      "name": "GraphQL",
+      "description": "POST /api/graphql. Requiere token_acceso (Authorization: Bearer).",
+      "item": [
+        {
+          "id": "eeb033e7-75da-52d0-9161-251e5521ec2b",
+          "name": "yo (consulta persistida)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/graphql",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "graphql"
+              ]
+            },
+            "description": "La consulta que envia el front: solo el hash de api/graphql/persisted-queries.json. Funciona en produccion y en desarrollo. Requiere token_acceso (ejecuta antes Iniciar sesion).",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_acceso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentId\": \"sha256:c5c9e25bff523b1efce79b1761908a0c17cf2f5f3e07f5ea447a53b7bde60d73\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Usuario",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/graphql",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "graphql"
+                  ]
+                },
+                "description": "La consulta que envia el front: solo el hash de api/graphql/persisted-queries.json. Funciona en produccion y en desarrollo. Requiere token_acceso (ejecuta antes Iniciar sesion).",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token_acceso}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"documentId\": \"sha256:c5c9e25bff523b1efce79b1761908a0c17cf2f5f3e07f5ea447a53b7bde60d73\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"yo\": {\n      \"id\": \"0b5e1c1e-3f7a-4a2b-9c58-1d9f6e2a7c10\",\n      \"correo\": \"ana@example.com\",\n      \"nombre\": \"Ana\"\n    }\n  }\n}"
+            },
+            {
+              "name": "200 Token inválido",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/graphql",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "graphql"
+                  ]
+                },
+                "description": "La consulta que envia el front: solo el hash de api/graphql/persisted-queries.json. Funciona en produccion y en desarrollo. Requiere token_acceso (ejecuta antes Iniciar sesion).",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token_acceso}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"documentId\": \"sha256:c5c9e25bff523b1efce79b1761908a0c17cf2f5f3e07f5ea447a53b7bde60d73\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": null,\n  \"errors\": [\n    {\n      \"message\": \"El token de acceso falta, no es válido o expiró.\",\n      \"locations\": [\n        {\n          \"line\": 1,\n          \"column\": 9\n        }\n      ],\n      \"path\": [\n        \"yo\"\n      ],\n      \"extensions\": {\n        \"codigo\": \"TOKEN_INVALIDO\"\n      }\n    }\n  ]\n}"
+            },
+            {
+              "name": "400 Consulta no permitida (hash desconocido)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/graphql",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "graphql"
+                  ]
+                },
+                "description": "La consulta que envia el front: solo el hash de api/graphql/persisted-queries.json. Funciona en produccion y en desarrollo. Requiere token_acceso (ejecuta antes Iniciar sesion).",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token_acceso}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"documentId\": \"sha256:c5c9e25bff523b1efce79b1761908a0c17cf2f5f3e07f5ea447a53b7bde60d73\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"CONSULTA_NO_PERMITIDA\",\n    \"mensaje\": \"Esta consulta no está permitida.\"\n  },\n  \"errors\": [\n    {\n      \"message\": \"Esta consulta no está permitida.\",\n      \"extensions\": {\n        \"codigo\": \"CONSULTA_NO_PERMITIDA\"\n      }\n    }\n  ]\n}"
+            },
+            {
+              "name": "429 Demasiadas solicitudes",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/graphql",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "graphql"
+                  ]
+                },
+                "description": "La consulta que envia el front: solo el hash de api/graphql/persisted-queries.json. Funciona en produccion y en desarrollo. Requiere token_acceso (ejecuta antes Iniciar sesion).",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token_acceso}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"documentId\": \"sha256:c5c9e25bff523b1efce79b1761908a0c17cf2f5f3e07f5ea447a53b7bde60d73\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "42"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"DEMASIADAS_SOLICITUDES\",\n    \"mensaje\": \"Demasiadas solicitudes. Espera para volver a intentar.\",\n    \"reintentar_en_segundos\": 42\n  },\n  \"errors\": [\n    {\n      \"message\": \"Demasiadas solicitudes. Espera para volver a intentar.\",\n      \"extensions\": {\n        \"codigo\": \"DEMASIADAS_SOLICITUDES\"\n      }\n    }\n  ]\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+                  "const cuerpo = pm.response.json();",
+                  "pm.test(\"yo devuelve id, correo y nombre\", function () { pm.expect(cuerpo.data.yo).to.have.all.keys(\"id\", \"correo\", \"nombre\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "0629302f-d30b-5f00-8e3f-e0ee66de02b4",
+          "name": "yo (consulta completa, solo desarrollo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/graphql",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "graphql"
+              ]
+            },
+            "description": "Texto completo de la consulta. Con NODE_ENV=production responde 400 CONSULTA_NO_PERMITIDA; solo se acepta en desarrollo (npm run start:dev).",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token_acceso}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query yo { yo { correo id nombre } }\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Usuario (desarrollo)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/graphql",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "graphql"
+                  ]
+                },
+                "description": "Texto completo de la consulta. Con NODE_ENV=production responde 400 CONSULTA_NO_PERMITIDA; solo se acepta en desarrollo (npm run start:dev).",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token_acceso}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"query\": \"query yo { yo { correo id nombre } }\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"yo\": {\n      \"id\": \"0b5e1c1e-3f7a-4a2b-9c58-1d9f6e2a7c10\",\n      \"correo\": \"ana@example.com\",\n      \"nombre\": \"Ana\"\n    }\n  }\n}"
+            },
+            {
+              "name": "400 Consulta no permitida (producción)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/graphql",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "graphql"
+                  ]
+                },
+                "description": "Texto completo de la consulta. Con NODE_ENV=production responde 400 CONSULTA_NO_PERMITIDA; solo se acepta en desarrollo (npm run start:dev).",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token_acceso}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"query\": \"query yo { yo { correo id nombre } }\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"CONSULTA_NO_PERMITIDA\",\n    \"mensaje\": \"Esta consulta no está permitida.\"\n  },\n  \"errors\": [\n    {\n      \"message\": \"Esta consulta no está permitida.\",\n      \"extensions\": {\n        \"codigo\": \"CONSULTA_NO_PERMITIDA\"\n      }\n    }\n  ]\n}"
+            },
+            {
+              "name": "400 Consulta demasiado compleja (profundidad > 8 o costo > 1000)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/graphql",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "graphql"
+                  ]
+                },
+                "description": "Texto completo de la consulta. Con NODE_ENV=production responde 400 CONSULTA_NO_PERMITIDA; solo se acepta en desarrollo (npm run start:dev).",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token_acceso}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"query\": \"query yo { yo { correo id nombre } }\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"CONSULTA_DEMASIADO_COMPLEJA\",\n    \"mensaje\": \"La consulta es demasiado compleja (profundidad máxima 8, costo máximo 1000).\"\n  },\n  \"errors\": [\n    {\n      \"message\": \"La consulta es demasiado compleja (profundidad máxima 8, costo máximo 1000).\",\n      \"extensions\": {\n        \"codigo\": \"CONSULTA_DEMASIADO_COMPLEJA\"\n      }\n    }\n  ]\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200 en desarrollo o 400 CONSULTA_NO_PERMITIDA en produccion\", function () { pm.expect([200, 400]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,9 +1,9 @@
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './pruebas',
+  testDir: './tests',
   testMatch: '**/*.spec.ts',
-  globalSetup: './pruebas/ayudas/preparar.ts',
+  globalSetup: './tests/helpers/setup.ts',
   workers: 1,
   timeout: 45_000,
   reporter: 'list',

@@ -1,8 +1,8 @@
 ---
-import LayoutBase from '../layouts/LayoutBase.astro';
-import ListaCursos from '../componentes/catalogo/ListaCursos';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import CourseList from '../features/catalog/components/CourseList';
 ---
 
-<LayoutBase arriba titulo="Cursos">
-  <ListaCursos client:only="react" />
-</LayoutBase>
+<BaseLayout alignTop title="Cursos">
+  <CourseList client:only="react" />
+</BaseLayout>
