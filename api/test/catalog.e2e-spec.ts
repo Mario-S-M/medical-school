@@ -75,6 +75,11 @@ beforeAll(async () => {
   const section = sql(`insert into escuela.secciones (curso_id, titulo, posicion) values (${anatomyId}, 'Huesos', 1) returning id`);
   sql(`insert into escuela.secciones (curso_id, titulo, posicion) values (${anatomyId}, 'Músculos', 2)`);
   sql(`insert into escuela.clases (seccion_id, titulo, descripcion, duracion_estimada_minutos, es_muestra, posicion) values (${section}, 'El cráneo', 'Clase 1', 15, true, 1), (${section}, 'La columna', null, null, false, 2)`);
+  // Solo "El cráneo" tiene un video vigente y listo; "La columna" tiene uno en cola (no cuenta).
+  sql(`insert into escuela.videos_clase (clase_id, estado, vigente, nombre_original, tipo_contenido, tamano_bytes, duracion_segundos, ruta_base)
+       select id, 'listo', true, 'a.mp4', 'video/mp4', 1000, 60, 'zz-e2e/cat-${process.pid}/1' from escuela.clases where seccion_id = ${section} and titulo = 'El cráneo'`);
+  sql(`insert into escuela.videos_clase (clase_id, estado, vigente, nombre_original, tipo_contenido, tamano_bytes, ruta_base)
+       select id, 'en_cola', false, 'a.mp4', 'video/mp4', 1000, 'zz-e2e/cat-${process.pid}/2' from escuela.clases where seccion_id = ${section} and titulo = 'La columna'`);
   insertCourse('borrador', `Curso borrador ${TAG}`, 'borrador', 'avanzado', null);
   insertCourse('revision', `Curso en revisión ${TAG}`, 'en_revision', 'avanzado', null);
 });
@@ -150,6 +155,8 @@ describe('búsqueda', () => {
 
 describe('filtros', () => {
   it('los filtros de categoría (slug) y nivel reducen el resultado', async () => {
+    // Un publicado de otra categoría y otro nivel: sin datos copiados, los filtros deben poder reducir el resultado.
+    insertCourse('otro', 'Histología general', 'publicado', 'intermedio', null);
     const all = await list({});
     const byCategory = await list({ c: categorySlug });
     const byLevel = await list({ n: 'avanzado' });
@@ -264,6 +271,14 @@ describe('ficha del curso', () => {
     ]);
   });
 
+  it('cada clase dice solo si tiene un video vigente y listo (tiene_video), sin rutas ni estado', async () => {
+    const query = `query($s: String!) { curso(slug: $s) { secciones { clases { titulo tiene_video } } } }`;
+    const body = await run(app, query, { s: slugOf('anatomia') });
+    const clases = (body.data as { curso: { secciones: { clases: Record<string, unknown>[] }[] } }).curso.secciones[0].clases;
+    expect(clases).toEqual([{ titulo: 'El cráneo', tiene_video: true }, { titulo: 'La columna', tiene_video: false }]);
+    expect(JSON.stringify(body)).not.toMatch(/zz-e2e\/cat|ruta_base|listo|en_cola/);
+  });
+
   it('no contiene campos internos: ni en la respuesta ni en el esquema (introspección)', async () => {
     const body = await run(app, CURSO, { s: slugOf('anatomia') });
     expect(JSON.stringify(body)).not.toMatch(/instructor_id|comentario_revision|"estado"|correo|@|clave|video/i);
@@ -278,7 +293,7 @@ describe('ficha del curso', () => {
     expect(types).toHaveLength(6);
     for (const type of types) {
       expect(type.fields.length).toBeGreaterThan(0);
-      for (const field of type.fields) expect(field.name).not.toMatch(forbidden);
+      for (const field of type.fields.filter((f) => f.name !== 'tiene_video')) expect(field.name).not.toMatch(forbidden);
     }
   });
 

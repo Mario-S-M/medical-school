@@ -3,7 +3,7 @@
     "_postman_id": "8d472502-6da6-5bdb-8639-683b87b383cb",
     "name": "Medical School - Escuela",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Escuela de la plataforma (SPEC 10): operaciones de GraphQL en POST {{base_url}}/api/graphql (por hash persistido, como el front) y las tres rutas REST de los bordes (firma de portada, firma de video y webhook interno). Contrato completo en api/README.md. Inicia sesión primero con la colección Medical School API (guarda token_acceso en el entorno). Orden sugerido: crear_curso, guardar_seccion, guardar_clase, firma de portada, confirmar_portada, firma de video, confirmar_subida_video, estado_video, enviar_revision."
+    "description": "Escuela de la plataforma (SPEC 10): operaciones de GraphQL en POST {{base_url}}/api/graphql (por hash persistido, como el front) y las rutas REST de los bordes (firma de portada, firma de video, webhook interno y, para la reproducción, la lista y la clave con el token de reproducción). Contrato completo en api/README.md. Inicia sesión primero con la colección Medical School API (guarda token_acceso en el entorno). Orden sugerido: crear_curso, guardar_seccion, guardar_clase, firma de portada, confirmar_portada, firma de video, confirmar_subida_video, estado_video, enviar_revision. Para ver una clase: autorizar_reproduccion (guarda token_reproduccion), GET lista.m3u8 y GET clave."
   },
   "item": [
     {
@@ -2527,7 +2527,7 @@
             "description": "Query `cursos_en_revision` por hash persistido (sha256 del manifiesto api/graphql/persisted-queries.json). Solo administrador. Cursos pendientes con su temario completo.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"operationName\": \"cursos_en_revision\",\n  \"variables\": {},\n  \"extensions\": {\n    \"persistedQuery\": {\n      \"version\": 1,\n      \"sha256Hash\": \"3c74db2dd4a0b8d0fac4f8964df42a05a07c41cca8ee67529babfe0329df2424\"\n    }\n  }\n}",
+              "raw": "{\n  \"operationName\": \"cursos_en_revision\",\n  \"variables\": {},\n  \"extensions\": {\n    \"persistedQuery\": {\n      \"version\": 1,\n      \"sha256Hash\": \"0b466b67b180019924cada37c51ef0adddec033656e1e16d73d60de47663d5bf\"\n    }\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2563,7 +2563,7 @@
                 "description": "Query `cursos_en_revision` por hash persistido (sha256 del manifiesto api/graphql/persisted-queries.json). Solo administrador. Cursos pendientes con su temario completo.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"operationName\": \"cursos_en_revision\",\n  \"variables\": {},\n  \"extensions\": {\n    \"persistedQuery\": {\n      \"version\": 1,\n      \"sha256Hash\": \"3c74db2dd4a0b8d0fac4f8964df42a05a07c41cca8ee67529babfe0329df2424\"\n    }\n  }\n}",
+                  "raw": "{\n  \"operationName\": \"cursos_en_revision\",\n  \"variables\": {},\n  \"extensions\": {\n    \"persistedQuery\": {\n      \"version\": 1,\n      \"sha256Hash\": \"0b466b67b180019924cada37c51ef0adddec033656e1e16d73d60de47663d5bf\"\n    }\n  }\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -2609,7 +2609,7 @@
                 "description": "Query `cursos_en_revision` por hash persistido (sha256 del manifiesto api/graphql/persisted-queries.json). Solo administrador. Cursos pendientes con su temario completo.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"operationName\": \"cursos_en_revision\",\n  \"variables\": {},\n  \"extensions\": {\n    \"persistedQuery\": {\n      \"version\": 1,\n      \"sha256Hash\": \"3c74db2dd4a0b8d0fac4f8964df42a05a07c41cca8ee67529babfe0329df2424\"\n    }\n  }\n}",
+                  "raw": "{\n  \"operationName\": \"cursos_en_revision\",\n  \"variables\": {},\n  \"extensions\": {\n    \"persistedQuery\": {\n      \"version\": 1,\n      \"sha256Hash\": \"0b466b67b180019924cada37c51ef0adddec033656e1e16d73d60de47663d5bf\"\n    }\n  }\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -4768,9 +4768,655 @@
       ]
     },
     {
+      "id": "d322227a-4cc9-5524-b8d3-b42bd830dfd4",
+      "name": "Reproducción",
+      "description": "Autorización de 10 minutos (GraphQL) y las dos rutas REST de borde con el token de reproducción: la lista y la clave (módulo playback).",
+      "item": [
+        {
+          "id": "d4dee996-f8f9-5989-8905-978f330f4ab3",
+          "name": "autorizar_reproduccion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_acceso}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/graphql",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "graphql"
+              ]
+            },
+            "description": "Mutation `autorizar_reproduccion` por hash persistido (sha256 del manifiesto api/graphql/persisted-queries.json). Cualquier cuenta con sesión si la clase es muestra de un curso publicado; el instructor dueño, su equipo de apoyo y los administradores, en cualquier clase. Devuelve el token de reproducción (JWT de audiencia `reproduccion`, atado a un video y una cuenta; vive expira_en segundos, 600 por defecto), la ruta de la lista y el correo de la marca de agua. Un script de prueba guarda el token en la variable de entorno token_reproduccion y el video_id en video_id: úsalos en las dos rutas REST de esta carpeta. No guarda nada en la base.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operationName\": \"autorizar_reproduccion\",\n  \"variables\": {\n    \"clase_id\": {{clase_id}}\n  },\n  \"extensions\": {\n    \"persistedQuery\": {\n      \"version\": 1,\n      \"sha256Hash\": \"6bd64c96f1178c6f72341e294e3fdc0f29bc46478b2865806d569e2b23ba6541\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Correcta",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_acceso}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/graphql",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "graphql"
+                  ]
+                },
+                "description": "Mutation `autorizar_reproduccion` por hash persistido (sha256 del manifiesto api/graphql/persisted-queries.json). Cualquier cuenta con sesión si la clase es muestra de un curso publicado; el instructor dueño, su equipo de apoyo y los administradores, en cualquier clase. Devuelve el token de reproducción (JWT de audiencia `reproduccion`, atado a un video y una cuenta; vive expira_en segundos, 600 por defecto), la ruta de la lista y el correo de la marca de agua. Un script de prueba guarda el token en la variable de entorno token_reproduccion y el video_id en video_id: úsalos en las dos rutas REST de esta carpeta. No guarda nada en la base.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"operationName\": \"autorizar_reproduccion\",\n  \"variables\": {\n    \"clase_id\": {{clase_id}}\n  },\n  \"extensions\": {\n    \"persistedQuery\": {\n      \"version\": 1,\n      \"sha256Hash\": \"6bd64c96f1178c6f72341e294e3fdc0f29bc46478b2865806d569e2b23ba6541\"\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"autorizar_reproduccion\": {\n      \"video_id\": 1,\n      \"token\": \"<JWT de reproducción>\",\n      \"expira_en\": 600,\n      \"lista_url\": \"/api/v1/reproducciones/1/lista.m3u8\",\n      \"duracion_segundos\": 240,\n      \"marca_agua\": \"ana@example.com\"\n    }\n  }\n}"
+            },
+            {
+              "name": "200 Error SIN_PERMISO",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_acceso}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/graphql",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "graphql"
+                  ]
+                },
+                "description": "Mutation `autorizar_reproduccion` por hash persistido (sha256 del manifiesto api/graphql/persisted-queries.json). Cualquier cuenta con sesión si la clase es muestra de un curso publicado; el instructor dueño, su equipo de apoyo y los administradores, en cualquier clase. Devuelve el token de reproducción (JWT de audiencia `reproduccion`, atado a un video y una cuenta; vive expira_en segundos, 600 por defecto), la ruta de la lista y el correo de la marca de agua. Un script de prueba guarda el token en la variable de entorno token_reproduccion y el video_id en video_id: úsalos en las dos rutas REST de esta carpeta. No guarda nada en la base.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"operationName\": \"autorizar_reproduccion\",\n  \"variables\": {\n    \"clase_id\": {{clase_id}}\n  },\n  \"extensions\": {\n    \"persistedQuery\": {\n      \"version\": 1,\n      \"sha256Hash\": \"6bd64c96f1178c6f72341e294e3fdc0f29bc46478b2865806d569e2b23ba6541\"\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"data\": null,\n  \"errors\": [\n    {\n      \"message\": \"No tienes permiso para hacer esto.\",\n      \"locations\": [\n        {\n          \"line\": 1,\n          \"column\": 1\n        }\n      ],\n      \"path\": [\n        \"autorizar_reproduccion\"\n      ],\n      \"extensions\": {\n        \"codigo\": \"SIN_PERMISO\"\n      }\n    }\n  ]\n}"
+            },
+            {
+              "name": "200 Error VIDEO_NO_DISPONIBLE",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_acceso}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/graphql",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "graphql"
+                  ]
+                },
+                "description": "Mutation `autorizar_reproduccion` por hash persistido (sha256 del manifiesto api/graphql/persisted-queries.json). Cualquier cuenta con sesión si la clase es muestra de un curso publicado; el instructor dueño, su equipo de apoyo y los administradores, en cualquier clase. Devuelve el token de reproducción (JWT de audiencia `reproduccion`, atado a un video y una cuenta; vive expira_en segundos, 600 por defecto), la ruta de la lista y el correo de la marca de agua. Un script de prueba guarda el token en la variable de entorno token_reproduccion y el video_id en video_id: úsalos en las dos rutas REST de esta carpeta. No guarda nada en la base.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"operationName\": \"autorizar_reproduccion\",\n  \"variables\": {\n    \"clase_id\": {{clase_id}}\n  },\n  \"extensions\": {\n    \"persistedQuery\": {\n      \"version\": 1,\n      \"sha256Hash\": \"6bd64c96f1178c6f72341e294e3fdc0f29bc46478b2865806d569e2b23ba6541\"\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"data\": null,\n  \"errors\": [\n    {\n      \"message\": \"El video de esta clase todavía no está listo.\",\n      \"locations\": [\n        {\n          \"line\": 1,\n          \"column\": 1\n        }\n      ],\n      \"path\": [\n        \"autorizar_reproduccion\"\n      ],\n      \"extensions\": {\n        \"codigo\": \"VIDEO_NO_DISPONIBLE\"\n      }\n    }\n  ]\n}"
+            },
+            {
+              "name": "200 Error NO_ENCONTRADO",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_acceso}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/graphql",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "graphql"
+                  ]
+                },
+                "description": "Mutation `autorizar_reproduccion` por hash persistido (sha256 del manifiesto api/graphql/persisted-queries.json). Cualquier cuenta con sesión si la clase es muestra de un curso publicado; el instructor dueño, su equipo de apoyo y los administradores, en cualquier clase. Devuelve el token de reproducción (JWT de audiencia `reproduccion`, atado a un video y una cuenta; vive expira_en segundos, 600 por defecto), la ruta de la lista y el correo de la marca de agua. Un script de prueba guarda el token en la variable de entorno token_reproduccion y el video_id en video_id: úsalos en las dos rutas REST de esta carpeta. No guarda nada en la base.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"operationName\": \"autorizar_reproduccion\",\n  \"variables\": {\n    \"clase_id\": {{clase_id}}\n  },\n  \"extensions\": {\n    \"persistedQuery\": {\n      \"version\": 1,\n      \"sha256Hash\": \"6bd64c96f1178c6f72341e294e3fdc0f29bc46478b2865806d569e2b23ba6541\"\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"data\": null,\n  \"errors\": [\n    {\n      \"message\": \"La clase no existe.\",\n      \"locations\": [\n        {\n          \"line\": 1,\n          \"column\": 1\n        }\n      ],\n      \"path\": [\n        \"autorizar_reproduccion\"\n      ],\n      \"extensions\": {\n        \"codigo\": \"NO_ENCONTRADO\"\n      }\n    }\n  ]\n}"
+            },
+            {
+              "name": "200 Error TOKEN_INVALIDO",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_acceso}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/graphql",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "graphql"
+                  ]
+                },
+                "description": "Mutation `autorizar_reproduccion` por hash persistido (sha256 del manifiesto api/graphql/persisted-queries.json). Cualquier cuenta con sesión si la clase es muestra de un curso publicado; el instructor dueño, su equipo de apoyo y los administradores, en cualquier clase. Devuelve el token de reproducción (JWT de audiencia `reproduccion`, atado a un video y una cuenta; vive expira_en segundos, 600 por defecto), la ruta de la lista y el correo de la marca de agua. Un script de prueba guarda el token en la variable de entorno token_reproduccion y el video_id en video_id: úsalos en las dos rutas REST de esta carpeta. No guarda nada en la base.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"operationName\": \"autorizar_reproduccion\",\n  \"variables\": {\n    \"clase_id\": {{clase_id}}\n  },\n  \"extensions\": {\n    \"persistedQuery\": {\n      \"version\": 1,\n      \"sha256Hash\": \"6bd64c96f1178c6f72341e294e3fdc0f29bc46478b2865806d569e2b23ba6541\"\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"data\": null,\n  \"errors\": [\n    {\n      \"message\": \"El token de acceso falta, no es válido o expiró.\",\n      \"locations\": [\n        {\n          \"line\": 1,\n          \"column\": 1\n        }\n      ],\n      \"path\": [\n        \"autorizar_reproduccion\"\n      ],\n      \"extensions\": {\n        \"codigo\": \"TOKEN_INVALIDO\"\n      }\n    }\n  ]\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const cuerpo = pm.response.json();",
+                  "const a = cuerpo.data && cuerpo.data.autorizar_reproduccion;",
+                  "if (a) {",
+                  "  pm.environment.set('token_reproduccion', a.token);",
+                  "  pm.environment.set('video_id', a.video_id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "055f5d44-7668-58e5-b68a-717d2b10bc1a",
+          "name": "GET lista.m3u8",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_reproduccion}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reproducciones/{{video_id}}/lista.m3u8",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reproducciones",
+                "{{video_id}}",
+                "lista.m3u8"
+              ]
+            },
+            "description": "Authorization: Bearer {{token_reproduccion}} (el token de la mutación autorizar_reproduccion; el token de acceso normal da 401). Responde la lista HLS con el #EXT-X-KEY tal cual y cada segmento como URL firmada de Storage con la misma vida que la autorización. Cache-Control: no-store. 401 sin token, caducado o de otra audiencia; 403 con el token de otro video; 404 si el video ya no es el vigente o no está listo. Cuenta para el límite de 120 peticiones por minuto y por IP de la ruta (429 con Retry-After)."
+          },
+          "response": [
+            {
+              "name": "200 Correcta",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_reproduccion}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/reproducciones/{{video_id}}/lista.m3u8",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "reproducciones",
+                    "{{video_id}}",
+                    "lista.m3u8"
+                  ]
+                },
+                "description": "Authorization: Bearer {{token_reproduccion}} (el token de la mutación autorizar_reproduccion; el token de acceso normal da 401). Responde la lista HLS con el #EXT-X-KEY tal cual y cada segmento como URL firmada de Storage con la misma vida que la autorización. Cache-Control: no-store. 401 sin token, caducado o de otra audiencia; 403 con el token de otro video; 404 si el video ya no es el vigente o no está listo. Cuenta para el límite de 120 peticiones por minuto y por IP de la ruta (429 con Retry-After)."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "text",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/vnd.apple.mpegurl"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-store"
+                }
+              ],
+              "body": "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-KEY:METHOD=AES-128,URI=\"clave\",IV=0x00000000000000000000000000000001\n#EXTINF:6.000000,\n/almacen/object/sign/videos/cursos/1/secciones/1/clases/1/1/hls/segmento_00000.ts?token=<firma>\n#EXT-X-ENDLIST\n"
+            },
+            {
+              "name": "401 TOKEN_INVALIDO",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_reproduccion}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/reproducciones/{{video_id}}/lista.m3u8",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "reproducciones",
+                    "{{video_id}}",
+                    "lista.m3u8"
+                  ]
+                },
+                "description": "Authorization: Bearer {{token_reproduccion}} (el token de la mutación autorizar_reproduccion; el token de acceso normal da 401). Responde la lista HLS con el #EXT-X-KEY tal cual y cada segmento como URL firmada de Storage con la misma vida que la autorización. Cache-Control: no-store. 401 sin token, caducado o de otra audiencia; 403 con el token de otro video; 404 si el video ya no es el vigente o no está listo. Cuenta para el límite de 120 peticiones por minuto y por IP de la ruta (429 con Retry-After)."
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"TOKEN_INVALIDO\",\n    \"mensaje\": \"El token de acceso falta, no es válido o expiró.\"\n  }\n}"
+            },
+            {
+              "name": "403 SIN_PERMISO",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_reproduccion}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/reproducciones/{{video_id}}/lista.m3u8",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "reproducciones",
+                    "{{video_id}}",
+                    "lista.m3u8"
+                  ]
+                },
+                "description": "Authorization: Bearer {{token_reproduccion}} (el token de la mutación autorizar_reproduccion; el token de acceso normal da 401). Responde la lista HLS con el #EXT-X-KEY tal cual y cada segmento como URL firmada de Storage con la misma vida que la autorización. Cache-Control: no-store. 401 sin token, caducado o de otra audiencia; 403 con el token de otro video; 404 si el video ya no es el vigente o no está listo. Cuenta para el límite de 120 peticiones por minuto y por IP de la ruta (429 con Retry-After)."
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"SIN_PERMISO\",\n    \"mensaje\": \"No tienes permiso para hacer esto.\"\n  }\n}"
+            },
+            {
+              "name": "404 NO_ENCONTRADO",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_reproduccion}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/reproducciones/{{video_id}}/lista.m3u8",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "reproducciones",
+                    "{{video_id}}",
+                    "lista.m3u8"
+                  ]
+                },
+                "description": "Authorization: Bearer {{token_reproduccion}} (el token de la mutación autorizar_reproduccion; el token de acceso normal da 401). Responde la lista HLS con el #EXT-X-KEY tal cual y cada segmento como URL firmada de Storage con la misma vida que la autorización. Cache-Control: no-store. 401 sin token, caducado o de otra audiencia; 403 con el token de otro video; 404 si el video ya no es el vigente o no está listo. Cuenta para el límite de 120 peticiones por minuto y por IP de la ruta (429 con Retry-After)."
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"NO_ENCONTRADO\",\n    \"mensaje\": \"Recurso no encontrado.\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "id": "04a265f7-f319-5d8b-9ac5-eba9dd2e2bee",
+          "name": "GET clave",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_reproduccion}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reproducciones/{{video_id}}/clave",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reproducciones",
+                "{{video_id}}",
+                "clave"
+              ]
+            },
+            "description": "Authorization: Bearer {{token_reproduccion}}. Única ruta que entrega la clave de cifrado AES-128: 16 bytes en application/octet-stream (Postman los muestra como binario). Cache-Control: no-store. Mismos errores que la lista."
+          },
+          "response": [
+            {
+              "name": "200 Correcta",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_reproduccion}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/reproducciones/{{video_id}}/clave",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "reproducciones",
+                    "{{video_id}}",
+                    "clave"
+                  ]
+                },
+                "description": "Authorization: Bearer {{token_reproduccion}}. Única ruta que entrega la clave de cifrado AES-128: 16 bytes en application/octet-stream (Postman los muestra como binario). Cache-Control: no-store. Mismos errores que la lista."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "text",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/octet-stream"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-store"
+                }
+              ],
+              "body": "<16 bytes binarios>"
+            },
+            {
+              "name": "401 TOKEN_INVALIDO",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_reproduccion}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/reproducciones/{{video_id}}/clave",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "reproducciones",
+                    "{{video_id}}",
+                    "clave"
+                  ]
+                },
+                "description": "Authorization: Bearer {{token_reproduccion}}. Única ruta que entrega la clave de cifrado AES-128: 16 bytes en application/octet-stream (Postman los muestra como binario). Cache-Control: no-store. Mismos errores que la lista."
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"TOKEN_INVALIDO\",\n    \"mensaje\": \"El token de acceso falta, no es válido o expiró.\"\n  }\n}"
+            },
+            {
+              "name": "403 SIN_PERMISO",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_reproduccion}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/reproducciones/{{video_id}}/clave",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "reproducciones",
+                    "{{video_id}}",
+                    "clave"
+                  ]
+                },
+                "description": "Authorization: Bearer {{token_reproduccion}}. Única ruta que entrega la clave de cifrado AES-128: 16 bytes en application/octet-stream (Postman los muestra como binario). Cache-Control: no-store. Mismos errores que la lista."
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"SIN_PERMISO\",\n    \"mensaje\": \"No tienes permiso para hacer esto.\"\n  }\n}"
+            },
+            {
+              "name": "404 NO_ENCONTRADO",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_reproduccion}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/reproducciones/{{video_id}}/clave",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "reproducciones",
+                    "{{video_id}}",
+                    "clave"
+                  ]
+                },
+                "description": "Authorization: Bearer {{token_reproduccion}}. Única ruta que entrega la clave de cifrado AES-128: 16 bytes en application/octet-stream (Postman los muestra como binario). Cache-Control: no-store. Mismos errores que la lista."
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"error\": {\n    \"codigo\": \"NO_ENCONTRADO\",\n    \"mensaje\": \"Recurso no encontrado.\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "834966c2-f6c8-595a-b901-ebe9a6532a08",
       "name": "Desarrollo: consulta completa",
-      "description": "Las mismas 33 operaciones con el texto completo de la consulta en lugar del hash. Solo funcionan con la API en desarrollo (npm run start:dev); en producción, 400 CONSULTA_NO_PERMITIDA.",
+      "description": "Las mismas 34 operaciones con el texto completo de la consulta en lugar del hash. Solo funcionan con la API en desarrollo (npm run start:dev); en producción, 400 CONSULTA_NO_PERMITIDA.",
       "item": [
         {
           "id": "cebfe5d5-2c61-5383-8445-4fa3b2638fe0",
@@ -7253,7 +7899,7 @@
             "description": "Solo desarrollo (NODE_ENV distinto de production): envía el texto completo de la consulta. En producción da 400 CONSULTA_NO_PERMITIDA. Solo administrador. Cursos pendientes con su temario completo.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"operationName\": \"cursos_en_revision\",\n  \"query\": \"query cursos_en_revision { cursos_en_revision { actualizado_en categoria conocimientos_previos descripcion id instructor lo_que_aprenderas nivel portada_ruta secciones { clases { descripcion duracion_estimada_minutos es_muestra id posicion titulo } id posicion titulo } slug subtitulo titulo } }\",\n  \"variables\": {}\n}",
+              "raw": "{\n  \"operationName\": \"cursos_en_revision\",\n  \"query\": \"query cursos_en_revision { cursos_en_revision { actualizado_en categoria conocimientos_previos descripcion id instructor lo_que_aprenderas nivel portada_ruta secciones { clases { descripcion duracion_estimada_minutos es_muestra id posicion tiene_video titulo } id posicion titulo } slug subtitulo titulo } }\",\n  \"variables\": {}\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -7289,7 +7935,7 @@
                 "description": "Solo desarrollo (NODE_ENV distinto de production): envía el texto completo de la consulta. En producción da 400 CONSULTA_NO_PERMITIDA. Solo administrador. Cursos pendientes con su temario completo.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"operationName\": \"cursos_en_revision\",\n  \"query\": \"query cursos_en_revision { cursos_en_revision { actualizado_en categoria conocimientos_previos descripcion id instructor lo_que_aprenderas nivel portada_ruta secciones { clases { descripcion duracion_estimada_minutos es_muestra id posicion titulo } id posicion titulo } slug subtitulo titulo } }\",\n  \"variables\": {}\n}",
+                  "raw": "{\n  \"operationName\": \"cursos_en_revision\",\n  \"query\": \"query cursos_en_revision { cursos_en_revision { actualizado_en categoria conocimientos_previos descripcion id instructor lo_que_aprenderas nivel portada_ruta secciones { clases { descripcion duracion_estimada_minutos es_muestra id posicion tiene_video titulo } id posicion titulo } slug subtitulo titulo } }\",\n  \"variables\": {}\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -7335,7 +7981,7 @@
                 "description": "Solo desarrollo (NODE_ENV distinto de production): envía el texto completo de la consulta. En producción da 400 CONSULTA_NO_PERMITIDA. Solo administrador. Cursos pendientes con su temario completo.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"operationName\": \"cursos_en_revision\",\n  \"query\": \"query cursos_en_revision { cursos_en_revision { actualizado_en categoria conocimientos_previos descripcion id instructor lo_que_aprenderas nivel portada_ruta secciones { clases { descripcion duracion_estimada_minutos es_muestra id posicion titulo } id posicion titulo } slug subtitulo titulo } }\",\n  \"variables\": {}\n}",
+                  "raw": "{\n  \"operationName\": \"cursos_en_revision\",\n  \"query\": \"query cursos_en_revision { cursos_en_revision { actualizado_en categoria conocimientos_previos descripcion id instructor lo_que_aprenderas nivel portada_ruta secciones { clases { descripcion duracion_estimada_minutos es_muestra id posicion tiene_video titulo } id posicion titulo } slug subtitulo titulo } }\",\n  \"variables\": {}\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -9056,6 +9702,291 @@
                 }
               ],
               "body": "{\n  \"data\": null,\n  \"errors\": [\n    {\n      \"message\": \"El curso está en revisión y no se puede editar.\",\n      \"locations\": [\n        {\n          \"line\": 1,\n          \"column\": 1\n        }\n      ],\n      \"path\": [\n        \"borrar_video\"\n      ],\n      \"extensions\": {\n        \"codigo\": \"CURSO_EN_REVISION\"\n      }\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "id": "8811b28f-b15a-5d60-a7a2-02dd36f99573",
+          "name": "autorizar_reproduccion (consulta completa)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token_acceso}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/graphql",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "graphql"
+              ]
+            },
+            "description": "Solo desarrollo (NODE_ENV distinto de production): envía el texto completo de la consulta. En producción da 400 CONSULTA_NO_PERMITIDA. Cualquier cuenta con sesión si la clase es muestra de un curso publicado; el instructor dueño, su equipo de apoyo y los administradores, en cualquier clase. Devuelve el token de reproducción (JWT de audiencia `reproduccion`, atado a un video y una cuenta; vive expira_en segundos, 600 por defecto), la ruta de la lista y el correo de la marca de agua. Un script de prueba guarda el token en la variable de entorno token_reproduccion y el video_id en video_id: úsalos en las dos rutas REST de esta carpeta. No guarda nada en la base.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operationName\": \"autorizar_reproduccion\",\n  \"query\": \"mutation autorizar_reproduccion($clase_id: EnteroGrande!) { autorizar_reproduccion(clase_id: $clase_id) { duracion_segundos expira_en lista_url marca_agua token video_id } }\",\n  \"variables\": {\n    \"clase_id\": {{clase_id}}\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Correcta",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_acceso}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/graphql",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "graphql"
+                  ]
+                },
+                "description": "Solo desarrollo (NODE_ENV distinto de production): envía el texto completo de la consulta. En producción da 400 CONSULTA_NO_PERMITIDA. Cualquier cuenta con sesión si la clase es muestra de un curso publicado; el instructor dueño, su equipo de apoyo y los administradores, en cualquier clase. Devuelve el token de reproducción (JWT de audiencia `reproduccion`, atado a un video y una cuenta; vive expira_en segundos, 600 por defecto), la ruta de la lista y el correo de la marca de agua. Un script de prueba guarda el token en la variable de entorno token_reproduccion y el video_id en video_id: úsalos en las dos rutas REST de esta carpeta. No guarda nada en la base.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"operationName\": \"autorizar_reproduccion\",\n  \"query\": \"mutation autorizar_reproduccion($clase_id: EnteroGrande!) { autorizar_reproduccion(clase_id: $clase_id) { duracion_segundos expira_en lista_url marca_agua token video_id } }\",\n  \"variables\": {\n    \"clase_id\": {{clase_id}}\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"autorizar_reproduccion\": {\n      \"video_id\": 1,\n      \"token\": \"<JWT de reproducción>\",\n      \"expira_en\": 600,\n      \"lista_url\": \"/api/v1/reproducciones/1/lista.m3u8\",\n      \"duracion_segundos\": 240,\n      \"marca_agua\": \"ana@example.com\"\n    }\n  }\n}"
+            },
+            {
+              "name": "200 Error SIN_PERMISO",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_acceso}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/graphql",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "graphql"
+                  ]
+                },
+                "description": "Solo desarrollo (NODE_ENV distinto de production): envía el texto completo de la consulta. En producción da 400 CONSULTA_NO_PERMITIDA. Cualquier cuenta con sesión si la clase es muestra de un curso publicado; el instructor dueño, su equipo de apoyo y los administradores, en cualquier clase. Devuelve el token de reproducción (JWT de audiencia `reproduccion`, atado a un video y una cuenta; vive expira_en segundos, 600 por defecto), la ruta de la lista y el correo de la marca de agua. Un script de prueba guarda el token en la variable de entorno token_reproduccion y el video_id en video_id: úsalos en las dos rutas REST de esta carpeta. No guarda nada en la base.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"operationName\": \"autorizar_reproduccion\",\n  \"query\": \"mutation autorizar_reproduccion($clase_id: EnteroGrande!) { autorizar_reproduccion(clase_id: $clase_id) { duracion_segundos expira_en lista_url marca_agua token video_id } }\",\n  \"variables\": {\n    \"clase_id\": {{clase_id}}\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"data\": null,\n  \"errors\": [\n    {\n      \"message\": \"No tienes permiso para hacer esto.\",\n      \"locations\": [\n        {\n          \"line\": 1,\n          \"column\": 1\n        }\n      ],\n      \"path\": [\n        \"autorizar_reproduccion\"\n      ],\n      \"extensions\": {\n        \"codigo\": \"SIN_PERMISO\"\n      }\n    }\n  ]\n}"
+            },
+            {
+              "name": "200 Error VIDEO_NO_DISPONIBLE",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_acceso}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/graphql",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "graphql"
+                  ]
+                },
+                "description": "Solo desarrollo (NODE_ENV distinto de production): envía el texto completo de la consulta. En producción da 400 CONSULTA_NO_PERMITIDA. Cualquier cuenta con sesión si la clase es muestra de un curso publicado; el instructor dueño, su equipo de apoyo y los administradores, en cualquier clase. Devuelve el token de reproducción (JWT de audiencia `reproduccion`, atado a un video y una cuenta; vive expira_en segundos, 600 por defecto), la ruta de la lista y el correo de la marca de agua. Un script de prueba guarda el token en la variable de entorno token_reproduccion y el video_id en video_id: úsalos en las dos rutas REST de esta carpeta. No guarda nada en la base.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"operationName\": \"autorizar_reproduccion\",\n  \"query\": \"mutation autorizar_reproduccion($clase_id: EnteroGrande!) { autorizar_reproduccion(clase_id: $clase_id) { duracion_segundos expira_en lista_url marca_agua token video_id } }\",\n  \"variables\": {\n    \"clase_id\": {{clase_id}}\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"data\": null,\n  \"errors\": [\n    {\n      \"message\": \"El video de esta clase todavía no está listo.\",\n      \"locations\": [\n        {\n          \"line\": 1,\n          \"column\": 1\n        }\n      ],\n      \"path\": [\n        \"autorizar_reproduccion\"\n      ],\n      \"extensions\": {\n        \"codigo\": \"VIDEO_NO_DISPONIBLE\"\n      }\n    }\n  ]\n}"
+            },
+            {
+              "name": "200 Error NO_ENCONTRADO",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_acceso}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/graphql",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "graphql"
+                  ]
+                },
+                "description": "Solo desarrollo (NODE_ENV distinto de production): envía el texto completo de la consulta. En producción da 400 CONSULTA_NO_PERMITIDA. Cualquier cuenta con sesión si la clase es muestra de un curso publicado; el instructor dueño, su equipo de apoyo y los administradores, en cualquier clase. Devuelve el token de reproducción (JWT de audiencia `reproduccion`, atado a un video y una cuenta; vive expira_en segundos, 600 por defecto), la ruta de la lista y el correo de la marca de agua. Un script de prueba guarda el token en la variable de entorno token_reproduccion y el video_id en video_id: úsalos en las dos rutas REST de esta carpeta. No guarda nada en la base.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"operationName\": \"autorizar_reproduccion\",\n  \"query\": \"mutation autorizar_reproduccion($clase_id: EnteroGrande!) { autorizar_reproduccion(clase_id: $clase_id) { duracion_segundos expira_en lista_url marca_agua token video_id } }\",\n  \"variables\": {\n    \"clase_id\": {{clase_id}}\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"data\": null,\n  \"errors\": [\n    {\n      \"message\": \"La clase no existe.\",\n      \"locations\": [\n        {\n          \"line\": 1,\n          \"column\": 1\n        }\n      ],\n      \"path\": [\n        \"autorizar_reproduccion\"\n      ],\n      \"extensions\": {\n        \"codigo\": \"NO_ENCONTRADO\"\n      }\n    }\n  ]\n}"
+            },
+            {
+              "name": "200 Error TOKEN_INVALIDO",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{token_acceso}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/graphql",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "graphql"
+                  ]
+                },
+                "description": "Solo desarrollo (NODE_ENV distinto de production): envía el texto completo de la consulta. En producción da 400 CONSULTA_NO_PERMITIDA. Cualquier cuenta con sesión si la clase es muestra de un curso publicado; el instructor dueño, su equipo de apoyo y los administradores, en cualquier clase. Devuelve el token de reproducción (JWT de audiencia `reproduccion`, atado a un video y una cuenta; vive expira_en segundos, 600 por defecto), la ruta de la lista y el correo de la marca de agua. Un script de prueba guarda el token en la variable de entorno token_reproduccion y el video_id en video_id: úsalos en las dos rutas REST de esta carpeta. No guarda nada en la base.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"operationName\": \"autorizar_reproduccion\",\n  \"query\": \"mutation autorizar_reproduccion($clase_id: EnteroGrande!) { autorizar_reproduccion(clase_id: $clase_id) { duracion_segundos expira_en lista_url marca_agua token video_id } }\",\n  \"variables\": {\n    \"clase_id\": {{clase_id}}\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                }
+              ],
+              "body": "{\n  \"data\": null,\n  \"errors\": [\n    {\n      \"message\": \"El token de acceso falta, no es válido o expiró.\",\n      \"locations\": [\n        {\n          \"line\": 1,\n          \"column\": 1\n        }\n      ],\n      \"path\": [\n        \"autorizar_reproduccion\"\n      ],\n      \"extensions\": {\n        \"codigo\": \"TOKEN_INVALIDO\"\n      }\n    }\n  ]\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const cuerpo = pm.response.json();",
+                  "const a = cuerpo.data && cuerpo.data.autorizar_reproduccion;",
+                  "if (a) {",
+                  "  pm.environment.set('token_reproduccion', a.token);",
+                  "  pm.environment.set('video_id', a.video_id);",
+                  "}"
+                ]
+              }
             }
           ]
         }

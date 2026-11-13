@@ -14,6 +14,7 @@ import { CategoriesModule } from '../../src/modules/categories/categories.module
 import { CoursesModule } from '../../src/modules/courses/courses.module';
 import { CoversModule } from '../../src/modules/covers/covers.module';
 import { GraphqlModule } from '../../src/modules/graphql/graphql.module';
+import { PlaybackModule } from '../../src/modules/playback/playback.module';
 import { ReviewModule } from '../../src/modules/review/review.module';
 import { MailModule } from '../../src/modules/mail/mail.module';
 import { RolesModule } from '../../src/modules/roles/roles.module';
@@ -29,7 +30,7 @@ import { startSmtpBridge } from './smtp-bridge';
 // Valores del `.env` de la raíz (nunca se imprimen). Las pruebas de la escuela ejecutan la app EN PROCESO en modo
 // desarrollo (acepta consultas completas) contra el stack real: verifica los tokens reales con `JWT_SECRET`, habla con la base
 // `plataforma` por Supavisor (127.0.0.1:5432) y con la API admin de Supabase Auth por Kong (127.0.0.1:8000).
-function readEnv(): Record<string, string> {
+export function readEnv(): Record<string, string> {
   const values: Record<string, string> = {};
   for (const line of readFileSync(resolve(REPO_ROOT, '.env'), 'utf8').split('\n')) {
     const match = /^([A-Z0-9_]+)=(.*)$/.exec(line);
@@ -38,7 +39,7 @@ function readEnv(): Record<string, string> {
   return values;
 }
 
-function realConfig(mailPort: number, transcoderUrl: string): Partial<AppConfig> {
+function realConfig(mailPort: number, transcoderUrl: string, playbackSeconds: number): Partial<AppConfig> {
   const env = readEnv();
   return {
     environment: 'development',
@@ -46,6 +47,7 @@ function realConfig(mailPort: number, transcoderUrl: string): Partial<AppConfig>
     auth: { url: `http://127.0.0.1:${env.KONG_HTTP_PORT ?? '8000'}/auth/v1`, timeoutMs: 8000, serviceKey: env.SERVICE_ROLE_KEY },
     // Storage por Kong y SMTP por el puente hacia Mailpit (el SMTP del contenedor no se publica).
     storage: { url: `http://127.0.0.1:${env.KONG_HTTP_PORT ?? '8000'}/storage/v1`, timeoutMs: 15000 },
+    playback: { authorizationSeconds: playbackSeconds },
     // Transcodificador: por defecto una dirección sin servicio (las suites de video levantan uno falso y pasan su URL).
     transcoder: { url: transcoderUrl, secret: env.SECRETO_TRANSCODIFICADOR, timeoutMs: 5000 },
     mail: { host: '127.0.0.1', port: mailPort },
@@ -60,10 +62,10 @@ function realConfig(mailPort: number, transcoderUrl: string): Partial<AppConfig>
 }
 
 // Arranca GraphQL y REST con los módulos de la escuela que existen hasta ahora (se añaden con cada paso de la SPEC 10).
-export async function startSchool(options: { transcoderUrl?: string } = {}): Promise<NestFastifyApplication> {
+export async function startSchool(options: { transcoderUrl?: string; playbackSeconds?: number } = {}): Promise<NestFastifyApplication> {
   const bridge = await startSmtpBridge();
   @Global()
-  @Module({ imports: [ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, load: [() => realConfig(bridge.port, options.transcoderUrl ?? 'http://127.0.0.1:1')] })] })
+  @Module({ imports: [ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, load: [() => realConfig(bridge.port, options.transcoderUrl ?? 'http://127.0.0.1:1', options.playbackSeconds ?? 600)] })] })
   class RealConfigModule implements OnApplicationShutdown {
     async onApplicationShutdown(): Promise<void> {
       await bridge.close();
@@ -91,6 +93,7 @@ export async function startSchool(options: { transcoderUrl?: string } = {}): Pro
       TeamModule,
       UsersAdminModule,
       VideosModule,
+      PlaybackModule,
     ],
   }).compile();
   const app = module.createNestApplication<NestFastifyApplication>(createAdapter(OPTIONS), { logger: false });

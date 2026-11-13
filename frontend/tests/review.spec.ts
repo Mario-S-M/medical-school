@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './helpers/test-base';
-import { createCategoryE2E, grantRole, clearLimits, setCourseCoverE2E, setVideoReadyE2E } from './helpers/database';
+import { addLessonE2E, createCategoryE2E, createPublishedCourseE2E, lessonIdE2E, setCourseStatusE2E, grantRole, clearLimits, setCourseCoverE2E, setVideoReadyE2E } from './helpers/database';
 import { signInAsAdmin } from './helpers/school';
 import { uniqueEmail, createVerifiedUser, signInOnPage, visit } from './helpers/users';
 
@@ -78,4 +78,19 @@ test('ciclo completo: faltantes, envío, devolución con comentario, reenvío y 
 
   await page.reload();
   await expect(page.getByRole('status').filter({ hasText: 'Publicado' })).toBeVisible();
+});
+
+test('la tarjeta de revisión ofrece "Ver clase" solo en las clases con video listo', async ({ page }) => {
+  const titulo = 'E2E Revisión con enlaces';
+  createPublishedCourseE2E(titulo, 'e2e-revision-enlaces');
+  addLessonE2E(titulo, 'Clase con video', false, true);
+  addLessonE2E(titulo, 'Clase sin video', false, false);
+  setCourseStatusE2E(titulo, 'en_revision');
+  await signInAsAdmin(page, uniqueEmail());
+  await visit(page, '/admin/revision');
+  const tarjeta = page.locator('li', { has: page.getByRole('heading', { name: titulo }) }).first();
+  await expect(tarjeta.getByText('Clase sin video')).toBeVisible();
+  const enlaces = tarjeta.getByRole('link', { name: /^Ver clase/ });
+  await expect(enlaces).toHaveCount(1);
+  await expect(enlaces).toHaveAttribute('href', `/clase?id=${lessonIdE2E(titulo, 'Clase con video')}`);
 });

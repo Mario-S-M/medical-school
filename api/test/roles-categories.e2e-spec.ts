@@ -84,15 +84,26 @@ afterAll(async () => {
 
 describe('sin token', () => {
   it('categorias es pública y trae las categorías ordenadas con { id, nombre, slug, posicion }', async () => {
-    const body = await run(CATEGORIAS, {});
-    const list = body.data?.categorias as { id: number; nombre: string; slug: string; posicion: number }[];
-    expect(body.errors).toBeUndefined();
-    expect(list.length).toBeGreaterThan(0);
+    // Crea sus propias categorías: no depende de que la base ya tenga alguna.
+    sql(`insert into escuela.categorias (nombre, slug, posicion) values ('zz-e2e Pública B', 'zz-e2e-publica-b', 9001), ('zz-e2e Pública A', 'zz-e2e-publica-a', 9000)`);
+    try {
+      const body = await run(CATEGORIAS, {});
+      const list = body.data?.categorias as { id: number; nombre: string; slug: string; posicion: number }[];
+      expect(body.errors).toBeUndefined();
+      expect(list.length).toBeGreaterThanOrEqual(2);
+      expect(list.filter((c) => c.nombre.startsWith('zz-e2e')).map((c) => c.nombre)).toEqual(['zz-e2e Pública A', 'zz-e2e Pública B']);
+      checkOrdered(list);
+    } finally {
+      sql(`delete from escuela.categorias where slug like 'zz-e2e-publica-%'`);
+    }
+  });
+
+  function checkOrdered(list: { id: number; nombre: string; slug: string; posicion: number }[]) {
     expect(list[0]).toEqual({ id: expect.any(Number), nombre: expect.any(String), slug: expect.any(String), posicion: expect.any(Number) });
     const positions = list.map((c) => c.posicion);
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
     expect(list.map((c) => c.id)).toEqual(sql('select id from escuela.categorias order by posicion, nombre').split('\n').map(Number));
-  });
+  }
 
   it('las demás operaciones dan TOKEN_INVALIDO', async () => {
     const calls: [string, Record<string, unknown>][] = [

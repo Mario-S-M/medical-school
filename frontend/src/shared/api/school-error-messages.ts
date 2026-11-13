@@ -10,5 +10,6 @@ export const SCHOOL_ERROR_MESSAGES: Record<string, string> = {
   USUARIO_NO_REGISTRADO: 'Ese correo no tiene una cuenta registrada.',
   INVITACION_DUPLICADA: 'Ya hay una invitación pendiente para esa persona.',
   YA_ES_MIEMBRO: 'Esa persona ya está en tu equipo.',
+  VIDEO_NO_DISPONIBLE: 'El video de esta clase todavía no está listo.',
   PORTADA_INVALIDA: 'La portada debe ser una imagen JPG, PNG o WebP de hasta 2 MB.',
 };

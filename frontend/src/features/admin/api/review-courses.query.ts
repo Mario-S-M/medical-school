@@ -9,7 +9,7 @@ const REVIEW_COURSES_QUERY = graphql(`
       categoria portada_ruta instructor actualizado_en
       secciones {
         id titulo posicion
-        clases { id titulo descripcion duracion_estimada_minutos es_muestra posicion }
+        clases { id titulo descripcion duracion_estimada_minutos es_muestra tiene_video posicion }
       }
     }
   }

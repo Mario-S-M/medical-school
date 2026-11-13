@@ -36,13 +36,18 @@ type PaginaCursos {
   paginas: Int!
 }
 
-"""Clase del temario (sin video ni claves)."""
+"""Clase del temario (sin rutas, archivos ni claves del video)."""
 type ClaseTemario {
   id: EnteroGrande!
   titulo: String!
   descripcion: String
   duracion_estimada_minutos: Int
   es_muestra: Boolean!
+
+  """
+  La clase tiene un video vigente y listo (solo el dato, nunca rutas ni claves).
+  """
+  tiene_video: Boolean!
   posicion: Int!
 }
 
@@ -215,6 +220,28 @@ type Usuario {
   id: ID!
   correo: String!
   nombre: String!
+}
+
+"""
+Permiso temporal para ver el video de una clase. El token solo sirve en /api/v1/reproducciones/*.
+"""
+type AutorizacionReproduccion {
+  video_id: EnteroGrande!
+
+  """
+  Token de reproducción (audiencia propia); va en la cabecera Authorization.
+  """
+  token: String!
+
+  """Segundos de vida de la autorización."""
+  expira_en: Int!
+
+  """Ruta de la lista .m3u8 del video."""
+  lista_url: String!
+  duracion_segundos: Int
+
+  """Correo de la cuenta que mira, para la marca de agua."""
+  marca_agua: String!
 }
 
 """Estado en el que quedó el curso tras la operación."""
@@ -534,4 +561,9 @@ type Mutation {
     """true da el rol y false lo quita."""
     activo: Boolean!
   ): RolAsignado!
+
+  """
+  Comprueba si la cuenta puede ver la clase y entrega un token de reproducción de vida corta. No guarda nada.
+  """
+  autorizar_reproduccion(clase_id: EnteroGrande!): AutorizacionReproduccion!
 }

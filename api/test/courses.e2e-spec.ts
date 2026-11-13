@@ -54,6 +54,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await app.close();
   sql(`delete from escuela.cursos where slug like 'zz-e2e-%'`);
+  sql(`delete from escuela.categorias where slug like 'zz-e2e-cat-ed-%'`);
   removeAccountResidue(userIds);
   cleanup();
   expect(courseCount()).toBe(before); // no queda ningún curso de prueba y los datos copiados siguen intactos
@@ -132,7 +133,8 @@ describe('editar_curso', () => {
   const edit = (variables: Record<string, unknown>, token = instructor.token) => run(app, EDITAR, { c: course.id, ...variables }, token);
 
   it('el dueño cambia solo los campos enviados y el slug no cambia', async () => {
-    const categoryId = Number(sql('select id from escuela.categorias order by id limit 1'));
+    // Categoría propia: una base limpia no trae ninguna (se borra con `zz-e2e-cat-%` al terminar).
+    const categoryId = Number(sql(`insert into escuela.categorias (nombre, slug, posicion) values ('ZZ E2E Edición ${process.pid}', 'zz-e2e-cat-ed-${process.pid}', 999) returning id`));
     const body = await edit({
       t: `  ZZ E2E Edición nueva ${TAG} `,
       s: 'Un subtítulo',

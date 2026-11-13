@@ -12,7 +12,7 @@ export default function ReviewCard({ course }: { course: ReviewCourse }) {
       {course.subtitulo && <p className="font-medium">{course.subtitulo}</p>}
       {course.descripcion && <p className="whitespace-pre-line text-slate-700">{course.descripcion}</p>}
       {course.conocimientos_previos && <p className="text-sm"><strong>Conocimientos previos:</strong> {course.conocimientos_previos}</p>}
-      <PublicSyllabus sections={course.secciones} />
+      <PublicSyllabus sections={course.secciones} link="video" />
       <ReviewActions courseId={course.id} />
     </li>
   );

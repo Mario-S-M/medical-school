@@ -12,6 +12,7 @@ export interface StorageObjectInfo {
 interface StorageResponse {
   status: number;
   body: unknown;
+  text: string;
 }
 
 interface ListedEntry {
@@ -43,6 +44,33 @@ export class StorageService {
     const url = (response.body as { url?: unknown } | null)?.url;
     if (response.status !== 200 || typeof url !== 'string' || !url.startsWith('/object/upload/sign/')) throw uniformError(500, 'ERROR_INTERNO');
     return url;
+  }
+
+  // Firma de descarga de varios objetos en UNA sola llamada (`POST /object/sign/<bucket>` con `{ expiresIn, paths }`, que
+  // contesta un arreglo `{ path, signedURL, error }`). Devuelve una ruta por cada `path`, en el mismo orden y sin prefijo
+  // (`/object/sign/<bucket>/<ruta>?token=...`), como `signUpload`: quien la entregue al navegador antepone `/almacen`.
+  // Si algún objeto no existe o la respuesta no cuadra, es un 500 ERROR_INTERNO.
+  async signDownloads(bucket: string, paths: string[], expiresIn: number): Promise<string[]> {
+    if (paths.length === 0) return [];
+    const response = await this.call('POST', `/object/sign/${bucket}`, { expiresIn, paths });
+    if (response.status !== 200 || !Array.isArray(response.body)) throw uniformError(500, 'ERROR_INTERNO');
+    const byPath = new Map<string, string>();
+    for (const item of response.body as { path?: unknown; signedURL?: unknown }[]) {
+      if (typeof item?.path === 'string' && typeof item.signedURL === 'string' && item.signedURL.startsWith('/object/sign/')) byPath.set(item.path, item.signedURL);
+    }
+    return paths.map((path) => {
+      const url = byPath.get(path);
+      if (url === undefined) throw uniformError(500, 'ERROR_INTERNO');
+      return url;
+    });
+  }
+
+  // Lee un objeto de texto con la clave de servicio. `null` si no existe; más de `maxBytes` o cualquier otro fallo, 500.
+  async downloadText(bucket: string, path: string, maxBytes: number): Promise<string | null> {
+    const response = await this.call('GET', `/object/authenticated/${bucket}/${encodePath(path)}`);
+    if (response.status === 404 || response.status === 400) return null;
+    if (response.status !== 200 || Buffer.byteLength(response.text) > maxBytes) throw uniformError(500, 'ERROR_INTERNO');
+    return response.text;
   }
 
   // `null` si el objeto no existe (Storage contesta 400 o 404 con `statusCode: "404"`); cualquier otro fallo es un 500.
@@ -114,7 +142,7 @@ export class StorageService {
       } catch {
         parsed = null;
       }
-      return { status: response.status, body: parsed };
+      return { status: response.status, body: parsed, text };
     } catch (error) {
       this.logger.error(`Fallo al llamar a Supabase Storage (${error instanceof Error ? error.name : 'desconocido'})`);
       throw uniformError(500, 'ERROR_INTERNO');

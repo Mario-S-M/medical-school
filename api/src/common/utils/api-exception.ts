@@ -21,6 +21,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   SIN_PERMISO: 'No tienes permiso para hacer esto.',
   CONSULTA_NO_PERMITIDA: 'Esta consulta no está permitida.',
   CONSULTA_DEMASIADO_COMPLEJA: 'La consulta es demasiado compleja (profundidad máxima 8, costo máximo 1000).',
+  VIDEO_NO_DISPONIBLE: 'El video de esta clase todavía no está listo.',
   ERROR_INTERNO: 'Error interno del servidor.',
 };
 

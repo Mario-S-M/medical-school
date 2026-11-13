@@ -97,7 +97,7 @@ export class CatalogRepository {
     return rows[0] ?? null;
   }
 
-  // Temario de varios cursos en dos consultas (por lotes, sin N+1): secciones y clases en su orden. Sin campos de video.
+  // Temario de varios cursos en dos consultas (por lotes, sin N+1): secciones y clases en su orden. Solo el booleano `tiene_video` (video vigente y listo): ni rutas ni claves.
   async findTrees(courseIds: number[]): Promise<Map<number, SyllabusSection[]>> {
     if (courseIds.length === 0) return new Map();
     const sections = await this.dataSource.query<SectionRow[]>(
@@ -108,8 +108,9 @@ export class CatalogRepository {
       sections.length === 0
         ? []
         : await this.dataSource.query<LessonRow[]>(
-            `SELECT id, seccion_id, titulo, descripcion, duracion_estimada_minutos, es_muestra, posicion
-             FROM escuela.clases WHERE seccion_id = ANY($1::bigint[]) ORDER BY posicion, id`,
+            `SELECT k.id, k.seccion_id, k.titulo, k.descripcion, k.duracion_estimada_minutos, k.es_muestra, k.posicion,
+                    EXISTS (SELECT 1 FROM escuela.videos_clase v WHERE v.clase_id = k.id AND v.vigente AND v.estado = 'listo') AS tiene_video
+             FROM escuela.clases k WHERE k.seccion_id = ANY($1::bigint[]) ORDER BY k.posicion, k.id`,
             [sections.map((section) => section.id)],
           );
     return buildTrees(courseIds, sections, lessons);

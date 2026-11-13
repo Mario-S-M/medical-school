@@ -18,7 +18,7 @@ const EDITAR = `mutation($c: EnteroGrande!, $s: String, $d: String, $n: String, 
 const SECCION = 'mutation($c: EnteroGrande!, $t: String!) { guardar_seccion(curso_id: $c, titulo: $t) { id } }';
 const ENVIAR = 'mutation($c: EnteroGrande!) { enviar_revision(curso_id: $c) { estado } }';
 const PENDIENTES = `{ cursos_en_revision { id slug titulo subtitulo descripcion conocimientos_previos lo_que_aprenderas nivel categoria portada_ruta instructor actualizado_en
-  secciones { id titulo posicion clases { id titulo descripcion duracion_estimada_minutos es_muestra posicion } } } }`;
+  secciones { id titulo posicion clases { id titulo descripcion duracion_estimada_minutos es_muestra tiene_video posicion } } } }`;
 const RESOLVER = `mutation($c: EnteroGrande!, $a: Boolean!, $m: String) { resolver_revision(curso_id: $c, aprobar: $a, comentario: $m) { estado } }`;
 const RETIRAR = 'mutation($c: EnteroGrande!, $m: String!) { retirar_curso(curso_id: $c, comentario: $m) { estado } }';
 const CATALOGO = 'query($q: String) { cursos(q: $q) { total cursos { slug } } }';
@@ -72,11 +72,13 @@ beforeAll(async () => {
   member = await newAccount(userIds);
   sql(`insert into escuela.equipos_apoyo (instructor_id, miembro_id) values ('${instructor.id}', '${member.id}')`);
   sql(`insert into escuela.roles_usuario (usuario_id, rol) values ('${member.id}', 'equipo_apoyo')`);
-  categoryId = Number(sql('select id from escuela.categorias order by id limit 1'));
+  // Categoría propia: una base limpia no trae ninguna.
+  categoryId = Number(sql(`insert into escuela.categorias (nombre, slug, posicion) values ('ZZ E2E Revisión ${process.pid}', 'zz-e2e-cat-rev-${process.pid}', 999) returning id`));
 });
 afterAll(async () => {
   await app.close();
   sql(`delete from escuela.cursos where slug like 'zz-e2e-%'`);
+  sql(`delete from escuela.categorias where slug like 'zz-e2e-cat-rev-%'`);
   removeAccountResidue(userIds);
   cleanup();
   expect(courseCount()).toBe(before); // no queda ningún curso de prueba y los datos copiados siguen intactos
@@ -231,10 +233,21 @@ describe('cursos_en_revision', () => {
       categoria: sql(`select nombre from escuela.categorias where id = ${categoryId}`),
     });
     expect(mine[0].secciones).toEqual([
-      expect.objectContaining({ titulo: 'Sección pend-viejo', posicion: 1, clases: [expect.objectContaining({ titulo: 'Clase pend-viejo', duracion_estimada_minutos: 10, es_muestra: true, posicion: 1 })] }),
+      expect.objectContaining({ titulo: 'Sección pend-viejo', posicion: 1, clases: [expect.objectContaining({ titulo: 'Clase pend-viejo', duracion_estimada_minutos: 10, es_muestra: true, tiene_video: true, posicion: 1 })] }),
     ]);
     // los cursos en revisión de los datos copiados también salen: todos están en revisión
     expect(sql(`select count(*) from escuela.cursos where estado = 'en_revision'`)).toBe(String(courses.length));
+  });
+
+  it('tiene_video es falso en una clase sin video o con uno que no está listo', async () => {
+    const id = readyCourse('pend-sinvideo', 'en_revision');
+    const section = Number(sql(`select id from escuela.secciones where curso_id = ${id}`));
+    sql(`insert into escuela.clases (seccion_id, titulo, es_muestra, posicion) values (${section}, 'Sin video', false, 2) returning id`);
+    const procesando = Number(sql(`insert into escuela.clases (seccion_id, titulo, es_muestra, posicion) values (${section}, 'Procesando', false, 3) returning id`));
+    sql(`insert into escuela.videos_clase (clase_id, estado, vigente, nombre_original, tipo_contenido, tamano_bytes, ruta_base) values (${procesando}, 'procesando', false, 'a.mp4', 'video/mp4', 1000, 'zz-e2e/rev-pv-${TAG}/1')`);
+    const body = await run(app, PENDIENTES, {}, admin.token);
+    const course = (body.data as { cursos_en_revision: { id: number; secciones: { clases: { titulo: string; tiene_video: boolean }[] }[] }[] }).cursos_en_revision.find((c) => c.id === id);
+    expect(course?.secciones[0].clases.map((c) => [c.titulo, c.tiene_video])).toEqual([['Clase pend-sinvideo', true], ['Sin video', false], ['Procesando', false]]);
   });
 
   it('la consulta con el temario completo cabe en el costo máximo', async () => {

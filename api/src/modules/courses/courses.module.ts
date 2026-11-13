@@ -17,6 +17,6 @@ import { CoursesService } from './services/courses.service';
 @Module({
   imports: [SecurityModule, RolesModule, TypeOrmModule.forFeature([Course, Section, Lesson, LessonVideo])],
   providers: [CourseAccessRepository, CourseAccessPolicy, CoursesRepository, CoursesService, CoursesResolver],
-  exports: [TypeOrmModule, CourseAccessPolicy],
+  exports: [TypeOrmModule, CourseAccessPolicy, CourseAccessRepository],
 })
 export class CoursesModule {}

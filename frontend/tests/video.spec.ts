@@ -16,7 +16,9 @@ test('un video de 5 minutos se sube sin avisos y queda listo', async ({ page }) 
   await expect(page.getByText('Recomendamos clases de entre 2 y 9 minutos.')).toBeVisible();
   await page.locator('input[id^="video_"]').setInputFiles(archivo);
   await expect(page.getByText(AVISO)).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /^Ver clase/ })).toHaveCount(0);
   await expect(page.getByText(/Video listo \(5 min\)/)).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByRole('link', { name: 'Ver clase Clase de video' })).toHaveAttribute('href', /^\/clase\?id=\d+$/);
   await expect(page.getByText('Reemplazar el video de «Clase de video»')).toBeVisible();
 });
 
