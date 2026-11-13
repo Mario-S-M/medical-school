@@ -1,5 +1,5 @@
 import { expect, test } from './helpers/test-base';
-import { clearCourseCoverE2E, createCategoryE2E, createPublishedCourseE2E, clearLimits, setCourseCoverE2E } from './helpers/database';
+import { addLessonE2E, lessonIdE2E, clearCourseCoverE2E, createCategoryE2E, createPublishedCourseE2E, clearLimits, setCourseCoverE2E } from './helpers/database';
 import { signInAsAdmin } from './helpers/school';
 import { uniqueEmail, visit } from './helpers/users';
 
@@ -89,4 +89,17 @@ test('una portada que no carga se reemplaza por el fondo de la tarjeta, sin imag
   } finally {
     clearCourseCoverE2E(titulo);
   }
+});
+
+test('la ficha pública ofrece "Ver clase" solo en las clases muestra y lleva a iniciar sesión sin sesión', async ({ page }) => {
+  addLessonE2E('E2E Anatomía del catálogo', 'Clase que no es muestra', false, true);
+  await visit(page, '/curso?c=e2e-anatomia-catalogo');
+  await expect(page.getByText('Clase que no es muestra')).toBeVisible();
+  const enlaces = page.getByRole('link', { name: /^Ver clase/ });
+  await expect(enlaces).toHaveCount(1);
+  const id = lessonIdE2E('E2E Anatomía del catálogo', 'Clase de muestra');
+  await expect(enlaces).toHaveAttribute('href', `/clase?id=${id}`);
+  await expect(enlaces).toHaveAccessibleName('Ver clase Clase de muestra');
+  await enlaces.click();
+  await expect(page).toHaveURL(/\/iniciar-sesion/);
 });

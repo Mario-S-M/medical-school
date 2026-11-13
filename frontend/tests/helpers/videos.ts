@@ -34,3 +34,12 @@ export async function prepareLesson(page: Page, titulo: string) {
   await page.getByRole('button', { name: 'Añadir clase' }).click();
   await expect(page.getByText('Sin video')).toBeVisible();
 }
+
+// Genera un MP4 real (patrón en movimiento y tono, 640x360 a 25 fps) de `segundos` de duración para probar la reproducción.
+export function generateRealVideo(nombre: string, segundos: number): string {
+  const destino = path.join(CARPETA, `${nombre}.mp4`);
+  execFileSync('docker', ['compose', 'exec', '-T', 'transcodificador', 'ffmpeg', '-hide_banner', '-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=25',
+    '-f', 'lavfi', '-i', 'sine=frequency=440', '-t', String(segundos), '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', `/trabajo/${nombre}.mp4`], { cwd: RAIZ });
+  execFileSync('docker', ['compose', 'cp', `transcodificador:/trabajo/${nombre}.mp4`, destino], { cwd: RAIZ, stdio: 'ignore' });
+  return destino;
+}

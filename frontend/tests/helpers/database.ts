@@ -78,3 +78,24 @@ export const setVideoReadyE2E = (titulo: string) =>
   sql(SCHOOL, `insert into escuela.videos_clase (clase_id, estado, vigente, nombre_original, tipo_contenido, tamano_bytes, duracion_segundos, ruta_base, listo_en)
     select k.id, 'listo', true, 'a.mp4', 'video/mp4', 10, 60, 'x', now() from escuela.clases k join escuela.secciones s on s.id = k.seccion_id
     join escuela.cursos c on c.id = s.curso_id where c.titulo = '${titulo}'`);
+
+const CLASE = (curso: string, clase: string) =>
+  `select k.id from escuela.clases k join escuela.secciones s on s.id = k.seccion_id join escuela.cursos c on c.id = s.curso_id where c.titulo = '${curso}' and k.titulo = '${clase}'`;
+
+export const lessonIdE2E = (curso: string, clase: string) => Number(consulta(SCHOOL, CLASE(curso, clase)));
+
+export const markSampleE2E = (curso: string, clase: string) =>
+  sql(SCHOOL, `update escuela.clases set es_muestra = true where id = (${CLASE(curso, clase)})`);
+
+// Añade una clase a la primera sección del curso; con `conVideo` deja un video listo y vigente (de mentira, sin archivos).
+export function addLessonE2E(curso: string, clase: string, esMuestra: boolean, conVideo: boolean) {
+  sql(SCHOOL, `insert into escuela.clases (seccion_id, titulo, es_muestra, posicion) select s.id, '${clase}', ${esMuestra}, (select coalesce(max(k.posicion), 0) + 1 from escuela.clases k where k.seccion_id = s.id) from escuela.secciones s join escuela.cursos c on c.id = s.curso_id where c.titulo = '${curso}' limit 1`);
+  if (conVideo) {
+    sql(SCHOOL, `insert into escuela.videos_clase (clase_id, estado, vigente, nombre_original, tipo_contenido, tamano_bytes, duracion_segundos, ruta_base, listo_en)
+      select (${CLASE(curso, clase)}), 'listo', true, 'a.mp4', 'video/mp4', 10, 60, 'x', now()`);
+  }
+}
+
+// Cambia el estado de un curso por SQL (por ejemplo, dejarlo `en_revision` sin recorrer el flujo del instructor).
+export const setCourseStatusE2E = (titulo: string, estado: 'borrador' | 'en_revision' | 'publicado') =>
+  sql(SCHOOL, `update escuela.cursos set estado = '${estado}' where titulo = '${titulo}'`);

@@ -1,6 +1,6 @@
 # Platform API (SPEC 09 and 10)
 
-NestJS backend on Fastify with TypeORM and Postgres (database `plataforma`). Since SPEC 09 it serves authentication (it replaced the previous workflow-based auth service and its reverse proxy); since the SPEC 10 cut-over it serves the whole school (roles, categories, courses, syllabus, public catalog, review, support team, covers and videos). It is the only entry point of the stack (`127.0.0.1:3000`).
+NestJS backend on Fastify with TypeORM and Postgres (database `plataforma`). Since SPEC 09 it serves authentication (it replaced the previous workflow-based auth service and its reverse proxy); since the SPEC 10 cut-over it serves the whole school (roles, categories, courses, syllabus, public catalog, review, support team, covers and videos). It is the only entry point of the stack (`127.0.0.1:3000`). SPEC 12 adds protected video playback (`playback` module).
 
 **Rule (SPEC 09, applied by SPEC 10): GraphQL for the domain, REST for the edges.**
 
@@ -10,6 +10,8 @@ NestJS backend on Fastify with TypeORM and Postgres (database `plataforma`). Sin
 | Authentication (`/api/v1/usuarios`, `/sesiones`, `/verificaciones-correo`, `/recuperaciones`) | **REST** | The `HttpOnly` refresh cookie |
 | Upload signatures to Storage (`/api/v1/portadas/firmas`, `/api/v1/videos/firmas`) | **REST** | They hand out a URL, they are not queries |
 | Internal webhook (`/api/v1/interno/video-procesado`), health, email templates | **REST** | Called by machines, not by the browser |
+| Playback authorization (`autorizar_reproduccion`) | **GraphQL** | A mutation with the session; it issues the playback token |
+| Playback list and key (`/api/v1/reproducciones/{video_id}/lista.m3u8` and `/clave`) | **REST** | The player (`hls.js`) asks for them with `Authorization`; they are not queries |
 
 The code is in English and organised by NestJS modules. The **contract stays in Spanish**: REST routes, JSON and GraphQL fields, error codes and messages, tables and columns, and `.env` variables.
 
@@ -80,7 +82,8 @@ postman/             two collections (auth, school) and the local environment
 | `team` | Support team and invitations: `mi_equipo`, `mis_invitaciones`, `invitar_equipo`, `responder_invitacion`, `cancelar_invitacion`, `quitar_miembro` |
 | `mail` | `MailService` over `nodemailer` (SMTP) and `MailTemplateService` for `team-invitation.html` |
 | `covers` | Cover signature (REST) and `confirmar_portada` |
-| `storage` | `StorageService` over Supabase Storage with `SERVICE_ROLE_KEY`: `signUpload`, `getObjectInfo`, `deleteObject`, `deletePrefix`, `publicUrl` |
+| `storage` | `StorageService` over Supabase Storage with `SERVICE_ROLE_KEY`: `signUpload`, `signDownloads` (signed reads in one batch call), `downloadText` (reads a small text object), `getObjectInfo`, `deleteObject`, `deletePrefix`, `publicUrl` |
+| `playback` | Protected playback (SPEC 12): `autorizar_reproduccion`, the two REST routes `lista.m3u8` and `clave`, `PlaybackAccessService` (access rules), `PlaybackTokenService` (token with its own audience), `PlaylistService` (rewritten list), `PlaybackTokenGuard`; see "Protected playback" |
 | `videos` | Video signature (REST), `estado_video`, `confirmar_subida_video`, `reintentar_video`, `borrar_video`, the internal webhook, the transcoder client and `StorageVideoFilesCleaner` (deletes video files when a lesson, section or video is deleted) |
 
 Each module has its own entities (TypeORM, `schema: 'escuela'`, Spanish `snake_case` columns), repositories, services, DTOs (`class-validator`), resolvers or controllers and guards. `Course.busqueda` is read-only (generated column); `VideoKey.clave` is `select: false` and never leaves the API.
@@ -105,6 +108,7 @@ Each module has its own entities (TypeORM, `schema: 'escuela'`, Spanish `snake_c
 | `URL_STORAGE`, `TIEMPO_ESPERA_STORAGE_MS` | `http://storage:5000` (http/https), 15000 |
 | `URL_TRANSCODIFICADOR`, `TIEMPO_ESPERA_TRANSCODIFICADOR_MS` | `http://transcodificador:8090`, 10000 |
 | `SECRETO_TRANSCODIFICADOR` | required; same value as the transcoder's, sent in both directions as `X-Secreto-Transcodificador` |
+| `SEGUNDOS_AUTORIZACION_REPRODUCCION` | optional, integer from 60 to 3600, default 600 (life of the playback authorization, of its token and of the signed segment URLs); not needed in `.env` |
 | `SMTP_HOST`, `SMTP_PORT` | `mailpit`, `1025` (no TLS, no authentication) |
 
 The compose passes them from `.env`; a missing or invalid one stops the start with a message that names the variable, never its value. For tests only: `URL_API` (default `http://127.0.0.1:3000`) and `URL_MAILPIT` (default `http://127.0.0.1:8025`).
@@ -175,11 +179,11 @@ npm run test:e2e                          # Jest + supertest, in series (--runIn
 NODE_OPTIONS=--experimental-vm-modules npx jest --config test/jest-e2e.json --runInBand test/review.e2e-spec.ts   # one file
 ```
 
-- Nest 12 is ESM, so the scripts set `NODE_OPTIONS=--experimental-vm-modules`. E2E specs live in `test/*.e2e-spec.ts`: `auth`, `codes`, `common`, `rate-limit`, `graphql`, `graphql-real`, `rest-with-graphql`, `roles-categories`, `courses`, `syllabus`, `catalog`, `review`, `covers`, `team`, `videos`, `videos-real` (real MP4 through the real transcoder), and `school-schema`.
+- Nest 12 is ESM, so the scripts set `NODE_OPTIONS=--experimental-vm-modules`. E2E specs live in `test/*.e2e-spec.ts`: `auth`, `codes`, `common`, `rate-limit`, `graphql`, `graphql-real`, `rest-with-graphql`, `roles-categories`, `courses`, `syllabus`, `catalog`, `review`, `covers`, `team`, `videos`, `videos-real` (real MP4 through the real transcoder), `school-schema`, `playback`, `playback-real` (a real video decrypted with the key the API serves) and `playback-lifetime` (about 70 s: a signed URL stops working after its life).
 - Most suites start the app in process (`start-app.ts`, `start-graphql.ts`, `start-school.ts`) against the real database; `graphql-real` and `videos-real` talk HTTP to the container at `URL_API`.
 - `test/helpers/real-env.ts` uses `docker compose exec db psql` as `supabase_admin` to confirm emails by SQL, age login attempts and clean up its own users (`prueba_e2e_*@example.com`) and the IPs in `198.18.0.0/15` (each test uses its own through `X-Forwarded-For`). It never prints secrets. `smtp-bridge.ts` relays the app's SMTP to Mailpit inside the container (its SMTP port is not published).
 - The cookie-reuse test takes 11 s because of Supabase Auth's 10 s tolerance; the video suites take minutes because they really transcode.
-- Other suites that use this API: `cd frontend && npx playwright test` (32 tests).
+- Other suites that use this API: `cd frontend && npx playwright test` (46 tests: 33 in Chromium and 13 of the player in Google Chrome).
 - Names check: `bash scripts/check-names.sh todo` (repo root) fails if a file or folder in `api/` or `frontend/` has a Spanish name.
 
 ## REST contract (`/api/v1`)
@@ -312,6 +316,7 @@ School codes (SPEC 07 and 08, unchanged by the migration; in GraphQL they travel
 | `PORTADA_INVALIDA` | 422 | cover type, size or path rejected |
 | `VIDEO_INVALIDO` | 422 | video type or size rejected, or the uploaded file does not match |
 | `VIDEO_EN_PROCESO` | 409 | the lesson already has a video uploading or processing |
+| `VIDEO_NO_DISPONIBLE` | 409 | `autorizar_reproduccion` on a lesson without a current `listo` video (SPEC 12) |
 | `SERVICIO_NO_DISPONIBLE` | 503 | the transcoder did not accept the job (the video stays in `error`) |
 
 `NO_ENCONTRADO` (404, with a specific message such as "El curso no existe.") is also what a resource that does not exist, or a draft course in the public catalog, answers. **GraphQL answers `200` with `data: null` and `errors[0].extensions.codigo`** for these domain errors (the HTTP status in the table is the REST one); only failures before execution (limits, allow-list, complexity) use their own status.
@@ -366,16 +371,16 @@ Error shapes:
 | `mis_roles` | signed in | -> `{ roles: [String], equipos: [{ instructor_id nombre_publico }] }` (the student role is implicit) | `TOKEN_INVALIDO` |
 | `categorias` | **public** | -> `[Categoria { id nombre slug posicion }]` ordered by position | `DEMASIADAS_SOLICITUDES` |
 | `cursos(q?, categoria?, nivel?, pagina?)` | **public** | -> `PaginaCursos { cursos[TarjetaCurso] total pagina paginas }`: published courses, 12 per page, search without accents over title, subtitle, description and instructor name, `nivel` is `basico`/`intermedio`/`avanzado`, `categoria` is a slug | `VALIDACION_FALLIDA` (bad `nivel` or `pagina`) |
-| `curso(slug)` | **public** | -> `FichaCurso` with `secciones[].clases[]` (no video, no `instructor_id`, `estado`, `comentario_revision` or emails) | `NO_ENCONTRADO` (unknown or not published) |
+| `curso(slug)` | **public** | -> `FichaCurso` with `secciones[].clases[]` (each lesson has `tiene_video`, true when it has a current `listo` video; no Storage paths, no `instructor_id`, `estado`, `comentario_revision`, key or emails) | `NO_ENCONTRADO` (unknown or not published) |
 | `mis_cursos` | `instructor`, `equipo_apoyo` | -> `[CursoResumen]`: own courses and those of the instructors whose team you are in, any state | `SIN_PERMISO` |
 | `curso_edicion(id)` | `instructor`, `equipo_apoyo`; owner or team | -> `CursoEdicion` with `secciones[].clases[]`, per lesson `video { estado duracion_segundos }` and `video_nuevo { id estado error }`, and `es_dueno`; never the encryption key | `SIN_PERMISO`, `NO_ENCONTRADO` |
 | `estado_video(clase_id)` | `instructor`, `equipo_apoyo`; owner or team (also in review) | -> `{ vigente { id estado duracion_segundos listo_en }, nuevo { id estado error } }`. A video `en_cola`/`procesando` not updated for 45 minutes becomes `error` ("El procesamiento tardó demasiado.") | `SIN_PERMISO`, `NO_ENCONTRADO` |
 | `mi_equipo` | `instructor` | -> `{ miembros[{ miembro_id desde correo }], invitaciones[{ id correo expira_en }] }` (pending and not expired) | `SIN_PERMISO` |
 | `mis_invitaciones` | signed in | -> `[{ id instructor creado_en expira_en }]` (pending and not expired) | `TOKEN_INVALIDO` |
 | `buscar_usuario(correo)` | `administrador` | -> `{ id correo nombre verificado roles }` (exact email) | `SIN_PERMISO`, `NO_ENCONTRADO` |
-| `cursos_en_revision` | `administrador` | -> `[CursoEnRevision]` with the full syllabus | `SIN_PERMISO` |
+| `cursos_en_revision` | `administrador` | -> `[CursoEnRevision]` with the full syllabus (each lesson with `tiene_video`) | `SIN_PERMISO` |
 
-### Mutations (21)
+### Mutations (22)
 
 | Mutation | Who | Arguments -> result | Errors |
 |---|---|---|---|
@@ -399,6 +404,7 @@ Error shapes:
 | `quitar_miembro(miembro_id)` | `instructor` | removes the member and, in the same statement, the `equipo_apoyo` role if the person is in no other team -> `{ ok }` | `SIN_PERMISO`, `NO_ENCONTRADO` |
 | `confirmar_subida_video(video_id)` | `instructor`, `equipo_apoyo`; owner or team, not in review | checks the original in Storage (exists, same size and type), moves `esperando_archivo` -> `en_cola` in one statement and asks the transcoder (`POST /trabajos`, 202) -> `{ estado: 'en_cola' }` | `SIN_PERMISO`, `NO_ENCONTRADO`, `CURSO_EN_REVISION`, `VIDEO_INVALIDO`, `ESTADO_INVALIDO`, `SERVICIO_NO_DISPONIBLE` |
 | `reintentar_video(video_id)` | same | a video in `error` whose original was kept goes back to `en_cola` -> `{ estado: 'en_cola' }` | same |
+| `autorizar_reproduccion(clase_id)` | signed in; see "Protected playback" | checks the access rules and issues a playback token -> `{ video_id token expira_en lista_url duracion_segundos marca_agua }`; stores nothing | `TOKEN_INVALIDO`, `SIN_PERMISO`, `NO_ENCONTRADO`, `VIDEO_NO_DISPONIBLE` |
 | `borrar_video(clase_id)` | same | deletes the current video and any in process or with error, with their Storage folders -> `{ ok }` | `SIN_PERMISO`, `NO_ENCONTRADO`, `CURSO_EN_REVISION` |
 
 Video states: `esperando_archivo -> en_cola -> procesando -> listo | error`. There is one current (`listo`) video per lesson and at most one in process (partial unique indexes); replacing a video keeps the current one until the new one is `listo`, then its files disappear from Storage. A lesson deleted with a video, `borrar_clase`, `borrar_seccion` and `borrar_video` delete rows and files; Storage failures are logged without data and never undo the row deletion. Neither the key nor `clave_hex` appear in any response, schema or log.
@@ -438,7 +444,7 @@ A full `curso_edicion` (`secciones[].clases[]` with video fields) costs 656, so 
 
 ### Persisted queries: regenerate and verify the manifest
 
-The manifest `api/graphql/persisted-queries.json` is `{ "sha256:<hex of the printed document>": "<document>" }` (33 entries) and is versioned in git. The frontend codegen (GraphQL Code Generator, client preset with `persistedDocuments`) writes it from the operations in `frontend/src/features/*/api/`. Run it whenever an operation of the frontend changes:
+The manifest `api/graphql/persisted-queries.json` is `{ "sha256:<hex of the printed document>": "<document>" }` (34 entries) and is versioned in git. The frontend codegen (GraphQL Code Generator, client preset with `persistedDocuments`) writes it from the operations in `frontend/src/features/*/api/`. Run it whenever an operation of the frontend changes:
 
 ```bash
 cd frontend && npm run codegen        # types in src/shared/graphql/generated/ and api/graphql/persisted-queries.json
@@ -463,6 +469,39 @@ docker compose up -d --build api      # production only accepts the hashes baked
 
 The `transcodificador` service (`./transcodificador`, ffmpeg, internal network only, `mem_limit: 2g`, no published port) receives jobs from the API (`POST http://transcodificador:8090/trabajos`, header `X-Secreto-Transcodificador`, answer `202`), downloads the original from Storage with the service key, transcodes it and reports the result with `POST` to its `URL_CALLBACK`, which is `http://api:3000/api/v1/interno/video-procesado` (the internal webhook above, same secret in the header). It limits a lesson to 30 minutes ("dura más de 30 minutos") and retries the callback up to 5 times. A job asked while the transcoder is down leaves the video in `error` with `503 SERVICIO_NO_DISPONIBLE`; `reintentar_video` re-queues it. The queue is in memory: restarting the transcoder loses jobs in process (they end as `error` through the 45-minute rule of `estado_video`).
 
+## Protected playback (SPEC 12)
+
+Playback goes in three steps, and the encryption key leaves the API **only** through `GET .../clave`.
+
+**1. `autorizar_reproduccion(clase_id)`** (GraphQL mutation, persisted hash, needs a session). It stores nothing. Access rules, decided here and never by the front:
+
+| Who | Which lessons |
+|---|---|
+| any account with a session | a lesson marked as sample (`es_muestra`) of a **published** course |
+| the owner instructor, their support team (`equipo_apoyo`) and administrators | any lesson, in any course state |
+| no session | nothing (`TOKEN_INVALIDO`) |
+
+Order of errors: no session `TOKEN_INVALIDO`; lesson does not exist `404 NO_ENCONTRADO`; no right `403 SIN_PERMISO`; no current `listo` video `409 VIDEO_NO_DISPONIBLE` (only for people who have the right, so the state of a lesson does not leak). Answer: `{ video_id, token, expira_en, lista_url, duracion_segundos, marca_agua }` where `marca_agua` is the email of the account and `lista_url` is `/api/v1/reproducciones/<video_id>/lista.m3u8`.
+
+**Playback token:** HS256 JWT signed with the same `JWT_SECRET` but **audience `reproduccion`** (the access token has `authenticated`), `iss = API_EXTERNAL_URL`, claims `sub` (account), `vid` (video), `cid` (lesson), `iat` and `exp`. Its life is `SEGUNDOS_AUTORIZACION_REPRODUCCION` (default 600 s; `expira_en` is that number). It is verified with the same JWT utility (`verifyJwt`, `signJwt` in `modules/security/utils/`) passing the audience: an access token is not valid for the list or the key, and a playback token is not valid for GraphQL. A token with another audience, expired, of another video or without `Bearer` is rejected.
+
+**2. REST routes** under `/api/v1/reproducciones/{video_id}/`, both with `Authorization: Bearer <playback token>` (never in the URL), `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`:
+
+| Route | Answer |
+|---|---|
+| `GET lista.m3u8` | `200 application/vnd.apple.mpegurl`. Reads `<ruta_base>/hls/lista.m3u8` from the private `videos` bucket, keeps `#EXT-X-KEY:METHOD=AES-128,URI="clave",IV=...` as is (the relative `URI="clave"` resolves to the key route) and replaces each `segmento_NNNNN.ts` with a signed Storage URL (`/almacen/object/sign/videos/...?token=...`) that lives as long as the authorization. All the URLs are signed in one batch call (`StorageService.signDownloads`) |
+| `GET clave` | `200 application/octet-stream`, the 16 bytes of `escuela.claves_video.clave` |
+
+Errors (uniform format): no token, expired or another audience `401 TOKEN_INVALIDO`; token of another video `403 SIN_PERMISO`; the video is no longer the current one or is not `listo` `404 NO_ENCONTRADO`. Both routes count for the 120 requests per minute limit **of their own route and IP**: the 121st request to `lista.m3u8` (or to `clave`) from one IP in a minute gets `429` with `Retry-After`.
+
+**Strict playlist parser** (`playback/utils/playlist.ts`): the list read from Storage is rejected whole (`500 ERROR_INTERNO`, logged without secrets) unless it starts with `#EXTM3U`, every non-tag line is exactly `segmento_NNNNN.ts` (so no other path of the bucket can ever be signed), the only tag with `URI=` is the `#EXT-X-KEY` of this format, and it has between 1 and 5000 segments.
+
+**`StorageService`:** `signDownloads(bucket, paths, expiresIn)` calls `POST /object/sign/<bucket>` once with `{ expiresIn, paths }` and returns one relative URL per path in the same order (a missing object or a mismatch is `500`); `downloadText(bucket, path, maxBytes)` reads a small object with the service key (`null` if it does not exist, `500` if it is bigger than `maxBytes`).
+
+**3. The browser** (`frontend/`, `hls.js`) sends the token only to `/api/v1/reproducciones/*`, never to Storage, renews the authorization at 80 % of its life and shows the account email as a moving watermark. See `../frontend/README.md`.
+
+**Limits of this design (SPEC 12):** a browser that plays a video has to receive the key and the segments, so a person with permission who knows the browser tools can save them during the life of the authorization. What is achieved: no download with a click or a copied link, URLs and key that die with the authorization, only authorized accounts, and any copy by screen recording carries the email of whoever made it. Preventing copies absolutely needs commercial DRM (Widevine, FairPlay), which is out of scope. The rate limit counts per route and IP, so the segments (which go straight to Storage) do not count and a shared IP shares the limit.
+
 ## Email
 
 - **Auth templates:** `src/modules/mail-templates/` serves the `*.html` files of `api/templates/` from memory at `GET /plantillas-correo/:nombre` (the name must match `^[a-z0-9_]+\.html$` and is looked up in a map loaded at startup: no listing, no path reading). Supabase Auth downloads them from `http://api:3000/plantillas-correo/...` (`GOTRUE_MAILER_TEMPLATES_*` in `supabase/docker-compose.yml`); `auth` depends on `api` (`service_started`). If `api` is down when Supabase sends, the email goes out with the default English template. Templates: `verificacion.html`, `recuperacion.html` and `cambio_contrasena.html`; they contain no secrets.
@@ -471,10 +510,10 @@ The `transcodificador` service (`./transcodificador`, ffmpeg, internal network o
 
 ## Postman
 
-`api/postman/` (v2.1), shared environment `local.postman_environment.json` (`base_url` = `http://127.0.0.1:3000`; no secrets: `token_acceso` and `secreto_transcodificador` are empty `secret` variables, plus `curso_id`, `seccion_id`, `clase_id`, `video_id`, `invitacion_id`, `categoria_id`, `usuario_id`, `slug`, `ruta_portada`, `correo_invitado`):
+`api/postman/` (v2.1), shared environment `local.postman_environment.json` (`base_url` = `http://127.0.0.1:3000`; no secrets: `token_acceso`, `secreto_transcodificador` and `token_reproduccion` are empty `secret` variables, plus `curso_id`, `seccion_id`, `clase_id`, `video_id`, `invitacion_id`, `categoria_id`, `usuario_id`, `slug`, `ruta_portada`, `correo_invitado`):
 
 - `medical-school-api.postman_collection.json`: folders `Auth` (REST) and `GraphQL` (`yo`), with success and error examples. Login and renewal store `token_acceso` in the environment.
-- `medical-school-school.postman_collection.json`: folders `Roles y administración`, `Categorías`, `Cursos`, `Temario`, `Catálogo`, `Revisión`, `Portadas`, `Equipo` and `Videos` with the 33 operations (`POST {{base_url}}/api/graphql`, body with `operationName`, `variables` and `extensions.persistedQuery.sha256Hash`, `Authorization: Bearer {{token_acceso}}` where a session is needed), the two REST signatures and the internal webhook (`X-Secreto-Transcodificador: {{secreto_transcodificador}}`), each with a success and an error example (`extensions.codigo`). The extra folder `Desarrollo: consulta completa` repeats the 33 operations with the full query text instead of the hash (it only works against a development API; in production it gets `400 CONSULTA_NO_PERMITIDA`).
+- `medical-school-school.postman_collection.json`: folders `Roles y administración`, `Categorías`, `Cursos`, `Temario`, `Catálogo`, `Revisión`, `Portadas`, `Equipo`, `Videos` and `Reproducción` with the 34 operations (`POST {{base_url}}/api/graphql`, body with `operationName`, `variables` and `extensions.persistedQuery.sha256Hash`, `Authorization: Bearer {{token_acceso}}` where a session is needed), the two REST signatures and the internal webhook (`X-Secreto-Transcodificador: {{secreto_transcodificador}}`), each with a success and an error example (`extensions.codigo`). The folder `Reproducción` has `autorizar_reproduccion` (its test script stores `token_reproduccion` and `video_id` in the environment) and the two `GET` routes (`Authorization: Bearer {{token_reproduccion}}`), with examples of `200`, `401`, `403`, `404`, `SIN_PERMISO` and `VIDEO_NO_DISPONIBLE`. The extra folder `Desarrollo: consulta completa` repeats the 34 operations with the full query text instead of the hash (it only works against a development API; in production it gets `400 CONSULTA_NO_PERMITIDA`).
 
 The school collection is generated, not written by hand: `python3 api/scripts/generate-school-postman.py` reads hashes and texts from `graphql/persisted-queries.json` (by operation name) and fails if an operation of the schema is missing. Re-run it after regenerating the manifest.
 
@@ -496,5 +535,6 @@ The school collection is generated, not written by hand: `python3 api/scripts/ge
 - **The list multipliers are estimates** by field name, not the real size (see `LIST_SIZES`); a response is never truncated by them.
 - **Transcoder:** in-memory queue (a restart loses jobs in process), one quality, 30-minute limit per lesson, and no cleanup of abandoned uploads (a signed video that is never confirmed stays as `esperando_archivo` with its object in Storage).
 - **Webhook protected only by the shared secret:** port 3000 is the single port, so the route is reachable from the host; without `X-Secreto-Transcodificador` it answers `403`.
-- **Video playback is not served yet** (protected playback, deliverable key and signed read URLs are SPEC 12); the key stays in the database.
+- **Playback is protected but not copy-proof:** see "Limits of this design" in "Protected playback". The watermark exists only in the client; there is no DRM, no audit of who watched what (SPEC 13 and later) and no key rotation. In development the signed URLs go through the `/almacen` proxy of Astro; production needs a reverse proxy.
+- **A playback token lives up to `SEGUNDOS_AUTORIZACION_REPRODUCCION` seconds** and is not revoked if the account loses access meanwhile.
 - **Courses cannot be deleted** (only retired back to draft) and there are no GraphQL subscriptions, DataLoader or server-side response cache.

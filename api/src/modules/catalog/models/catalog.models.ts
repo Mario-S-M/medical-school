@@ -49,7 +49,7 @@ export class CoursePage {
   pages!: number;
 }
 
-@ObjectType('ClaseTemario', { description: 'Clase del temario (sin video ni claves).' })
+@ObjectType('ClaseTemario', { description: 'Clase del temario (sin rutas, archivos ni claves del video).' })
 export class SyllabusLesson {
   @Field(() => BigIntScalar, { name: 'id' })
   id!: number;
@@ -65,6 +65,9 @@ export class SyllabusLesson {
 
   @Field(() => Boolean, { name: 'es_muestra' })
   isSample!: boolean;
+
+  @Field(() => Boolean, { name: 'tiene_video', description: 'La clase tiene un video vigente y listo (solo el dato, nunca rutas ni claves).' })
+  hasVideo!: boolean;
 
   @Field(() => Int, { name: 'posicion' })
   position!: number;

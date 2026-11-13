@@ -26,3 +26,8 @@ export async function waitForCode(correo: string, previos = 0): Promise<string> 
   }
   throw new Error(`No llegó ningún código a ${correo}`);
 }
+
+// Borra de Mailpit los correos enviados a las cuentas de prueba (@ejemplo.test), para no dejar nada al terminar.
+export async function deleteTestEmails() {
+  await (await mailpit()).delete('search', { params: { query: 'to:ejemplo.test' } });
+}

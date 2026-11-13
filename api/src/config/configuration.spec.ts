@@ -41,6 +41,14 @@ describe('readConfig', () => {
     expect(() => readConfig({ ...base, URL_STORAGE: 'ftp://storage' })).toThrow('URL_STORAGE');
     expect(() => readConfig({ ...base, SMTP_PORT: '0' })).toThrow('SMTP_PORT');
   });
+  it('SEGUNDOS_AUTORIZACION_REPRODUCCION vale 600 por defecto y acepta de 60 a 3600', () => {
+    expect(readConfig(base).playback).toEqual({ authorizationSeconds: 600 });
+    expect(readConfig({ ...base, SEGUNDOS_AUTORIZACION_REPRODUCCION: '60' }).playback.authorizationSeconds).toBe(60);
+    expect(readConfig({ ...base, SEGUNDOS_AUTORIZACION_REPRODUCCION: '3600' }).playback.authorizationSeconds).toBe(3600);
+    for (const value of ['59', '3601', '1.5', 'abc', '-1']) {
+      expect(() => readConfig({ ...base, SEGUNDOS_AUTORIZACION_REPRODUCCION: value })).toThrow('SEGUNDOS_AUTORIZACION_REPRODUCCION');
+    }
+  });
   it('falla con un puerto o un entorno inválido', () => {
     expect(() => readConfig({ ...base, PUERTO: 'abc' })).toThrow('PUERTO');
     expect(() => readConfig({ ...base, NODE_ENV: 'otro' })).toThrow('NODE_ENV');

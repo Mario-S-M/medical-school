@@ -3,8 +3,8 @@
 
 Uso, desde la raíz del repo:  python3 api/scripts/generate-school-postman.py
 Los hashes y el texto de cada consulta salen de api/graphql/persisted-queries.json (se busca la entrada por nombre de
-operación); si falta alguna de las 33 operaciones del esquema, el script falla. No lleva secretos: los valores sensibles
-(`token_acceso`, `secreto_transcodificador`) quedan vacíos en el entorno.
+operación); si falta alguna de las 34 operaciones del esquema, el script falla. No lleva secretos: los valores sensibles
+(`token_acceso`, `secreto_transcodificador`, `token_reproduccion`) quedan vacíos en el entorno.
 """
 import json
 import re
@@ -27,6 +27,8 @@ E_TOKEN = ("TOKEN_INVALIDO", "El token de acceso falta, no es válido o expiró.
 E_PERMISO = ("SIN_PERMISO", "No tienes permiso para hacer esto.")
 E_REVISION = ("CURSO_EN_REVISION", "El curso está en revisión y no se puede editar.")
 E_CURSO = ("NO_ENCONTRADO", "El curso no existe.")
+E_VIDEO = ("VIDEO_NO_DISPONIBLE", "El video de esta clase todavía no está listo.")
+E_CLASE = ("NO_ENCONTRADO", "La clase no existe.")
 FECHA = "2026-11-13T15:00:00.000Z"
 
 # (carpeta, operación, sesión, variables, descripción, respuesta correcta (data), error (codigo, mensaje))
@@ -107,6 +109,10 @@ GQL = [
      {"reintentar_video": {"estado": "en_cola"}}, ("ESTADO_INVALIDO", "Solo se puede reintentar un video con error.")),
     ("Videos", "borrar_video", True, {"clase_id": "{{clase_id}}"}, "Dueño o equipo de apoyo; no en revisión. Borra el video vigente y los que estén en proceso o con error, con sus archivos.",
      {"borrar_video": {"ok": True}}, E_REVISION),
+
+    ("Reproducción", "autorizar_reproduccion", True, {"clase_id": "{{clase_id}}"}, "Cualquier cuenta con sesión si la clase es muestra de un curso publicado; el instructor dueño, su equipo de apoyo y los administradores, en cualquier clase. Devuelve el token de reproducción (JWT de audiencia `reproduccion`, atado a un video y una cuenta; vive expira_en segundos, 600 por defecto), la ruta de la lista y el correo de la marca de agua. Un script de prueba guarda el token en la variable de entorno token_reproduccion y el video_id en video_id: úsalos en las dos rutas REST de esta carpeta. No guarda nada en la base.",
+     {"autorizar_reproduccion": {"video_id": 1, "token": "<JWT de reproducción>", "expira_en": 600, "lista_url": "/api/v1/reproducciones/1/lista.m3u8", "duracion_segundos": 240, "marca_agua": "ana@example.com"}},
+     [E_PERMISO, E_VIDEO, E_CLASE, E_TOKEN]),
 ]
 
 # Rutas REST de los bordes: (carpeta, nombre, ruta, secreto, cuerpo, descripción, éxito (estado, cuerpo), error (estado, codigo, mensaje))
@@ -125,7 +131,23 @@ REST = [
      (403, "SIN_PERMISO", "No tienes permiso para hacer esto.")),
 ]
 
-CARPETAS = ["Roles y administración", "Categorías", "Cursos", "Temario", "Catálogo", "Revisión", "Portadas", "Equipo", "Videos"]
+# Rutas REST de reproducción (GET con el token de reproducción): (nombre, ruta, descripción, éxito (tipo, cuerpo), errores (estado, codigo, mensaje))
+LISTA_EJEMPLO = ("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:0\n"
+                 "#EXT-X-KEY:METHOD=AES-128,URI=\"clave\",IV=0x00000000000000000000000000000001\n"
+                 "#EXTINF:6.000000,\n/almacen/object/sign/videos/cursos/1/secciones/1/clases/1/1/hls/segmento_00000.ts?token=<firma>\n#EXT-X-ENDLIST\n")
+E_REPRO = [(401, "TOKEN_INVALIDO", "El token de acceso falta, no es válido o expiró."),
+           (403, "SIN_PERMISO", "No tienes permiso para hacer esto."),
+           (404, "NO_ENCONTRADO", "Recurso no encontrado.")]
+REPRODUCCION = [
+    ("GET lista.m3u8", "/api/v1/reproducciones/{{video_id}}/lista.m3u8",
+     "Authorization: Bearer {{token_reproduccion}} (el token de la mutación autorizar_reproduccion; el token de acceso normal da 401). Responde la lista HLS con el #EXT-X-KEY tal cual y cada segmento como URL firmada de Storage con la misma vida que la autorización. Cache-Control: no-store. 401 sin token, caducado o de otra audiencia; 403 con el token de otro video; 404 si el video ya no es el vigente o no está listo. Cuenta para el límite de 120 peticiones por minuto y por IP de la ruta (429 con Retry-After).",
+     ("application/vnd.apple.mpegurl", LISTA_EJEMPLO), E_REPRO),
+    ("GET clave", "/api/v1/reproducciones/{{video_id}}/clave",
+     "Authorization: Bearer {{token_reproduccion}}. Única ruta que entrega la clave de cifrado AES-128: 16 bytes en application/octet-stream (Postman los muestra como binario). Cache-Control: no-store. Mismos errores que la lista.",
+     ("application/octet-stream", "<16 bytes binarios>"), E_REPRO),
+]
+
+CARPETAS = ["Roles y administración", "Categorías", "Cursos", "Temario", "Catálogo", "Revisión", "Portadas", "Equipo", "Videos", "Reproducción"]
 DESCRIPCIONES = {
     "Roles y administración": "yo, mis_roles y las operaciones del administrador sobre cuentas y roles (módulos roles y users-admin).",
     "Categorías": "Categorías del catálogo (módulo categories). `categorias` es pública.",
@@ -136,6 +158,7 @@ DESCRIPCIONES = {
     "Portadas": "Firma REST de la portada y su confirmación en GraphQL (módulo covers).",
     "Equipo": "Equipo de apoyo e invitaciones (módulos team y mail).",
     "Videos": "Firma REST del video, estado, reintento, borrado y webhook interno (módulo videos).",
+    "Reproducción": "Autorización de 10 minutos (GraphQL) y las dos rutas REST de borde con el token de reproducción: la lista y la clave (módulo playback).",
 }
 
 
@@ -167,7 +190,17 @@ def cabeceras(sesion, secreto=False):
     return h
 
 
-def peticion(nombre, ruta, sesion, cuerpo_raw, descripcion, ejemplos, secreto=False):
+# Guarda el token y el video de la autorización para las dos rutas REST de reproducción.
+EVENTO_TOKEN = [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+    "const cuerpo = pm.response.json();",
+    "const a = cuerpo.data && cuerpo.data.autorizar_reproduccion;",
+    "if (a) {",
+    "  pm.environment.set('token_reproduccion', a.token);",
+    "  pm.environment.set('video_id', a.video_id);",
+    "}"]}}]
+
+
+def peticion(nombre, ruta, sesion, cuerpo_raw, descripcion, ejemplos, secreto=False, evento=None):
     req = {"method": "POST", "header": cabeceras(sesion, secreto), "url": url(ruta), "description": descripcion,
            "body": {"mode": "raw", "raw": cuerpo_raw, "options": {"raw": {"language": "json"}}}}
     respuestas = []
@@ -175,7 +208,21 @@ def peticion(nombre, ruta, sesion, cuerpo_raw, descripcion, ejemplos, secreto=Fa
         respuestas.append({"name": titulo, "originalRequest": req, "status": texto, "code": estado,
                            "_postman_previewlanguage": "json", "header": [{"key": "Content-Type", "value": "application/json; charset=utf-8"}],
                            "body": j(cuerpo)})
-    return {"id": uid(nombre + ruta + cuerpo_raw[:60]), "name": nombre, "request": req, "response": respuestas}
+    item = {"id": uid(nombre + ruta + cuerpo_raw[:60]), "name": nombre, "request": req, "response": respuestas}
+    if evento:
+        item["event"] = evento
+    return item
+
+
+def peticion_get(nombre, ruta, descripcion, ok, errores):
+    req = {"method": "GET", "header": [{"key": "Authorization", "value": "Bearer {{token_reproduccion}}"}], "url": url(ruta), "description": descripcion}
+    texto = {401: "Unauthorized", 403: "Forbidden", 404: "Not Found"}
+    respuestas = [{"name": "200 Correcta", "originalRequest": req, "status": "OK", "code": 200, "_postman_previewlanguage": "text",
+                   "header": [{"key": "Content-Type", "value": ok[0]}, {"key": "Cache-Control", "value": "no-store"}], "body": ok[1]}]
+    for estado, codigo, mensaje in errores:
+        respuestas.append({"name": f"{estado} {codigo}", "originalRequest": req, "status": texto[estado], "code": estado, "_postman_previewlanguage": "json",
+                           "header": [{"key": "Content-Type", "value": "application/json; charset=utf-8"}], "body": j({"error": {"codigo": codigo, "mensaje": mensaje}})})
+    return {"id": uid(nombre + ruta), "name": nombre, "request": req, "response": respuestas}
 
 
 def error_gql(codigo, mensaje, campo):
@@ -202,9 +249,9 @@ def peticion_gql(carpeta, op, sesion, variables, descripcion, ok, error, complet
     else:
         desc = f"{OPERACIONES[op][2].capitalize()} `{op}` por hash persistido (sha256 del manifiesto api/graphql/persisted-queries.json). {descripcion}"
         nombre = op
-    ejemplos = [("200 Correcta", 200, "OK", {"data": ok}),
-                (f"200 Error {error[0]}", 200, "OK", error_gql(error[0], error[1], campo))]
-    return peticion(nombre, "/api/graphql", sesion, cuerpo, desc, ejemplos)
+    errores = error if isinstance(error, list) else [error]
+    ejemplos = [("200 Correcta", 200, "OK", {"data": ok})] + [(f"200 Error {e[0]}", 200, "OK", error_gql(e[0], e[1], campo)) for e in errores]
+    return peticion(nombre, "/api/graphql", sesion, cuerpo, desc, ejemplos, evento=EVENTO_TOKEN if op == "autorizar_reproduccion" else None)
 
 
 def peticion_rest(carpeta, nombre, ruta, secreto, cuerpo, descripcion, ok, error):
@@ -221,24 +268,26 @@ def construir():
         carpetas[carpeta].append(peticion_gql(carpeta, op, sesion, variables, desc, ok, error, False))
     for carpeta, nombre, ruta, secreto, cuerpo, desc, ok, error in REST:
         carpetas[carpeta].append(peticion_rest(carpeta, nombre, ruta, secreto, cuerpo, desc, ok, error))
+    for nombre, ruta, desc, ok, errores in REPRODUCCION:
+        carpetas["Reproducción"].append(peticion_get(nombre, ruta, desc, ok, errores))
     items = [{"id": uid("carpeta" + c), "name": c, "description": DESCRIPCIONES[c], "item": carpetas[c]} for c in CARPETAS]
     completas = [peticion_gql(c, op, s, v, d, ok, er, True) for c, op, s, v, d, ok, er in GQL]
     items.append({"id": uid("carpeta-completa"), "name": "Desarrollo: consulta completa",
-                  "description": "Las mismas 33 operaciones con el texto completo de la consulta en lugar del hash. Solo funcionan con la API en desarrollo (npm run start:dev); en producción, 400 CONSULTA_NO_PERMITIDA.",
+                  "description": "Las mismas 34 operaciones con el texto completo de la consulta en lugar del hash. Solo funcionan con la API en desarrollo (npm run start:dev); en producción, 400 CONSULTA_NO_PERMITIDA.",
                   "item": completas})
     return {"info": {"_postman_id": uid("coleccion"), "name": "Medical School - Escuela",
                      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-                     "description": "Escuela de la plataforma (SPEC 10): operaciones de GraphQL en POST {{base_url}}/api/graphql (por hash persistido, como el front) y las tres rutas REST de los bordes (firma de portada, firma de video y webhook interno). Contrato completo en api/README.md. Inicia sesión primero con la colección Medical School API (guarda token_acceso en el entorno). Orden sugerido: crear_curso, guardar_seccion, guardar_clase, firma de portada, confirmar_portada, firma de video, confirmar_subida_video, estado_video, enviar_revision."},
+                     "description": "Escuela de la plataforma (SPEC 10): operaciones de GraphQL en POST {{base_url}}/api/graphql (por hash persistido, como el front) y las rutas REST de los bordes (firma de portada, firma de video, webhook interno y, para la reproducción, la lista y la clave con el token de reproducción). Contrato completo en api/README.md. Inicia sesión primero con la colección Medical School API (guarda token_acceso en el entorno). Orden sugerido: crear_curso, guardar_seccion, guardar_clase, firma de portada, confirmar_portada, firma de video, confirmar_subida_video, estado_video, enviar_revision. Para ver una clase: autorizar_reproduccion (guarda token_reproduccion), GET lista.m3u8 y GET clave."},
             "item": items}
 
 
 def comprobar(coleccion):
-    # Las 33 operaciones del esquema (campos de Query y Mutation) deben estar todas en la colección y en el manifiesto
+    # Las 34 operaciones del esquema (campos de Query y Mutation) deben estar todas en la colección y en el manifiesto
     campos = set()
     for bloque in re.findall(r"type (?:Query|Mutation) \{(.*?)\n\}", SCHEMA, re.S):
         campos |= set(re.findall(r"^  (\w+)[(:]", bloque, re.M))
     en_coleccion = {op for _, op, *_ in GQL}
-    assert len(en_coleccion) == len(GQL) == 33, len(GQL)
+    assert len(en_coleccion) == len(GQL) == 34, len(GQL)
     assert campos == en_coleccion == set(OPERACIONES), (campos ^ en_coleccion, en_coleccion ^ set(OPERACIONES))
 
 
@@ -248,7 +297,7 @@ def entorno(ruta):
     nuevas = [("correo_invitado", "invitado@example.com", "default"), ("usuario_id", "", "default"), ("categoria_id", "", "default"),
               ("curso_id", "", "default"), ("slug", "", "default"), ("seccion_id", "", "default"), ("clase_id", "", "default"),
               ("video_id", "", "default"), ("invitacion_id", "", "default"), ("ruta_portada", "", "default"),
-              ("secreto_transcodificador", "", "secret")]
+              ("secreto_transcodificador", "", "secret"), ("token_reproduccion", "", "secret")]
     for clave, valor, tipo in nuevas:
         if clave not in existentes:
             datos["values"].append({"key": clave, "value": valor, "type": tipo, "enabled": True})
@@ -260,7 +309,7 @@ def main():
     comprobar(coleccion)
     (API / "postman" / "medical-school-school.postman_collection.json").write_text(json.dumps(coleccion, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     entorno(API / "postman" / "local.postman_environment.json")
-    print(f"{len(GQL)} operaciones de GraphQL x 2 (hash y consulta completa) y {len(REST)} rutas REST")
+    print(f"{len(GQL)} operaciones de GraphQL x 2 (hash y consulta completa) y {len(REST) + len(REPRODUCCION)} rutas REST")
 
 
 if __name__ == "__main__":

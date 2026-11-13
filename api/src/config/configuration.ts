@@ -12,6 +12,8 @@ export interface AppConfig {
   jwt: { secret: string; issuer: string };
   // Supabase Storage: dirección interna y tiempo máximo de espera de cada llamada (usa `auth.serviceKey` para autenticarse).
   storage: { url: string; timeoutMs: number };
+  // Reproducción protegida (SPEC 12): vida en segundos del token de reproducción y de las URL firmadas de los segmentos.
+  playback: { authorizationSeconds: number };
   // Transcodificador de videos (red interna): dirección, secreto compartido (cabecera `X-Secreto-Transcodificador`, en los dos
   // sentidos; nunca sale en una respuesta ni en el registro) y tiempo máximo de espera al pedirle un trabajo.
   transcoder: { url: string; secret: string; timeoutMs: number };
@@ -52,6 +54,14 @@ function validUrl(env: Environment, key: string, fallback: string): string {
   throw new Error(`La variable de entorno ${key} debe ser una URL http o https`);
 }
 
+function validInteger(env: Environment, key: string, fallback: string, min: number, max: number): number {
+  const value = Number(text(env, key, fallback));
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new Error(`La variable de entorno ${key} debe ser un entero entre ${min} y ${max}`);
+  }
+  return value;
+}
+
 export function readConfig(env: Environment = process.env): AppConfig {
   const environment = text(env, 'NODE_ENV', 'development');
   if (!['development', 'production', 'test'].includes(environment)) {
@@ -69,6 +79,7 @@ export function readConfig(env: Environment = process.env): AppConfig {
     },
     jwt: { secret: text(env, 'JWT_SECRET'), issuer: text(env, 'API_EXTERNAL_URL') },
     storage: { url: validUrl(env, 'URL_STORAGE', 'http://storage:5000'), timeoutMs: Number(text(env, 'TIEMPO_ESPERA_STORAGE_MS', '15000')) },
+    playback: { authorizationSeconds: validInteger(env, 'SEGUNDOS_AUTORIZACION_REPRODUCCION', '600', 60, 3600) },
     transcoder: {
       url: validUrl(env, 'URL_TRANSCODIFICADOR', 'http://transcodificador:8090'),
       secret: text(env, 'SECRETO_TRANSCODIFICADOR'),

@@ -80,6 +80,46 @@ describe('StorageService', () => {
     expect(fetchMock.mock.calls.every(([, init]) => (init as RequestInit).method === 'POST')).toBe(true);
   });
 
+  it('signDownloads firma todas las rutas en UNA llamada por lotes y devuelve las URL en el orden pedido', async () => {
+    fetchMock.mockResolvedValue(
+      reply(200, [
+        { error: null, path: 'v/hls/segmento_00002.ts', signedURL: '/object/sign/videos/v/hls/segmento_00002.ts?token=b' },
+        { error: null, path: 'v/hls/segmento_00001.ts', signedURL: '/object/sign/videos/v/hls/segmento_00001.ts?token=a' },
+      ]),
+    );
+    const urls = await service.signDownloads('videos', ['v/hls/segmento_00001.ts', 'v/hls/segmento_00002.ts'], 600);
+    expect(urls).toEqual(['/object/sign/videos/v/hls/segmento_00001.ts?token=a', '/object/sign/videos/v/hls/segmento_00002.ts?token=b']);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('http://storage:5000/object/sign/videos');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({ expiresIn: 600, paths: ['v/hls/segmento_00001.ts', 'v/hls/segmento_00002.ts'] });
+  });
+
+  it('signDownloads da 500 si falta un objeto o Storage contesta algo inesperado, y sin rutas no llama', async () => {
+    fetchMock.mockResolvedValueOnce(reply(200, [{ error: 'no existe', path: 'a.ts', signedURL: null }]));
+    await expect(service.signDownloads('videos', ['a.ts'], 60)).rejects.toMatchObject({ code: 'ERROR_INTERNO' });
+    fetchMock.mockResolvedValueOnce(reply(200, [{ error: null, path: 'a.ts', signedURL: 'http://otro/a.ts?token=x' }]));
+    await expect(service.signDownloads('videos', ['a.ts'], 60)).rejects.toMatchObject({ code: 'ERROR_INTERNO' });
+    fetchMock.mockResolvedValueOnce(reply(500, {}));
+    await expect(service.signDownloads('videos', ['a.ts'], 60)).rejects.toMatchObject({ code: 'ERROR_INTERNO' });
+    fetchMock.mockClear();
+    expect(await service.signDownloads('videos', [], 60)).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('downloadText lee el texto, devuelve null si no existe y da 500 si falla o pesa de más', async () => {
+    fetchMock.mockResolvedValueOnce(reply(200, '#EXTM3U\n'));
+    expect(await service.downloadText('videos', 'v/hls/lista.m3u8', 100)).toBe('#EXTM3U\n');
+    expect((fetchMock.mock.calls[0] as [string])[0]).toBe('http://storage:5000/object/authenticated/videos/v/hls/lista.m3u8');
+    fetchMock.mockResolvedValueOnce(reply(400, { statusCode: '404' }));
+    expect(await service.downloadText('videos', 'nada', 100)).toBeNull();
+    fetchMock.mockResolvedValueOnce(reply(500, 'clave-de-prueba'));
+    await expect(service.downloadText('videos', 'a', 100)).rejects.toMatchObject({ code: 'ERROR_INTERNO', apiMessage: 'Error interno del servidor.' });
+    fetchMock.mockResolvedValueOnce(reply(200, 'x'.repeat(101)));
+    await expect(service.downloadText('videos', 'a', 100)).rejects.toMatchObject({ code: 'ERROR_INTERNO' });
+  });
+
   it('publicUrl devuelve la ruta pública bajo /almacen', () => {
     expect(service.publicUrl('portadas', 'cursos/1/x.png')).toBe('/almacen/object/public/portadas/cursos/1/x.png');
   });

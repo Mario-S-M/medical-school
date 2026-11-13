@@ -14,6 +14,7 @@ import { GraphqlModule } from './modules/graphql/graphql.module';
 import { HealthModule } from './modules/health/health.module';
 import { MailModule } from './modules/mail/mail.module';
 import { MailTemplatesModule } from './modules/mail-templates/mail-templates.module';
+import { PlaybackModule } from './modules/playback/playback.module';
 import { ReviewModule } from './modules/review/review.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { StorageModule } from './modules/storage/storage.module';
@@ -41,6 +42,7 @@ import { VideosModule } from './modules/videos/videos.module';
     StorageModule,
     CoversModule,
     VideosModule,
+    PlaybackModule,
     UsersAdminModule,
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],

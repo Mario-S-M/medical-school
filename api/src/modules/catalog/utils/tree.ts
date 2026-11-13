@@ -14,6 +14,7 @@ export interface LessonRow {
   descripcion: string | null;
   duracion_estimada_minutos: number | null;
   es_muestra: boolean;
+  tiene_video: boolean;
   posicion: number;
 }
 
@@ -29,6 +30,7 @@ export function buildTrees(courseIds: number[], sections: SectionRow[], lessons:
       description: lesson.descripcion,
       estimatedMinutes: lesson.duracion_estimada_minutos,
       isSample: lesson.es_muestra,
+      hasVideo: lesson.tiene_video,
       position: lesson.posicion,
     });
     lessonsBySection.set(lesson.seccion_id, list);

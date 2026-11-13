@@ -1,13 +1,14 @@
 import { z } from 'zod';
 import { videoStateSchema } from '../../videos/schemas/video-status-schema';
 
-// Los campos de video solo vienen en el editor; en el temario público faltan (o son null).
+// Los campos de video solo vienen en el editor; en el temario público faltan (o son null). `tiene_video` llega en el temario público y en la revisión.
 export const lessonSchema = z.object({
   id: z.number(),
   titulo: z.string(),
   descripcion: z.string().nullish(),
   duracion_estimada_minutos: z.number().nullish(),
   es_muestra: z.boolean(),
+  tiene_video: z.boolean().nullish(),
   posicion: z.number().optional(),
   video: z.object({ estado: videoStateSchema, duracion_segundos: z.number().nullish() }).nullish(),
   video_nuevo: z.object({ id: z.number(), estado: videoStateSchema, error: z.string().nullish() }).nullish(),

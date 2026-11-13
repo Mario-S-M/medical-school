@@ -1,7 +1,10 @@
+import WatchLink from '../../player/components/WatchLink';
 import type { Section } from '../../courses/schemas/syllabus-schema';
 
-// Temario en solo lectura: secciones, clases, duración estimada y la etiqueta Muestra. No muestra ningún video.
-export default function PublicSyllabus({ sections }: { sections: Section[] }) {
+// Temario en solo lectura con la etiqueta Muestra. "Ver clase" solo en las muestra (ficha) o en las que tienen video (revisión).
+type Props = { sections: Section[]; link?: 'sample' | 'video' };
+
+export default function PublicSyllabus({ sections, link = 'sample' }: Props) {
   return (
     <ol className="flex flex-col gap-3">
       {sections.map((s) => (
@@ -13,6 +16,7 @@ export default function PublicSyllabus({ sections }: { sections: Section[] }) {
                 <span>{c.titulo}</span>
                 {c.es_muestra && <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800">Muestra</span>}
                 {c.duracion_estimada_minutos && <span className="text-slate-500">{c.duracion_estimada_minutos} min</span>}
+                {(link === 'video' ? c.tiene_video : c.es_muestra) && <WatchLink lessonId={c.id} title={c.titulo} />}
               </li>
             ))}
           </ul>
