@@ -4,7 +4,7 @@ import { getParam } from '../../../shared/lib/url-params';
 import { withQueryClient } from '../../../shared/lib/with-query-client';
 import RetireCourse from '../../admin/components/RetireCourse';
 import useRoles from '../../auth/hooks/use-roles';
-import { coverUrl } from '../../courses/lib/cover-url';
+import CoverImage from '../../courses/components/CoverImage';
 import useCourseSheet from '../hooks/use-course-sheet';
 import { LEVEL_LABELS } from '../lib/level-labels';
 import PublicSyllabus from './PublicSyllabus';
@@ -14,10 +14,9 @@ function CourseSheet() {
   const { roles } = useRoles();
   if (error) return <ErrorAlert message={`${errorMessage(error)} El curso no existe o ya no está disponible.`} />;
   if (!course) return <p role="status" className="text-slate-500">Cargando…</p>;
-  const cover = coverUrl(course.portada_ruta);
   return (
     <article className="flex max-w-3xl flex-col gap-5">
-      {cover && <img src={cover} alt={`Portada de ${course.titulo}`} className="h-64 w-full rounded-2xl object-cover" />}
+      <CoverImage path={course.portada_ruta} alt={`Portada de ${course.titulo}`} className="h-64 w-full rounded-2xl object-cover" />
       <h1 className="text-3xl font-bold">{course.titulo}</h1>
       {course.subtitulo && <p className="text-lg text-slate-700">{course.subtitulo}</p>}
       <p className="text-sm text-slate-600">{course.instructor}{course.categoria ? ` · ${course.categoria.nombre}` : ''}{course.nivel ? ` · ${LEVEL_LABELS[course.nivel]}` : ''}</p>

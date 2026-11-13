@@ -60,6 +60,10 @@ export const setCourseStateE2E = (titulo: string, estado: string) =>
 export const setCourseCoverE2E = (titulo: string) =>
   sql(SCHOOL, `update escuela.cursos set portada_ruta = 'cursos/e2e/portada.png' where titulo = '${titulo}'`);
 
+// Quita la portada (deja el curso sin ruta), para no arrastrar la portada falsa a otras pruebas.
+export const clearCourseCoverE2E = (titulo: string) =>
+  sql(SCHOOL, `update escuela.cursos set portada_ruta = null where titulo = '${titulo}'`);
+
 // Curso ya publicado (con una sección y una clase muestra) para probar el catálogo sin pasar por la revisión.
 export function createPublishedCourseE2E(titulo: string, slug: string, nivel = 'basico', minutos = 0) {
   sql(SCHOOL, `with c as (insert into escuela.cursos (slug, instructor_id, titulo, subtitulo, descripcion, nivel, categoria_id, estado, publicado_en)

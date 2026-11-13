@@ -1,5 +1,5 @@
 import { expect, test } from './helpers/test-base';
-import { createCategoryE2E, createPublishedCourseE2E, clearLimits } from './helpers/database';
+import { clearCourseCoverE2E, createCategoryE2E, createPublishedCourseE2E, clearLimits, setCourseCoverE2E } from './helpers/database';
 import { signInAsAdmin } from './helpers/school';
 import { uniqueEmail, visit } from './helpers/users';
 
@@ -69,4 +69,24 @@ test('un administrador retira un curso desde su ficha', async ({ page }) => {
   await expect(page).toHaveURL(/\/cursos$/);
   await visit(page, '/cursos?categoria=e2e-ciencias');
   await expect(page.getByText('12 cursos')).toBeVisible();
+});
+
+test('una portada que no carga se reemplaza por el fondo de la tarjeta, sin imagen rota', async ({ page }) => {
+  const titulo = 'E2E Anatomía del catálogo';
+  setCourseCoverE2E(titulo); // apunta a un archivo que no existe en Storage
+  try {
+    const fallida = page.waitForResponse((r) => r.url().includes('/portadas/cursos/e2e/portada.png') && !r.ok());
+    await visit(page, '/cursos?q=anatomia');
+    await fallida;
+    const tarjeta = page.getByRole('link', { name: /E2E Anatomía del catálogo/ });
+    await expect(tarjeta).toBeVisible();
+    await expect(tarjeta.locator('img')).toHaveCount(0);
+    await expect(tarjeta.locator('[aria-hidden="true"].bg-gradient-to-br')).toHaveCount(1);
+
+    await tarjeta.click();
+    await expect(page.getByRole('heading', { name: titulo })).toBeVisible();
+    await expect(page.locator('main img')).toHaveCount(0);
+  } finally {
+    clearCourseCoverE2E(titulo);
+  }
 });

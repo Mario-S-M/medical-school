@@ -1,13 +1,12 @@
 import PublicSyllabus from '../../catalog/components/PublicSyllabus';
-import { coverUrl } from '../../courses/lib/cover-url';
+import CoverImage from '../../courses/components/CoverImage';
 import type { ReviewCourse } from '../schemas/review-schema';
 import ReviewActions from './ReviewActions';
 
 export default function ReviewCard({ course }: { course: ReviewCourse }) {
-  const cover = coverUrl(course.portada_ruta);
   return (
     <li className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      {cover && <img src={cover} alt={`Portada de ${course.titulo}`} className="h-40 w-full rounded-lg object-cover" />}
+      <CoverImage path={course.portada_ruta} alt={`Portada de ${course.titulo}`} className="h-40 w-full rounded-lg object-cover" />
       <h2 className="text-xl font-semibold">{course.titulo}</h2>
       <p className="text-sm text-slate-600">{course.instructor} · {course.categoria ?? 'Sin categoría'} · {course.nivel ?? 'Sin nivel'}</p>
       {course.subtitulo && <p className="font-medium">{course.subtitulo}</p>}

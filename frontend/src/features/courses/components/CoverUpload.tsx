@@ -1,17 +1,21 @@
 import ErrorAlert from '../../../shared/components/ui/ErrorAlert';
 import useCoverUpload from '../hooks/use-cover-upload';
-import { coverUrl } from '../lib/cover-url';
 import { COVER_TYPES } from '../schemas/cover-file-schema';
+import CoverImage from './CoverImage';
 
 type Props = { courseId: number; path?: string | null };
 
 export default function CoverUpload({ courseId, path }: Props) {
   const { upload, uploading, error } = useCoverUpload(courseId);
-  const url = coverUrl(path);
   return (
     <section aria-label="Portada" className="flex max-w-2xl flex-col gap-3">
       <h2 className="text-xl font-bold">Portada</h2>
-      {url ? <img src={url} alt="Portada del curso" className="h-48 w-full rounded-xl object-cover" /> : <p className="text-slate-500">Todavía no hay portada.</p>}
+      <CoverImage
+        path={path}
+        alt="Portada del curso"
+        className="h-48 w-full rounded-xl object-cover"
+        fallback={<p className="text-slate-500">{path ? 'No se pudo cargar la portada.' : 'Todavía no hay portada.'}</p>}
+      />
       <ErrorAlert message={error} />
       <label htmlFor="portada" className="text-sm font-medium">Elegir imagen (JPG, PNG o WebP, hasta 2 MB)</label>
       <input
