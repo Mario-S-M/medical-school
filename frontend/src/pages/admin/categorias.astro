@@ -1,8 +1,8 @@
 ---
-import LayoutBase from '../../layouts/LayoutBase.astro';
-import PaginaCategorias from '../../componentes/admin/PaginaCategorias';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import CategoriesPage from '../../features/admin/components/CategoriesPage';
 ---
 
-<LayoutBase arriba titulo="Categorías">
-  <PaginaCategorias client:only="react" />
-</LayoutBase>
+<BaseLayout alignTop title="Categorías">
+  <CategoriesPage client:only="react" />
+</BaseLayout>

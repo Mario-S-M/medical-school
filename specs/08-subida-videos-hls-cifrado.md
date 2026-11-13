@@ -1,6 +1,6 @@
 # SPEC 08 — Subida de videos de clase, con aviso de duración y procesado a HLS cifrado
 
-**Estado:** Aprobado
+**Estado:** Implementado
 **Depende de:** SPEC 07 (y, a través de ella, SPEC 06, 05, 04, 03, 02 y 01)
 **Fecha:** 2026-11-09
 **Objetivo:** Permitir que el instructor y su equipo de apoyo suban el video de cada clase con una recomendación de 2 a 9 minutos y un aviso de clase larga, y que un servicio de transcodificación propio lo convierta a HLS de una sola calidad cifrado con AES-128 y lo guarde, ordenado por curso, sección y clase, en un bucket privado de Supabase Storage.
@@ -42,7 +42,7 @@ Por qué las dos mitades no van juntas: esta spec añade un servicio nuevo (el t
 
   Todo vive en el volumen nombrado `storage-data` (SPEC 07); el transcodificador usa su propio volumen `transcodificador-trabajo` solo para archivos temporales.
 - **Límite de Storage** (`FILE_SIZE_LIMIT` en `supabase/docker-compose.yml`) de 50 MB a **1 GiB**. El bucket `portadas` conserva su propio tope de 2 MB.
-- **Datos:** tablas `escuela.videos_clase` y `escuela.claves_video` (`escuela/sql/003_videos.sql`). La clave AES-128 de cada video se genera en n8n, vive en `claves_video` y **ningún endpoint de esta spec la devuelve**.
+- **Datos:** tablas `escuela.videos_clase` y `escuela.claves_video` (`escuela/sql/003_videos.sql`). La clave AES-128 de cada video la genera el workflow de solicitud con `gen_random_bytes` de `pgcrypto` (el Code node de n8n no tiene `crypto`), vive en `claves_video` y **ningún endpoint de esta spec la devuelve**.
 - **Seis workflows** en la carpeta `Escuela` de n8n, con grupos de nodos, notas y los subworkflows de la SPEC 07 (`Exigir rol`, `Validar campos`, `Validar acceso a curso`):
   - `POST /escuela/solicitar-subida-video` `{ clase_id, nombre_archivo, tipo_contenido, tamano_bytes }` → `201 { video_id, url_subida, ruta }`. Acepta `video/mp4`, `video/quicktime` y `video/webm`, de 1 byte a 1 073 741 824; si no, `422 VIDEO_INVALIDO`. Crea el registro en `esperando_archivo` y firma la subida directa a Storage (como las portadas: el archivo nunca pasa por n8n).
   - `POST /escuela/confirmar-subida-video` `{ video_id }` → `202 { estado: 'en_cola' }`. Comprueba en Storage que el archivo exista y cumpla los límites (`422 VIDEO_INVALIDO` si no) y le pide el trabajo al transcodificador.
@@ -54,7 +54,7 @@ Por qué las dos mitades no van juntas: esta spec añade un servicio nuevo (el t
 - **Reemplazo:** subir otro video a una clase que ya tiene uno crea un video nuevo; el anterior **sigue siendo el vigente** hasta que el nuevo queda `listo`. Solo puede haber un video en proceso por clase (`409 VIDEO_EN_PROCESO`).
 - **Limpieza:** `borrar-clase` y `borrar-seccion` borran también los archivos de sus videos en Storage.
 - **Cambios a lo existente:**
-  - `curso-edicion` devuelve en cada clase `video: { estado, duracion_segundos } | null` (el vigente) y `video_nuevo: { estado, error } | null`.
+  - `curso-edicion` devuelve en cada clase `video: { estado, duracion_segundos } | null` (el vigente) y `video_nuevo: { id, estado, error } | null` (el `id` lo necesita el botón de reintentar).
   - `enviar-revision` suma la falta `falta_video`: **cada clase necesita su video `listo`**.
   - Las pruebas de la SPEC 07 que enviaban cursos a revisión sin video se ajustan.
   - Caddy permite las cinco rutas públicas nuevas.
@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS escuela.claves_video (
 - **Estados:** `esperando_archivo` → `en_cola` (al confirmar) → `procesando` (cuando el transcodificador empieza) → `listo` o `error`. Un video `error` con original conservado se puede reintentar (vuelve a `en_cola`).
 - **Al quedar `listo`**, en una sola sentencia: el anterior vigente de esa clase deja de serlo y se borra su fila (los archivos, en un paso aparte, con el mismo borrado), y el nuevo pasa a `vigente = true`.
 - **Tiempo máximo:** un video `en_cola` o `procesando` con `actualizado_en` de más de 45 minutos se trata como `error` ("El procesamiento tardó demasiado.") la próxima vez que se consulta su estado.
-- `claves_video.clave` son 16 bytes aleatorios generados en n8n al solicitar la subida; no se incluye en ninguna respuesta de la API ni en ninguna columna de `videos_clase`.
+- `claves_video.clave` son 16 bytes aleatorios generados con `gen_random_bytes(16)` (extensión `pgcrypto`, en `escuela/sql/000_extensiones.sql`) al registrar el video; no se incluye en ninguna respuesta de la API ni en ninguna columna de `videos_clase`.
 
 **Contrato del transcodificador** (red interna `http://transcodificador:8090`, cabecera `X-Secreto-Transcodificador`; sin ella `403`):
 
@@ -153,7 +153,7 @@ CREATE TABLE IF NOT EXISTS escuela.claves_video (
 ```json
 { "id": 7, "titulo": "Bienvenida", "es_muestra": true, "duracion_estimada_minutos": 4,
   "video": { "estado": "listo", "duracion_segundos": 252 },
-  "video_nuevo": { "estado": "procesando", "error": null } }
+  "video_nuevo": { "id": 31, "estado": "procesando", "error": null } }
 ```
 
 **Variables del `.env`:** `SECRETO_TRANSCODIFICADOR` (nueva). El servicio `transcodificador` también lee `SERVICE_ROLE_KEY`, que ya existe, para hablar con Storage.
@@ -180,31 +180,31 @@ CREATE TABLE IF NOT EXISTS escuela.claves_video (
 
 ## Criterios de aceptación
 
-- [ ] `escuela/pruebas/pruebas.sh` y `auth/pruebas/pruebas.sh` terminan con código 0 contra el stack levantado, incluidos los casos de SPEC 07 ya ajustados.
-- [ ] `npx playwright test` termina con código 0, `npm run build` y `npx astro check` pasan, `frontend/scripts/verificar_tamano.sh` pasa y `docker compose config -q` pasa.
-- [ ] `transcodificador` está en ejecución, **no publica ningún puerto** en el host y responde `200` en `/salud` desde el contenedor de `n8n` (`http://transcodificador:8090/salud`); sin la cabecera `X-Secreto-Transcodificador`, `POST /trabajos` responde `403`.
-- [ ] El `ffmpeg` del contenedor incluye `libx264` y `aac`, y el servicio corre con un usuario sin privilegios, con el sistema de archivos en solo lectura y con un límite de memoria de 2 GB.
-- [ ] `FILE_SIZE_LIMIT` de Storage vale `1073741824` y el bucket `videos` es privado: un `GET` anónimo a un objeto suyo no devuelve `200`.
-- [ ] `escuela/sql/003_videos.sql` se aplica dos veces seguidas sin errores; un segundo video `vigente` en la misma clase y un segundo video en proceso en la misma clase son rechazados por la base; una clave de 17 bytes también.
-- [ ] `solicitar-subida-video` por un usuario sin rol de instructor ni equipo da `403`, en una clase de un curso ajeno da `403`, en una inexistente `404`, y en un curso `en_revision` `409 CURSO_EN_REVISION`. El instructor dueño y un miembro del equipo reciben `201`.
-- [ ] `solicitar-subida-video` con `video/avi`, con `tamano_bytes` 0 o 1 073 741 825, con un campo extra o sin `nombre_archivo` da `422`; con exactamente 1 073 741 824 y `video/mp4` da `201`. Una segunda solicitud con la primera sin terminar da `409 VIDEO_EN_PROCESO`.
-- [ ] `confirmar-subida-video` sin haber subido el archivo da `422 VIDEO_INVALIDO`; tras subir un MP4 de unos segundos con la URL firmada devuelve `202` y, en menos de 2 minutos, `estado-video` lo muestra `listo` con `duracion_segundos` igual a la real (±1 s).
-- [ ] Un video `listo` deja en el bucket `videos` `…/<video_id>/hls/lista.m3u8` y sus segmentos de 6 s bajo la ruta `cursos/<curso_id>/secciones/<seccion_id>/clases/<clase_id>/<video_id>/`, y **no** deja `original.*`.
-- [ ] La lista `lista.m3u8` contiene `#EXT-X-KEY:METHOD=AES-128`; un segmento descargado no es un TS válido (`ffprobe` falla) y, descifrado con la clave de `claves_video` y el `IV` de la lista, sí lo es.
-- [ ] El alto máximo es 720: un original de 1080p sale de 720 y uno de 360p sale de 360, sin ampliarse.
-- [ ] Ninguna respuesta de la API (incluidos `curso-edicion`, `estado-video` y los errores) contiene la clave de cifrado ni los 32 caracteres hexadecimales de `clave_hex`.
-- [ ] Un archivo corrupto con extensión `.mp4` termina en `error` con un mensaje legible y conserva el original; `reintentar-video` lo devuelve a `en_cola` (y vuelve a `error` si sigue corrupto). Un video de 31 minutos termina en `error` con "dura más de 30 minutos".
-- [ ] Reemplazar el video de una clase deja el anterior como vigente mientras el nuevo está `en_cola` o `procesando`; cuando el nuevo queda `listo`, es el único vigente y los archivos del anterior ya no existen en Storage.
-- [ ] `borrar-video` responde `204`, borra la fila y los archivos del video vigente y del que estuviera en proceso o con error, y `curso-edicion` muestra `video: null`. `borrar-clase` y `borrar-seccion` también dejan sin archivos a sus videos.
-- [ ] Un video `en_cola` con `actualizado_en` retrasado 46 minutos aparece como `error` con "El procesamiento tardó demasiado." en `estado-video`.
-- [ ] `curso-edicion` devuelve en cada clase `video` (con `estado` y `duracion_segundos`) y `video_nuevo`; `enviar-revision` de un curso con una clase sin video `listo` da `422 CURSO_INCOMPLETO` con `falta_video` en `detalles`, y con todos los videos `listo` envía el curso.
-- [ ] El webhook interno `video-procesado` no se alcanza por Caddy (`POST /escuela/interno/video-procesado` y `/webhook/escuela/interno/video-procesado` dan `404`) y por el puerto 5678 directo responde `403` sin el secreto y con un secreto equivocado.
-- [ ] Un curso en revisión rechaza `solicitar-subida-video`, `confirmar-subida-video`, `reintentar-video` y `borrar-video` con `409 CURSO_EN_REVISION`; en un curso publicado se aceptan sin cambiar su estado.
-- [ ] En el editor, junto a cada clase se lee "Recomendamos clases de entre 2 y 9 minutos". Un video de 5 minutos se sube sin avisos; uno de 10 minutos muestra "¿Estás seguro de que quieres subir una clase tan grande?" con **Subir de todos modos** (que sigue la subida) y **Elegir otro archivo** (que la cancela); uno de 31 minutos y uno de más de 1 GiB se rechazan sin subirse.
-- [ ] Durante el procesado la clase muestra su estado y se actualiza sola hasta "Listo" con la duración; en `error` muestra el mensaje y el botón **Reintentar**; reemplazar y borrar piden confirmación.
-- [ ] Ningún workflow nuevo guarda ejecuciones correctas, todos están publicados en la carpeta `Escuela`, cada uno tiene su nota general y sus grupos de nodos (`python3 escuela/scripts/revisar_notas.py` termina con código 0), y la comprobación de permisos reutiliza `Exigir rol`, `Validar campos` y `Validar acceso a curso` sin copiarlas.
-- [ ] Ningún archivo de `transcodificador/`, `escuela/` ni `frontend/` contiene `SERVICE_ROLE_KEY`, `SECRETO_TRANSCODIFICADOR`, `SECRETO_PROXY` ni `JWT_SECRET`, y `.env.example` incluye `SECRETO_TRANSCODIFICADOR` sin valor.
-- [ ] `transcodificador/README.md` documenta su API, cómo construirlo y probarlo; `escuela/README.md` documenta los endpoints, los errores nuevos, el esquema de rutas del bucket y la credencial nueva; la colección de Postman tiene las cinco peticiones nuevas y sigue siendo JSON válido sin secretos.
+- [x] `escuela/pruebas/pruebas.sh` y `auth/pruebas/pruebas.sh` terminan con código 0 contra el stack levantado, incluidos los casos de SPEC 07 ya ajustados.
+- [x] `npx playwright test` termina con código 0, `npm run build` y `npx astro check` pasan, `frontend/scripts/verificar_tamano.sh` pasa y `docker compose config -q` pasa.
+- [x] `transcodificador` está en ejecución, **no publica ningún puerto** en el host y responde `200` en `/salud` desde el contenedor de `n8n` (`http://transcodificador:8090/salud`); sin la cabecera `X-Secreto-Transcodificador`, `POST /trabajos` responde `403`.
+- [x] El `ffmpeg` del contenedor incluye `libx264` y `aac`, y el servicio corre con un usuario sin privilegios, con el sistema de archivos en solo lectura y con un límite de memoria de 2 GB.
+- [x] `FILE_SIZE_LIMIT` de Storage vale `1073741824` y el bucket `videos` es privado: un `GET` anónimo a un objeto suyo no devuelve `200`.
+- [x] `escuela/sql/003_videos.sql` se aplica dos veces seguidas sin errores; un segundo video `vigente` en la misma clase y un segundo video en proceso en la misma clase son rechazados por la base; una clave de 17 bytes también.
+- [x] `solicitar-subida-video` por un usuario sin rol de instructor ni equipo da `403`, en una clase de un curso ajeno da `403`, en una inexistente `404`, y en un curso `en_revision` `409 CURSO_EN_REVISION`. El instructor dueño y un miembro del equipo reciben `201`.
+- [x] `solicitar-subida-video` con `video/avi`, con `tamano_bytes` 0 o 1 073 741 825, con un campo extra o sin `nombre_archivo` da `422`; con exactamente 1 073 741 824 y `video/mp4` da `201`. Una segunda solicitud con la primera sin terminar da `409 VIDEO_EN_PROCESO`.
+- [x] `confirmar-subida-video` sin haber subido el archivo da `422 VIDEO_INVALIDO`; tras subir un MP4 de unos segundos con la URL firmada devuelve `202` y, en menos de 2 minutos, `estado-video` lo muestra `listo` con `duracion_segundos` igual a la real (±1 s).
+- [x] Un video `listo` deja en el bucket `videos` `…/<video_id>/hls/lista.m3u8` y sus segmentos de 6 s bajo la ruta `cursos/<curso_id>/secciones/<seccion_id>/clases/<clase_id>/<video_id>/`, y **no** deja `original.*`.
+- [x] La lista `lista.m3u8` contiene `#EXT-X-KEY:METHOD=AES-128`; un segmento descargado no es un TS válido (`ffprobe` falla) y, descifrado con la clave de `claves_video` y el `IV` de la lista, sí lo es.
+- [x] El alto máximo es 720: un original de 1080p sale de 720 y uno de 360p sale de 360, sin ampliarse.
+- [x] Ninguna respuesta de la API (incluidos `curso-edicion`, `estado-video` y los errores) contiene la clave de cifrado ni los 32 caracteres hexadecimales de `clave_hex`.
+- [x] Un archivo corrupto con extensión `.mp4` termina en `error` con un mensaje legible y conserva el original; `reintentar-video` lo devuelve a `en_cola` (y vuelve a `error` si sigue corrupto). Un video de 31 minutos termina en `error` con "dura más de 30 minutos".
+- [x] Reemplazar el video de una clase deja el anterior como vigente mientras el nuevo está `en_cola` o `procesando`; cuando el nuevo queda `listo`, es el único vigente y los archivos del anterior ya no existen en Storage.
+- [x] `borrar-video` responde `204`, borra la fila y los archivos del video vigente y del que estuviera en proceso o con error, y `curso-edicion` muestra `video: null`. `borrar-clase` y `borrar-seccion` también dejan sin archivos a sus videos.
+- [x] Un video `en_cola` con `actualizado_en` retrasado 46 minutos aparece como `error` con "El procesamiento tardó demasiado." en `estado-video`.
+- [x] `curso-edicion` devuelve en cada clase `video` (con `estado` y `duracion_segundos`) y `video_nuevo`; `enviar-revision` de un curso con una clase sin video `listo` da `422 CURSO_INCOMPLETO` con `falta_video` en `detalles`, y con todos los videos `listo` envía el curso.
+- [x] El webhook interno `video-procesado` no se alcanza por Caddy (`POST /escuela/interno/video-procesado` y `/webhook/escuela/interno/video-procesado` dan `404`) y por el puerto 5678 directo responde `403` sin el secreto y con un secreto equivocado.
+- [x] Un curso en revisión rechaza `solicitar-subida-video`, `confirmar-subida-video`, `reintentar-video` y `borrar-video` con `409 CURSO_EN_REVISION`; en un curso publicado se aceptan sin cambiar su estado.
+- [x] En el editor, junto a cada clase se lee "Recomendamos clases de entre 2 y 9 minutos". Un video de 5 minutos se sube sin avisos; uno de 10 minutos muestra "¿Estás seguro de que quieres subir una clase tan grande?" con **Subir de todos modos** (que sigue la subida) y **Elegir otro archivo** (que la cancela); uno de 31 minutos y uno de más de 1 GiB se rechazan sin subirse.
+- [x] Durante el procesado la clase muestra su estado y se actualiza sola hasta "Listo" con la duración; en `error` muestra el mensaje y el botón **Reintentar**; reemplazar y borrar piden confirmación.
+- [x] Ningún workflow nuevo guarda ejecuciones correctas, todos están publicados en la carpeta `Escuela`, cada uno tiene su nota general y sus grupos de nodos (`python3 escuela/scripts/revisar_notas.py` termina con código 0), y la comprobación de permisos reutiliza `Exigir rol`, `Validar campos` y `Validar acceso a curso` sin copiarlas.
+- [x] Ningún archivo de `transcodificador/`, `escuela/` ni `frontend/` contiene `SERVICE_ROLE_KEY`, `SECRETO_TRANSCODIFICADOR`, `SECRETO_PROXY` ni `JWT_SECRET`, y `.env.example` incluye `SECRETO_TRANSCODIFICADOR` sin valor.
+- [x] `transcodificador/README.md` documenta su API, cómo construirlo y probarlo; `escuela/README.md` documenta los endpoints, los errores nuevos, el esquema de rutas del bucket y la credencial nueva; la colección de Postman tiene las cinco peticiones nuevas y sigue siendo JSON válido sin secretos.
 
 ## Decisiones tomadas y descartadas
 
@@ -225,7 +225,7 @@ CREATE TABLE IF NOT EXISTS escuela.claves_video (
 
 - **Tomada: Supabase Storage (ya decidido en la SPEC 07), en un bucket privado `videos` con rutas curso/sección/clase/video.** Las URLs firmadas de la SPEC 09 salen de ahí. **Descartados:** un servidor de archivos propio y varios volúmenes Docker por rango de cursos, que Storage no soporta de forma nativa.
 - **Tomada: "en volúmenes" significa carpetas ordenadas dentro del volumen nombrado `storage-data`**, más un volumen aparte (`transcodificador-trabajo`) para lo temporal. **Descartada:** repartir por varios volúmenes.
-- **Tomada: la clave AES-128 en una tabla aparte (`claves_video`) y generada en n8n.** Queda fuera de cualquier `SELECT` de la ficha o del editor y la SPEC 09 la entregará con permisos. **Descartada:** una columna en `videos_clase`, que se filtraría con cualquier consulta descuidada.
+- **Tomada: la clave AES-128 en una tabla aparte (`claves_video`) y generada con `pgcrypto` desde el workflow** (el Code node de n8n no expone `crypto` y `require('crypto')` está prohibido; se comprobó al implementar). **Descartado:** `gen_random_uuid()`, que fija 6 de los 128 bits. Queda fuera de cualquier `SELECT` de la ficha o del editor y la SPEC 09 la entregará con permisos. **Descartada:** una columna en `videos_clase`, que se filtraría con cualquier consulta descuidada.
 - **Tomada: un único video vigente por clase y uno solo en proceso, ambos garantizados con índices únicos parciales.** **Descartado:** controlarlo solo en los workflows.
 - **Tomada: Storage sube su límite global a 1 GiB; los límites reales por bucket los pone cada bucket** (`portadas` sigue en 2 MB). **Descartado:** subir los videos por n8n, que ya choca con el límite de 10 KB de Caddy.
 

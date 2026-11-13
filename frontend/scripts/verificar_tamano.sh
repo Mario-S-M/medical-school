@@ -10,6 +10,6 @@ while IFS= read -r archivo; do
     echo "✗ $archivo tiene $lineas líneas (máximo $maximo)"
     fallos=1
   fi
-done < <(find src -type f \( -name '*.astro' -o -name '*.tsx' -o -name '*.ts' \))
+done < <(find src -type f -not -path 'src/shared/graphql/generated/*' \( -name '*.astro' -o -name '*.tsx' -o -name '*.ts' \))
 [ "$fallos" -eq 0 ] && echo "✓ Todos los archivos de src/ tienen $maximo líneas o menos"
 exit "$fallos"

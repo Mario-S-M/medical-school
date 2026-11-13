@@ -1,0 +1,537 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+"""Tarjeta de un curso publicado en el catálogo (sin campos internos)."""
+type TarjetaCurso {
+  slug: String!
+  titulo: String!
+  subtitulo: String
+  nivel: String
+
+  """Nombre de la categoría."""
+  categoria: String
+  categoria_slug: String
+
+  """Nombre público del instructor."""
+  instructor: String!
+  portada_ruta: String
+
+  """Cantidad de secciones."""
+  secciones: Int!
+
+  """Cantidad de clases."""
+  clases: Int!
+}
+
+"""Una página del catálogo público."""
+type PaginaCursos {
+  cursos: [TarjetaCurso!]!
+
+  """Cursos que cumplen los filtros, en todas las páginas."""
+  total: Int!
+  pagina: Int!
+
+  """Cantidad de páginas (12 cursos por página)."""
+  paginas: Int!
+}
+
+"""Clase del temario (sin video ni claves)."""
+type ClaseTemario {
+  id: EnteroGrande!
+  titulo: String!
+  descripcion: String
+  duracion_estimada_minutos: Int
+  es_muestra: Boolean!
+  posicion: Int!
+}
+
+"""Entero de hasta 2^53 - 1 para los identificadores bigint."""
+scalar EnteroGrande
+
+"""Sección del temario con sus clases."""
+type SeccionTemario {
+  id: EnteroGrande!
+  titulo: String!
+  posicion: Int!
+  clases: [ClaseTemario!]!
+}
+
+"""Categoría de un curso."""
+type CategoriaFicha {
+  nombre: String!
+  slug: String!
+}
+
+"""
+Ficha pública de un curso publicado (sin campos internos, videos ni claves).
+"""
+type FichaCurso {
+  id: EnteroGrande!
+  slug: String!
+  titulo: String!
+  subtitulo: String
+  descripcion: String
+  conocimientos_previos: String
+  lo_que_aprenderas: [String!]!
+  nivel: String
+  categoria: CategoriaFicha
+  portada_ruta: String
+
+  """Nombre público del instructor."""
+  instructor: String!
+
+  """Fecha ISO 8601."""
+  publicado_en: String
+  secciones: [SeccionTemario!]!
+}
+
+"""Equipo de un instructor al que pertenece la persona."""
+type EquipoApoyo {
+  instructor_id: ID!
+  nombre_publico: String
+}
+
+"""
+Roles extra de la persona (el estudiante es implícito) y sus equipos de apoyo.
+"""
+type MisRoles {
+  roles: [String!]!
+  equipos: [EquipoApoyo!]!
+}
+
+"""La operación se hizo."""
+type Confirmacion {
+  ok: Boolean!
+}
+
+"""Categoría del catálogo."""
+type Categoria {
+  id: Int!
+  nombre: String!
+  slug: String!
+  posicion: Int!
+}
+
+"""Identificador de la categoría creada o editada."""
+type CategoriaGuardada {
+  id: Int!
+}
+
+"""Identificador del elemento creado o editado."""
+type Identificador {
+  id: EnteroGrande!
+}
+
+"""Curso recién creado: su id y el slug (fijado al crear)."""
+type CursoCreado {
+  id: EnteroGrande!
+  slug: String!
+}
+
+"""
+Curso propio o de un instructor cuyo equipo de apoyo integra la persona.
+"""
+type CursoResumen {
+  id: EnteroGrande!
+  slug: String!
+  titulo: String!
+
+  """borrador, en_revision o publicado."""
+  estado: String!
+  comentario_revision: String
+  portada_ruta: String
+
+  """Fecha ISO 8601."""
+  actualizado_en: String!
+  es_mio: Boolean!
+
+  """Nombre público del instructor dueño."""
+  instructor: String!
+}
+
+"""Video vigente de una clase (el que ven los estudiantes)."""
+type VideoClase {
+  estado: String!
+  duracion_segundos: Int
+}
+
+"""Último video por reemplazar (aún no vigente)."""
+type VideoNuevo {
+  id: EnteroGrande!
+  estado: String!
+  error: String
+}
+
+"""Clase de una sección para el editor."""
+type ClaseEdicion {
+  id: EnteroGrande!
+  titulo: String!
+  descripcion: String
+  duracion_estimada_minutos: Int
+  es_muestra: Boolean!
+  posicion: Int!
+  video: VideoClase
+  video_nuevo: VideoNuevo
+}
+
+"""Sección del temario para el editor."""
+type SeccionEdicion {
+  id: EnteroGrande!
+  titulo: String!
+  posicion: Int!
+  clases: [ClaseEdicion!]!
+}
+
+"""Curso completo para el editor (nunca incluye claves de cifrado)."""
+type CursoEdicion {
+  id: EnteroGrande!
+  slug: String!
+  titulo: String!
+  subtitulo: String
+  descripcion: String
+  conocimientos_previos: String
+  lo_que_aprenderas: [String!]!
+  nivel: String
+  categoria_id: Int
+  estado: String!
+  comentario_revision: String
+  portada_ruta: String
+
+  """Fecha ISO 8601."""
+  actualizado_en: String!
+  es_dueno: Boolean!
+  secciones: [SeccionEdicion!]!
+}
+
+"""Portada guardada en el curso."""
+type PortadaConfirmada {
+  """Ruta pública (bajo /almacen) de la portada; se lee sin sesión."""
+  portada_url: String!
+}
+
+"""Persona con la sesión iniciada."""
+type Usuario {
+  id: ID!
+  correo: String!
+  nombre: String!
+}
+
+"""Estado en el que quedó el curso tras la operación."""
+type EstadoCurso {
+  """borrador, en_revision o publicado."""
+  estado: String!
+}
+
+"""Curso pendiente de revisión con su temario completo (administrador)."""
+type CursoEnRevision {
+  id: EnteroGrande!
+  slug: String!
+  titulo: String!
+  subtitulo: String
+  descripcion: String
+  conocimientos_previos: String
+  lo_que_aprenderas: [String!]!
+  nivel: String
+
+  """Nombre de la categoría."""
+  categoria: String
+  portada_ruta: String
+
+  """Nombre público del instructor."""
+  instructor: String!
+
+  """Fecha ISO 8601."""
+  actualizado_en: String!
+  secciones: [SeccionTemario!]!
+}
+
+"""El video que se sirve de la clase."""
+type VideoVigente {
+  id: EnteroGrande!
+  estado: String!
+  duracion_segundos: Int
+
+  """Fecha ISO 8601."""
+  listo_en: String
+}
+
+"""Estado de los videos de una clase."""
+type EstadoVideo {
+  vigente: VideoVigente
+  nuevo: VideoNuevo
+}
+
+"""El video quedó en la cola del transcodificador."""
+type VideoEncolado {
+  estado: String!
+}
+
+"""Cuenta encontrada por un administrador, con sus roles de la escuela."""
+type UsuarioAdministrado {
+  id: ID!
+  correo: String!
+  nombre: String
+  verificado: Boolean!
+  roles: [String!]!
+}
+
+"""Resultado de dar o quitar un rol."""
+type RolAsignado {
+  usuario_id: ID!
+  rol: String!
+  activo: Boolean!
+}
+
+"""Persona del equipo de apoyo del instructor."""
+type MiembroEquipo {
+  miembro_id: ID!
+
+  """Fecha ISO 8601 en que entró al equipo."""
+  desde: String!
+
+  """Correo con el que aceptó la invitación (null si entró sin ella)."""
+  correo: String
+}
+
+"""Invitación pendiente y vigente que hizo el instructor."""
+type InvitacionEnviada {
+  id: EnteroGrande!
+  correo: String!
+
+  """Fecha ISO 8601."""
+  expira_en: String!
+}
+
+"""Miembros e invitaciones pendientes del equipo de apoyo del instructor."""
+type MiEquipo {
+  miembros: [MiembroEquipo!]!
+  invitaciones: [InvitacionEnviada!]!
+}
+
+"""Invitación pendiente y vigente que recibió la persona."""
+type InvitacionRecibida {
+  id: EnteroGrande!
+
+  """Nombre público del instructor que invita."""
+  instructor: String!
+
+  """Fecha ISO 8601."""
+  creado_en: String!
+
+  """Fecha ISO 8601."""
+  expira_en: String!
+}
+
+"""
+Invitación creada; `correo_enviado` es false si el servidor de correo falló (la invitación existe igual).
+"""
+type InvitacionCreada {
+  id: EnteroGrande!
+
+  """Fecha ISO 8601."""
+  expira_en: String!
+  correo_enviado: Boolean!
+}
+
+"""Resultado de responder una invitación."""
+type RespuestaInvitacion {
+  aceptada: Boolean!
+}
+
+type Query {
+  """La persona que hace la petición."""
+  yo: Usuario!
+
+  """Roles de la persona que hace la petición y sus equipos de apoyo."""
+  mis_roles: MisRoles!
+
+  """Categorías ordenadas por posición (pública, sin sesión)."""
+  categorias: [Categoria!]!
+
+  """Cursos propios y de los instructores del equipo, en cualquier estado."""
+  mis_cursos: [CursoResumen!]!
+
+  """Curso completo con temario y videos para el editor (dueño y equipo)."""
+  curso_edicion(id: EnteroGrande!): CursoEdicion!
+
+  """
+  El video vigente de la clase y el que se está subiendo o procesando (con su error).
+  """
+  estado_video(clase_id: EnteroGrande!): EstadoVideo!
+
+  """
+  Catálogo público: cursos publicados, 12 por página (pública, sin sesión).
+  """
+  cursos(
+    """Texto de búsqueda (título, subtítulo, descripción o instructor)."""
+    q: String
+
+    """Slug de la categoría."""
+    categoria: String
+
+    """basico, intermedio o avanzado."""
+    nivel: String
+
+    """Desde 1 (por omisión, 1)."""
+    pagina: Int
+  ): PaginaCursos!
+
+  """Ficha pública de un curso publicado por su slug (pública, sin sesión)."""
+  curso(slug: String!): FichaCurso!
+
+  """Cursos pendientes de revisión con su temario (administrador)."""
+  cursos_en_revision: [CursoEnRevision!]!
+
+  """Miembros e invitaciones pendientes del equipo de apoyo (instructor)."""
+  mi_equipo: MiEquipo!
+
+  """Invitaciones pendientes y vigentes de la persona con sesión."""
+  mis_invitaciones: [InvitacionRecibida!]!
+
+  """Busca una cuenta por su correo exacto (administrador)."""
+  buscar_usuario(correo: String!): UsuarioAdministrado!
+}
+
+type Mutation {
+  """Crea o edita una categoría (administrador)."""
+  guardar_categoria(
+    """Con id se edita; sin id se crea."""
+    id: Int
+    nombre: String!
+    posicion: Int!
+  ): CategoriaGuardada!
+
+  """Borra una categoría sin cursos (administrador)."""
+  borrar_categoria(id: Int!): Confirmacion!
+
+  """Crea un curso en borrador y fija su slug (instructor)."""
+  crear_curso(titulo: String!): CursoCreado!
+
+  """Edita los datos del curso: solo el dueño y fuera de revisión."""
+  editar_curso(
+    curso_id: EnteroGrande!
+    titulo: String
+    subtitulo: String
+    descripcion: String
+    conocimientos_previos: String
+    lo_que_aprenderas: [String!]
+
+    """basico, intermedio o avanzado."""
+    nivel: String
+    categoria_id: Int
+  ): Identificador!
+
+  """Crea (sin seccion_id) o edita una sección del curso."""
+  guardar_seccion(
+    curso_id: EnteroGrande!
+
+    """Con id se edita; sin id se crea al final."""
+    seccion_id: EnteroGrande
+    titulo: String!
+  ): Identificador!
+
+  """Borra una sección con sus clases y renumera las demás."""
+  borrar_seccion(seccion_id: EnteroGrande!): Confirmacion!
+
+  """Crea (sin clase_id) o edita una clase de la sección."""
+  guardar_clase(
+    seccion_id: EnteroGrande!
+
+    """Con id se edita; sin id se crea al final."""
+    clase_id: EnteroGrande
+    titulo: String!
+    descripcion: String
+    duracion_estimada_minutos: Int
+    es_muestra: Boolean!
+  ): Identificador!
+
+  """Borra una clase y renumera las demás de su sección."""
+  borrar_clase(clase_id: EnteroGrande!): Confirmacion!
+
+  """
+  Sube o baja una sección o una clase un lugar (el primero no sube ni el último baja).
+  """
+  mover(
+    """seccion o clase."""
+    tipo: String!
+    id: EnteroGrande!
+
+    """subir o bajar."""
+    direccion: String!
+  ): Confirmacion!
+
+  """
+  Confirma el video ya subido con la URL firmada y lo pone en la cola del transcodificador.
+  """
+  confirmar_subida_video(video_id: EnteroGrande!): VideoEncolado!
+
+  """Vuelve a encolar un video con error cuyo original se conservó."""
+  reintentar_video(video_id: EnteroGrande!): VideoEncolado!
+
+  """
+  Borra el video vigente y cualquiera en proceso o con error de la clase, con sus archivos.
+  """
+  borrar_video(clase_id: EnteroGrande!): Confirmacion!
+
+  """Envía el curso completo a revisión: solo el dueño, desde borrador."""
+  enviar_revision(curso_id: EnteroGrande!): EstadoCurso!
+
+  """
+  Aprueba (publica) o devuelve a borrador con comentario un curso en revisión (administrador).
+  """
+  resolver_revision(
+    curso_id: EnteroGrande!
+
+    """true publica el curso; false lo devuelve a borrador con comentario."""
+    aprobar: Boolean!
+    comentario: String
+  ): EstadoCurso!
+
+  """
+  Retira un curso publicado del catálogo y lo devuelve a borrador con comentario (administrador).
+  """
+  retirar_curso(curso_id: EnteroGrande!, comentario: String!): EstadoCurso!
+
+  """
+  Confirma la portada ya subida con la URL firmada y borra la anterior (solo el dueño, fuera de revisión).
+  """
+  confirmar_portada(
+    curso_id: EnteroGrande!
+
+    """Ruta que devolvió la firma: cursos/<curso_id>/portada-<uuid>.<ext>."""
+    ruta: String!
+  ): PortadaConfirmada!
+
+  """
+  Invita por correo a una cuenta registrada y verificada a tu equipo de apoyo (instructor).
+  """
+  invitar_equipo(correo: String!): InvitacionCreada!
+
+  """Acepta o rechaza una invitación propia, pendiente y vigente."""
+  responder_invitacion(
+    invitacion_id: EnteroGrande!
+
+    """true entra al equipo; false rechaza."""
+    aceptar: Boolean!
+  ): RespuestaInvitacion!
+
+  """Cancela una invitación pendiente del instructor."""
+  cancelar_invitacion(invitacion_id: EnteroGrande!): Confirmacion!
+
+  """
+  Quita a una persona de tu equipo de apoyo y, si no sigue en otro, su rol equipo_apoyo (instructor).
+  """
+  quitar_miembro(miembro_id: ID!): Confirmacion!
+
+  """Da o quita el rol instructor o administrador (administrador)."""
+  asignar_rol(
+    usuario_id: ID!
+
+    """instructor o administrador."""
+    rol: String!
+
+    """true da el rol y false lo quita."""
+    activo: Boolean!
+  ): RolAsignado!
+}

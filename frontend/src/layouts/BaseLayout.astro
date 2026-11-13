@@ -1,0 +1,30 @@
+---
+import { ClientRouter } from 'astro:transitions';
+import '../styles/global.css';
+import Header from '../shared/layout/Header.astro';
+import SessionMenu from '../features/auth/components/SessionMenu';
+import Footer from '../shared/layout/Footer.astro';
+
+interface Props {
+  title: string;
+  alignTop?: boolean; // contenido largo: se alinea arriba en vez de centrarse
+}
+const { title, alignTop = false } = Astro.props;
+---
+
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title} · Medical School</title>
+    <ClientRouter />
+  </head>
+  <body class="flex min-h-screen flex-col bg-gradient-to-b from-sky-50 via-white to-slate-50 text-slate-900">
+    <Header><SessionMenu client:load transition:persist="menu-sesion" /></Header>
+    <main class:list={["mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-10", !alignTop && "justify-center"]}>
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>

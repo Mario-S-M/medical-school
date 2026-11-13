@@ -1,8 +1,0 @@
-[
-  {
-    "id": "smtpMailpit01",
-    "name": "SMTP Mailpit",
-    "type": "smtp",
-    "data": { "user": "", "password": "", "host": "mailpit", "port": 1025, "secure": false, "disableStartTls": true, "hostName": "" }
-  }
-]

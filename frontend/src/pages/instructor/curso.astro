@@ -1,8 +1,8 @@
 ---
-import LayoutBase from '../../layouts/LayoutBase.astro';
-import PaginaEditorCurso from '../../componentes/instructor/PaginaEditorCurso';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import EditorPage from '../../features/courses/components/EditorPage';
 ---
 
-<LayoutBase arriba titulo="Editar curso">
-  <PaginaEditorCurso client:only="react" />
-</LayoutBase>
+<BaseLayout alignTop title="Editar curso">
+  <EditorPage client:only="react" />
+</BaseLayout>

@@ -1,8 +1,8 @@
 ---
-import LayoutBase from '../../layouts/LayoutBase.astro';
-import PaginaRoles from '../../componentes/admin/PaginaRoles';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import RolesPage from '../../features/admin/components/RolesPage';
 ---
 
-<LayoutBase arriba titulo="Roles">
-  <PaginaRoles client:only="react" />
-</LayoutBase>
+<BaseLayout alignTop title="Roles">
+  <RolesPage client:only="react" />
+</BaseLayout>

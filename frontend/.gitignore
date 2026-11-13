@@ -25,3 +25,6 @@ pnpm-debug.log*
 
 test-results/
 playwright-report/
+
+# tipos generados por GraphQL Code Generator (npm run codegen)
+src/shared/graphql/generated/

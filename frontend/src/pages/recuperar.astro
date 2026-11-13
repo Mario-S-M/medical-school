@@ -1,12 +1,12 @@
 ---
-import LayoutBase from '../layouts/LayoutBase.astro';
-import TarjetaAuth from '../componentes/estructura/TarjetaAuth.astro';
-import FormularioRecuperar from '../componentes/auth/FormularioRecuperar';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import AuthCard from '../shared/layout/AuthCard.astro';
+import RecoverForm from '../features/auth/components/RecoverForm';
 ---
 
-<LayoutBase titulo="Recuperar contraseña">
-  <TarjetaAuth titulo="Recuperar contraseña" descripcion="Escribe tu correo y, si está registrado, te enviaremos un código.">
-    <FormularioRecuperar client:load />
+<BaseLayout title="Recuperar contraseña">
+  <AuthCard title="Recuperar contraseña" description="Escribe tu correo y, si está registrado, te enviaremos un código.">
+    <RecoverForm client:load />
     <p class="mt-4 text-sm"><a class="text-sky-700 underline" href="/iniciar-sesion">Volver a iniciar sesión</a></p>
-  </TarjetaAuth>
-</LayoutBase>
+  </AuthCard>
+</BaseLayout>
